@@ -1,0 +1,13 @@
+# Python 虛擬環境
+venv/
+__pycache__/
+*.pyc
+
+# 測試用的本機 repo（不需要上傳，組員可以自己生成）
+test_repo/
+
+# 環境變數 / API key（絕對不要上傳）
+.env
+
+# macOS 系統檔案
+.DS_Store
