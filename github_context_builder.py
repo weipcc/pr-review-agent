@@ -38,7 +38,7 @@ def build_file_context(owner: str, repo: str, ref: str, file_diff: FileDiff) -> 
     """針對單一檔案，組合出要放進 prompt 的上下文文字（含行號）。"""
     content = get_file_content(owner, repo, file_diff.filename, ref)
     if not content:
-        return "(檔案已被刪除或無法讀取)"
+        return "(File was deleted or could not be read)"
 
     lines = content.splitlines()
 
@@ -57,7 +57,7 @@ def build_file_context(owner: str, repo: str, ref: str, file_diff: FileDiff) -> 
         seen_ranges.add((start, end))
 
         snippet_lines = [f"{i + 1}: {lines[i]}" for i in range(start, end)]
-        snippets.append(f"...(第 {start + 1} 行到第 {end} 行)...\n" + "\n".join(snippet_lines))
+        snippets.append(f"...(lines {start + 1} to {end})...\n" + "\n".join(snippet_lines))
 
     return "\n\n".join(snippets)
 

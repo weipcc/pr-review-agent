@@ -32,7 +32,7 @@ def build_file_context(repo_path: str, file_diff: FileDiff) -> str:
     lines = read_file_lines(repo_path, file_diff.filename)
 
     if not lines:
-        return "(檔案已被刪除或無法讀取)"
+        return "(File was deleted or could not be read)"
 
     if len(lines) <= MAX_FULL_FILE_LINES:
         numbered = [f"{i + 1}: {line}" for i, line in enumerate(lines)]
@@ -50,14 +50,14 @@ def build_file_context(repo_path: str, file_diff: FileDiff) -> str:
         seen_ranges.add((start, end))
 
         snippet_lines = [f"{i + 1}: {lines[i]}" for i in range(start, end)]
-        snippets.append(f"...(第 {start + 1} 行到第 {end} 行)...\n" + "\n".join(snippet_lines))
+        snippets.append(f"...(lines {start + 1} to {end})...\n" + "\n".join(snippet_lines))
 
     return "\n\n".join(snippets)
 
 
 def build_diff_text(file_diff: FileDiff) -> str:
     """把單一檔案的 diff hunks 轉成人類/LLM 可讀的文字格式。"""
-    parts = [f"檔案: {file_diff.filename}"]
+    parts = [f"File: {file_diff.filename}"]
     for hunk in file_diff.hunks:
         parts.append(hunk.header)
         for line in hunk.lines:

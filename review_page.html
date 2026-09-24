@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <title>PR Review Agent</title>
 <style>
   body {
-    font-family: -apple-system, "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
     max-width: 800px;
     margin: 40px auto;
     padding: 0 20px;
@@ -51,10 +51,10 @@
 </head>
 <body>
   <h1>PR Review Agent</h1>
-  <p>貼上 GitHub PR 網址，按下審查按鈕：</p>
+  <p>Paste a GitHub PR URL and click the button to start a review:</p>
   <input type="text" id="prUrl" placeholder="https://github.com/owner/repo/pull/1" />
   <br />
-  <button id="reviewBtn" onclick="runReview()">開始審查</button>
+  <button id="reviewBtn" onclick="runReview()">Start review</button>
   <div id="result"></div>
 
   <script>
@@ -64,13 +64,13 @@
       const button = document.getElementById("reviewBtn");
 
       if (!prUrl) {
-        resultDiv.innerHTML = "<p class='error'>請先輸入 PR 網址。</p>";
+        resultDiv.innerHTML = "<p class='error'>Please enter a PR URL first.</p>";
         return;
       }
 
       button.disabled = true;
-      button.textContent = "審查中...";
-      resultDiv.innerHTML = "<p>審查中，請稍候...</p>";
+      button.textContent = "Reviewing...";
+      resultDiv.innerHTML = "<p>Reviewing, please wait...</p>";
 
       try {
         const res = await fetch("http://localhost:8000/review", {
@@ -81,7 +81,7 @@
 
         if (!res.ok) {
           const err = await res.json();
-          throw new Error(err.detail || "API 回傳錯誤");
+          throw new Error(err.detail || "API returned an error");
         }
 
         const data = await res.json();
@@ -93,11 +93,11 @@
         resultDiv.innerHTML = "<pre>" + escaped + "</pre>";
       } catch (err) {
         resultDiv.innerHTML =
-          "<p class='error'>呼叫失敗：" + err.message + "</p>" +
-          "<p>請確認本機的 uvicorn 服務是否有正常啟動（http://localhost:8000）。</p>";
+          "<p class='error'>Request failed: " + err.message + "</p>" +
+          "<p>Please make sure the local uvicorn server is running (http://localhost:8000).</p>";
       } finally {
         button.disabled = false;
-        button.textContent = "開始審查";
+        button.textContent = "Start review";
       }
     }
   </script>
