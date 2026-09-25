@@ -11,7 +11,7 @@ import argparse
 import sys
 
 from aggregator import aggregate_results
-from context_builder import build_context_for_files
+from context_builder import build_context_for_files, read_local_readme
 from diff_reader import get_parsed_diff
 from report import render_markdown, save_report
 from reviewer import review_all_files
@@ -50,8 +50,11 @@ def main():
     print(f"Detected {len(file_diffs)} changed file(s). Building context...")
     file_contexts = build_context_for_files(args.repo_path, file_diffs)
 
+    # 本機模式沒有 PR 標題/描述，只帶 README 摘錄當專案背景
+    project_context = {"readme": read_local_readme(args.repo_path)}
+
     print("Calling the LLM to review...")
-    review_results = review_all_files(file_contexts)
+    review_results = review_all_files(file_contexts, project_context)
 
     print("Aggregating results...")
     aggregated = aggregate_results(review_results)

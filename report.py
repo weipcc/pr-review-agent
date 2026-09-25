@@ -104,6 +104,11 @@ def render_markdown(aggregated: dict) -> str:
     """把彙整結果轉成完整的 Markdown 字串。"""
     lines = ["# PR Review Report", ""]
 
+    pr_title = aggregated.get("pr_title")
+    if pr_title:
+        pr_url = aggregated.get("pr_url")
+        lines.append(f"**PR:** {pr_title}" + (f" ({pr_url})" if pr_url else ""))
+
     overall_recommendation = aggregated.get("overall_recommendation")
     if overall_recommendation:
         lines.append(f"**Overall recommendation:** {RECOMMENDATION_BADGE.get(overall_recommendation, overall_recommendation)}")

@@ -16,7 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from aggregator import aggregate_results
-from github_context_builder import build_context_for_files
+from context_builder import MAX_PR_DESCRIPTION_CHARS, truncate_text
+from github_context_builder import build_context_for_files, get_readme
 from github_diff_reader import get_parsed_pr_diff
 from report import render_markdown
 from reviewer import review_all_files
@@ -74,12 +75,21 @@ def review_pr(request: ReviewRequest):
 
     file_contexts = build_context_for_files(owner, repo, head_sha, file_diffs)
 
+    # 專案背景：PR 標題/描述 + README 摘錄，讓模型知道這個 PR 想達成什麼、專案是做什麼的
+    project_context = {
+        "pr_title": metadata.get("title") or "",
+        "pr_description": truncate_text(metadata.get("body") or "", MAX_PR_DESCRIPTION_CHARS),
+        "readme": get_readme(owner, repo, head_sha),
+    }
+
     try:
-        review_results = review_all_files(file_contexts)
+        review_results = review_all_files(file_contexts, project_context)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"LLM review call failed: {e}")
 
     aggregated = aggregate_results(review_results)
+    aggregated["pr_title"] = project_context["pr_title"]
+    aggregated["pr_url"] = request.pr_url
     markdown_report = render_markdown(aggregated)
 
     return ReviewResponse(
