@@ -67,7 +67,7 @@ def get_raw_diff(repo_path: str, base: str = "HEAD") -> str:
 
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        raise RuntimeError(f"git diff 執行失敗: {result.stderr}")
+        raise RuntimeError(f"git diff failed: {result.stderr}")
     return result.stdout
 
 
@@ -136,4 +136,4 @@ if __name__ == "__main__":
     # 簡單測試：對目前資料夾跑一次
     diffs = get_parsed_diff(".")
     for f in diffs:
-        print(f"檔案: {f.filename}, hunks 數量: {len(f.hunks)}")
+        print(f"File: {f.filename}, hunks: {len(f.hunks)}")

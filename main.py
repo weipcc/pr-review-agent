@@ -11,28 +11,28 @@ import argparse
 import sys
 
 from aggregator import aggregate_results
-from context_builder import build_context_for_files
+from context_builder import build_context_for_files, read_local_readme
 from diff_reader import get_parsed_diff
 from report import render_markdown, save_report
 from reviewer import review_all_files
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="本地端 PR Review Agent")
+    parser = argparse.ArgumentParser(description="Local PR Review Agent")
     parser.add_argument(
         "--repo-path",
         default=".",
-        help="要審查的 git repo 路徑（預設為目前資料夾）",
+        help="Path to the git repo to review (default: current directory)",
     )
     parser.add_argument(
         "--base",
         default="HEAD",
-        help="比較基準分支，例如 'main'。預設 HEAD，代表比對尚未 commit 的變更",
+        help="Base branch to compare against, e.g. 'main'. Default is HEAD, i.e. uncommitted changes",
     )
     parser.add_argument(
         "--output",
         default=None,
-        help="把報告存成檔案的路徑，例如 review.md。不指定則直接印在終端機",
+        help="Path to save the report to, e.g. review.md. If omitted, the report is printed to the terminal",
     )
     return parser.parse_args()
 
@@ -40,27 +40,30 @@ def parse_args():
 def main():
     args = parse_args()
 
-    print(f"讀取 diff 中... (repo: {args.repo_path}, base: {args.base})")
+    print(f"Reading diff... (repo: {args.repo_path}, base: {args.base})")
     file_diffs = get_parsed_diff(args.repo_path, args.base)
 
     if not file_diffs:
-        print("沒有偵測到任何變更，結束。")
+        print("No changes detected. Exiting.")
         sys.exit(0)
 
-    print(f"偵測到 {len(file_diffs)} 個變更檔案，組合上下文中...")
+    print(f"Detected {len(file_diffs)} changed file(s). Building context...")
     file_contexts = build_context_for_files(args.repo_path, file_diffs)
 
-    print("呼叫 LLM 進行審查中...")
-    review_results = review_all_files(file_contexts)
+    # 本機模式沒有 PR 標題/描述，只帶 README 摘錄當專案背景
+    project_context = {"readme": read_local_readme(args.repo_path)}
 
-    print("彙整結果中...")
+    print("Calling the LLM to review...")
+    review_results = review_all_files(file_contexts, project_context)
+
+    print("Aggregating results...")
     aggregated = aggregate_results(review_results)
 
     report_text = render_markdown(aggregated)
 
     if args.output:
         save_report(report_text, args.output)
-        print(f"報告已存成: {args.output}")
+        print(f"Report saved to: {args.output}")
     else:
         print("\n" + report_text)
 

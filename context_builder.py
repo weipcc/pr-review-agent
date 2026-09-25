@@ -14,6 +14,30 @@ from diff_reader import FileDiff
 MAX_FULL_FILE_LINES = 400
 CONTEXT_WINDOW = 30  # 檔案太大時，hunk 前後各取幾行
 
+# 專案背景資訊（README / PR 描述）的長度上限。這些內容會被放進每一次 LLM 呼叫，
+# 太長會白白增加 token，所以只取開頭一段（README 的開頭通常就是專案簡介與架構概述）。
+MAX_README_CHARS = 6000
+MAX_PR_DESCRIPTION_CHARS = 3000
+
+README_CANDIDATES = ("README.md", "README.rst", "README.txt", "README")
+
+
+def truncate_text(text: str, limit: int) -> str:
+    """超過 limit 個字元就截斷並標註，避免專案背景資訊撐大 prompt。"""
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "\n...[truncated]"
+
+
+def read_local_readme(repo_path: str) -> str:
+    """讀取本機 repo 根目錄的 README（找不到就回傳空字串），並截斷到長度上限。"""
+    for name in README_CANDIDATES:
+        path = Path(repo_path) / name
+        if path.is_file():
+            text = path.read_text(encoding="utf-8", errors="replace")
+            return truncate_text(text, MAX_README_CHARS)
+    return ""
+
 
 def read_file_lines(repo_path: str, filename: str) -> list[str]:
     """讀取本地檔案內容，回傳每一行的清單（不含換行符號）。"""
@@ -32,7 +56,7 @@ def build_file_context(repo_path: str, file_diff: FileDiff) -> str:
     lines = read_file_lines(repo_path, file_diff.filename)
 
     if not lines:
-        return "(檔案已被刪除或無法讀取)"
+        return "(File was deleted or could not be read)"
 
     if len(lines) <= MAX_FULL_FILE_LINES:
         numbered = [f"{i + 1}: {line}" for i, line in enumerate(lines)]
@@ -50,14 +74,14 @@ def build_file_context(repo_path: str, file_diff: FileDiff) -> str:
         seen_ranges.add((start, end))
 
         snippet_lines = [f"{i + 1}: {lines[i]}" for i in range(start, end)]
-        snippets.append(f"...(第 {start + 1} 行到第 {end} 行)...\n" + "\n".join(snippet_lines))
+        snippets.append(f"...(lines {start + 1} to {end})...\n" + "\n".join(snippet_lines))
 
     return "\n\n".join(snippets)
 
 
 def build_diff_text(file_diff: FileDiff) -> str:
     """把單一檔案的 diff hunks 轉成人類/LLM 可讀的文字格式。"""
-    parts = [f"檔案: {file_diff.filename}"]
+    parts = [f"File: {file_diff.filename}"]
     for hunk in file_diff.hunks:
         parts.append(hunk.header)
         for line in hunk.lines:

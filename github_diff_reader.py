@@ -26,7 +26,7 @@ def parse_pr_url(pr_url: str) -> tuple[str, str, int]:
     """
     match = PR_URL_RE.search(pr_url)
     if not match:
-        raise ValueError(f"無法解析 PR 網址: {pr_url}")
+        raise ValueError(f"Could not parse PR URL: {pr_url}")
     return match.group("owner"), match.group("repo"), int(match.group("number"))
 
 
@@ -71,4 +71,4 @@ if __name__ == "__main__":
     diffs, meta = get_parsed_pr_diff(test_url)
     print(f"PR head sha: {meta['_head_sha']}")
     for f in diffs:
-        print(f"檔案: {f.filename}, hunks 數量: {len(f.hunks)}")
+        print(f"File: {f.filename}, hunks: {len(f.hunks)}")

@@ -16,7 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from aggregator import aggregate_results
-from github_context_builder import build_context_for_files
+from context_builder import MAX_PR_DESCRIPTION_CHARS, truncate_text
+from github_context_builder import build_context_for_files, get_readme
 from github_diff_reader import get_parsed_pr_diff
 from report import render_markdown
 from reviewer import review_all_files
@@ -39,8 +40,9 @@ class ReviewRequest(BaseModel):
 class ReviewResponse(BaseModel):
     pr_url: str
     overall_summary: str
+    overall_recommendation: str
     total_issues: int
-    severity_counts: dict
+    category_counts: dict
     files: list
     markdown_report: str
 
@@ -48,7 +50,7 @@ class ReviewResponse(BaseModel):
 @app.get("/")
 def health_check():
     """簡單的健康檢查，確認服務有啟動。"""
-    return {"status": "ok", "message": "PR Review Agent API 運作中"}
+    return {"status": "ok", "message": "PR Review Agent API is running"}
 
 
 @app.post("/review", response_model=ReviewResponse)
@@ -62,10 +64,10 @@ def review_pr(request: ReviewRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"抓取 PR 資料失敗: {e}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch PR data: {e}")
 
     if not file_diffs:
-        raise HTTPException(status_code=404, detail="這個 PR 沒有偵測到任何變更檔案")
+        raise HTTPException(status_code=404, detail="No changed files were detected in this PR")
 
     owner = metadata["_owner"]
     repo = metadata["_repo"]
@@ -73,19 +75,29 @@ def review_pr(request: ReviewRequest):
 
     file_contexts = build_context_for_files(owner, repo, head_sha, file_diffs)
 
+    # 專案背景：PR 標題/描述 + README 摘錄，讓模型知道這個 PR 想達成什麼、專案是做什麼的
+    project_context = {
+        "pr_title": metadata.get("title") or "",
+        "pr_description": truncate_text(metadata.get("body") or "", MAX_PR_DESCRIPTION_CHARS),
+        "readme": get_readme(owner, repo, head_sha),
+    }
+
     try:
-        review_results = review_all_files(file_contexts)
+        review_results = review_all_files(file_contexts, project_context)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"呼叫 LLM 審查失敗: {e}")
+        raise HTTPException(status_code=502, detail=f"LLM review call failed: {e}")
 
     aggregated = aggregate_results(review_results)
+    aggregated["pr_title"] = project_context["pr_title"]
+    aggregated["pr_url"] = request.pr_url
     markdown_report = render_markdown(aggregated)
 
     return ReviewResponse(
         pr_url=request.pr_url,
         overall_summary=aggregated["overall_summary"],
+        overall_recommendation=aggregated["overall_recommendation"],
         total_issues=aggregated["total_issues"],
-        severity_counts=aggregated["severity_counts"],
+        category_counts=aggregated["category_counts"],
         files=aggregated["files"],
         markdown_report=markdown_report,
     )
