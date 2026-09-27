@@ -75,22 +75,24 @@ def poll_once() -> int:
         if notification.subject.type != "PullRequest":
             continue
 
-        # Convert API URL → web URL
-        # API shape: https://api.github.com/repos/{owner}/{repo}/pulls/{number}
-        parts = notification.subject.url.rstrip("/").split("/")
-        owner_name, repo_name, pr_number = parts[-4], parts[-3], int(parts[-1])
-        pr_url = f"https://github.com/{owner_name}/{repo_name}/pull/{pr_number}"
-
-        print(f"[poller] @mention detected on {pr_url}")
-
         try:
+            # Convert API URL → web URL
+            # API shape: https://api.github.com/repos/{owner}/{repo}/pulls/{number}
+            if not notification.subject.url:
+                raise ValueError("Notification subject.url is missing")
+            parts = notification.subject.url.rstrip("/").split("/")
+            owner_name, repo_name, pr_number = parts[-4], parts[-3], int(parts[-1])
+            pr_url = f"https://github.com/{owner_name}/{repo_name}/pull/{pr_number}"
+
+            print(f"[poller] @mention detected on {pr_url}")
+
             markdown_report = _run_review_pipeline(pr_url)
             repo_obj = gh.get_repo(f"{owner_name}/{repo_name}")
             repo_obj.get_pull(pr_number).create_issue_comment(markdown_report)
             print(f"[poller] ✅ Review posted on {pr_url}")
             reviewed_count += 1
         except Exception as exc:
-            print(f"[poller] ❌ Failed for {pr_url}: {exc}")
+            print(f"[poller] ❌ Failed for notification {notification.id}: {exc}")
         finally:
             # Always mark as done so this notification never comes back
             try:
