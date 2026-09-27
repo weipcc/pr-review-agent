@@ -9,7 +9,19 @@ api.py
     curl -X POST http://localhost:8000/review \
         -H "Content-Type: application/json" \
         -d '{"pr_url": "https://github.com/owner/repo/pull/1"}'
+
+背景 Poller:
+    若設定了 GITHUB_TOKEN 環境變數，伺服器啟動後會自動開始輪詢
+    GitHub 通知，針對 @mention 的 PR 自動執行 review 並回覆留言。
+    可透過 POLL_INTERVAL_SECONDS 調整輪詢間隔（預設 15 秒）。
 """
+
+import asyncio
+import os
+from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,10 +31,42 @@ from aggregator import aggregate_results
 from context_builder import MAX_PR_DESCRIPTION_CHARS, truncate_text
 from github_context_builder import build_context_for_files, get_readme
 from github_diff_reader import get_parsed_pr_diff
+from mention_poller import poll_once
 from report import render_markdown
 from reviewer import review_all_files
 
-app = FastAPI(title="PR Review Agent API")
+POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", 15))
+
+
+async def _poll_loop() -> None:
+    """Background task: run poll_once() on a fixed interval."""
+    while True:
+        print(f"[poller] Checking for @mentions ...")
+        try:
+            await asyncio.to_thread(poll_once)
+        except RuntimeError as exc:
+            print(f"[poller] Disabled: {exc}")
+            return
+        except Exception as exc:
+            print(f"[poller] Error: {exc}")
+        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start the mention poller on startup if GITHUB_TOKEN is configured."""
+    if os.environ.get("GITHUB_TOKEN", "").strip():
+        print(f"[poller] Starting mention poller (interval={POLL_INTERVAL_SECONDS}s) ...")
+        task = asyncio.create_task(_poll_loop())
+    else:
+        task = None
+        print("[poller] GITHUB_TOKEN not set — mention poller is disabled.")
+    yield
+    if task:
+        task.cancel()
+
+
+app = FastAPI(title="PR Review Agent API", lifespan=lifespan)
 
 # 允許瀏覽器呼叫這支本機 API（僅供本機測試使用，不對外公開部署時無妨用 *）
 app.add_middleware(
