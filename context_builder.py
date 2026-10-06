@@ -1,10 +1,10 @@
 """
 context_builder.py
-負責為每個被改動的檔案組合出要餵給 LLM 的上下文。
+Builds the context fed to the LLM for each changed file.
 
-策略：
-- 檔案不大（預設 < 400 行）時，直接讀取完整內容
-- 檔案太大時，只取每個 hunk 前後 N 行，避免 prompt 過長
+Strategy:
+- If the file is small (default < 400 lines), read its full content
+- If the file is too large, take only N lines before and after each hunk to keep the prompt from growing too long
 """
 
 from pathlib import Path
@@ -12,10 +12,10 @@ from pathlib import Path
 from diff_reader import FileDiff
 
 MAX_FULL_FILE_LINES = 400
-CONTEXT_WINDOW = 30  # 檔案太大時，hunk 前後各取幾行
+CONTEXT_WINDOW = 30  # Lines to take before and after each hunk when the file is too large
 
-# 專案背景資訊（README / PR 描述）的長度上限。這些內容會被放進每一次 LLM 呼叫，
-# 太長會白白增加 token，所以只取開頭一段（README 的開頭通常就是專案簡介與架構概述）。
+# Length cap for project context (README / PR description). This content goes into every LLM call,
+# and being too long just wastes tokens, so only the opening section is kept (a README's opening is usually the project intro and architecture overview).
 MAX_README_CHARS = 6000
 MAX_PR_DESCRIPTION_CHARS = 3000
 
@@ -23,14 +23,14 @@ README_CANDIDATES = ("README.md", "README.rst", "README.txt", "README")
 
 
 def truncate_text(text: str, limit: int) -> str:
-    """超過 limit 個字元就截斷並標註，避免專案背景資訊撐大 prompt。"""
+    """Truncate and mark text longer than limit characters, so project context does not bloat the prompt."""
     if len(text) <= limit:
         return text
     return text[:limit].rstrip() + "\n...[truncated]"
 
 
 def read_local_readme(repo_path: str) -> str:
-    """讀取本機 repo 根目錄的 README（找不到就回傳空字串），並截斷到長度上限。"""
+    """Read the README at the local repo root (return an empty string if not found) and truncate it to the length cap."""
     for name in README_CANDIDATES:
         path = Path(repo_path) / name
         if path.is_file():
@@ -40,18 +40,18 @@ def read_local_readme(repo_path: str) -> str:
 
 
 def read_file_lines(repo_path: str, filename: str) -> list[str]:
-    """讀取本地檔案內容，回傳每一行的清單（不含換行符號）。"""
+    """Read a local file and return a list of its lines (without newline characters)."""
     file_path = Path(repo_path) / filename
     if not file_path.exists():
-        # 檔案可能已被刪除，回傳空清單
+        # The file may have been deleted; return an empty list
         return []
     return file_path.read_text(encoding="utf-8", errors="replace").splitlines()
 
 
 def build_file_context(repo_path: str, file_diff: FileDiff) -> str:
     """
-    針對單一檔案，組合出要放進 prompt 的上下文文字。
-    回傳格式是一段可讀的文字，包含行號，方便 LLM 對應到正確位置。
+    Build the context text to put into the prompt for a single file.
+    The result is a readable block of text with line numbers, so the LLM can map comments to the right locations.
     """
     lines = read_file_lines(repo_path, file_diff.filename)
 
@@ -62,7 +62,7 @@ def build_file_context(repo_path: str, file_diff: FileDiff) -> str:
         numbered = [f"{i + 1}: {line}" for i, line in enumerate(lines)]
         return "\n".join(numbered)
 
-    # 檔案太大，只取每個 hunk 附近的內容
+    # The file is too large; take only the content near each hunk
     snippets: list[str] = []
     seen_ranges: set[tuple[int, int]] = set()
 
@@ -80,7 +80,7 @@ def build_file_context(repo_path: str, file_diff: FileDiff) -> str:
 
 
 def build_diff_text(file_diff: FileDiff) -> str:
-    """把單一檔案的 diff hunks 轉成人類/LLM 可讀的文字格式。"""
+    """Convert a single file's diff hunks into a text format readable by humans and the LLM."""
     parts = [f"File: {file_diff.filename}"]
     for hunk in file_diff.hunks:
         parts.append(hunk.header)
@@ -92,8 +92,8 @@ def build_diff_text(file_diff: FileDiff) -> str:
 
 def build_context_for_files(repo_path: str, file_diffs: list[FileDiff]) -> dict[str, dict]:
     """
-    對所有變更檔案，組合出 {filename: {"diff": ..., "context": ...}} 的結構，
-    方便 reviewer.py 直接拿去組 prompt。
+    For all changed files, build a {filename: {"diff": ..., "context": ...}} structure,
+    which reviewer.py can use directly to build prompts.
     """
     result: dict[str, dict] = {}
     for file_diff in file_diffs:

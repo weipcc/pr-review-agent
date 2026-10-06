@@ -1,9 +1,9 @@
 """
 github_diff_reader.py
-負責透過 GitHub REST API 取得遠端 PR 的 diff，取代原本讀本機 git diff 的方式。
+Fetches a remote PR's diff through the GitHub REST API, replacing the original approach of reading a local git diff.
 
-不需要 GitHub token 也能用（僅限公開 repo），但匿名請求有速率限制
-（每小時約 60 次），足夠拿來測試小型 repo。
+Works without a GitHub token (public repos only), but anonymous requests are rate limited
+(about 60 per hour), which is enough for testing small repos.
 """
 
 import re
@@ -21,8 +21,8 @@ PR_URL_RE = re.compile(
 
 def parse_pr_url(pr_url: str) -> tuple[str, str, int]:
     """
-    把 PR 網址解析成 (owner, repo, pr_number)。
-    例如: https://github.com/octocat/Hello-World/pull/42
+    Parse a PR URL into (owner, repo, pr_number).
+    Example: https://github.com/octocat/Hello-World/pull/42
     """
     match = PR_URL_RE.search(pr_url)
     if not match:
@@ -31,7 +31,7 @@ def parse_pr_url(pr_url: str) -> tuple[str, str, int]:
 
 
 def get_pr_metadata(owner: str, repo: str, pr_number: int) -> dict:
-    """取得 PR 的基本資訊（包含 head commit sha，之後抓檔案內容會用到）。"""
+    """Get the PR's basic info (including the head commit sha, which is used later to fetch file contents)."""
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}"
     response = requests.get(url, timeout=30)
     response.raise_for_status()
@@ -39,7 +39,7 @@ def get_pr_metadata(owner: str, repo: str, pr_number: int) -> dict:
 
 
 def get_pr_raw_diff(owner: str, repo: str, pr_number: int) -> str:
-    """取得 PR 的原始 diff 文字（格式跟本機 git diff 幾乎相同）。"""
+    """Get the PR's raw diff text (nearly the same format as a local git diff)."""
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}"
     headers = {"Accept": "application/vnd.github.v3.diff"}
     response = requests.get(url, headers=headers, timeout=30)
@@ -49,8 +49,8 @@ def get_pr_raw_diff(owner: str, repo: str, pr_number: int) -> str:
 
 def get_parsed_pr_diff(pr_url: str) -> tuple[list[FileDiff], dict]:
     """
-    整合函式：輸入 PR 網址，回傳 (解析好的 FileDiff 清單, PR metadata)。
-    PR metadata 裡的 head sha 會拿去給 context builder 抓對應版本的檔案內容。
+    Convenience function: takes a PR URL and returns (parsed list of FileDiff, PR metadata).
+    The head sha in the PR metadata is passed to the context builder to fetch the matching version of each file.
     """
     owner, repo, pr_number = parse_pr_url(pr_url)
     metadata = get_pr_metadata(owner, repo, pr_number)
@@ -66,7 +66,7 @@ def get_parsed_pr_diff(pr_url: str) -> tuple[list[FileDiff], dict]:
 
 
 if __name__ == "__main__":
-    # 簡單測試（換成任何公開 repo 的 PR 網址）
+    # Quick test (replace with a PR URL from any public repo)
     test_url = "https://github.com/octocat/Hello-World/pull/1"
     diffs, meta = get_parsed_pr_diff(test_url)
     print(f"PR head sha: {meta['_head_sha']}")

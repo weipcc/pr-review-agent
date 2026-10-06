@@ -1,7 +1,7 @@
 """
 github_context_builder.py
-負責透過 GitHub API 讀取 PR head commit 版本的檔案內容，
-取代原本從本機檔案系統讀取的方式。
+Reads file contents at the PR head commit through the GitHub API,
+replacing the original approach of reading from the local filesystem.
 """
 
 import base64
@@ -18,8 +18,8 @@ CONTEXT_WINDOW = 30
 
 def get_file_content(owner: str, repo: str, path: str, ref: str) -> str:
     """
-    透過 GitHub Contents API 取得指定 commit（ref）版本的檔案內容。
-    若檔案不存在（例如被刪除），回傳空字串。
+    Get a file's content at the given commit (ref) through the GitHub Contents API.
+    If the file does not exist (e.g. it was deleted), return an empty string.
     """
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{path}"
     response = requests.get(url, params={"ref": ref}, timeout=30)
@@ -36,9 +36,9 @@ def get_file_content(owner: str, repo: str, path: str, ref: str) -> str:
 
 def get_readme(owner: str, repo: str, ref: str) -> str:
     """
-    透過 GitHub README API 取得指定 commit（ref）版本的 README，並截斷到長度上限。
-    README 只是補充背景，抓不到（沒有 README、網路或速率限制問題）就回傳空字串，
-    不要讓整個審查因此失敗。
+    Get the README at the given commit (ref) through the GitHub README API and truncate it to the length cap.
+    The README is only supplementary background; if it cannot be fetched (no README, network or rate-limit problems), return an empty string,
+    so the whole review does not fail because of it.
     """
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/readme"
     try:
@@ -59,7 +59,7 @@ def get_readme(owner: str, repo: str, ref: str) -> str:
 
 
 def build_file_context(owner: str, repo: str, ref: str, file_diff: FileDiff) -> str:
-    """針對單一檔案，組合出要放進 prompt 的上下文文字（含行號）。"""
+    """Build the context text (with line numbers) to put into the prompt for a single file."""
     content = get_file_content(owner, repo, file_diff.filename, ref)
     if not content:
         return "(File was deleted or could not be read)"
@@ -90,8 +90,8 @@ def build_context_for_files(
     owner: str, repo: str, ref: str, file_diffs: list[FileDiff]
 ) -> dict[str, dict]:
     """
-    對所有變更檔案，組合出 {filename: {"diff": ..., "context": ...}} 的結構，
-    方便 reviewer.py 直接拿去組 prompt。
+    For all changed files, build a {filename: {"diff": ..., "context": ...}} structure,
+    which reviewer.py can use directly to build prompts.
     """
     result: dict[str, dict] = {}
     for file_diff in file_diffs:

@@ -1,106 +1,107 @@
 # PR Review Agent
 
-一個用 LLM（目前串接 Google Gemini API）自動審查 GitHub PR 的小工具，
-提供兩種使用方式：本機 CLI 版本、以及透過網頁呼叫的 API 版本。
+A small tool that uses an LLM (currently the Google Gemini API) to automatically review GitHub PRs.
+It offers two ways to use it: a local CLI version, and an API version that is called from a web page.
 
-## 架構
+## Architecture
 
 ```
-輸入（PR 網址 / 本機 repo）
-   → 抓取 diff、檔案內容，以及專案背景（PR 標題/描述、README 開頭一段）
-   → 依總 token 數決定審查方式：
-        小 PR → 批次模式：所有檔案一次送給 Gemini，能看到整個 PR 的全貌
-        大 PR → 逐檔模式：一個檔案一次呼叫，但附上其他檔案的 diff 當參考
-   → Gemini 依固定 schema 回傳結構化結果（分類、信心、引用的原始碼、建議…）
-   → 彙整並排序
-   → 產生 Markdown 報告（英文）
+Input (PR URL / local repo)
+   → Fetch the diff, file contents, and project context (PR title/description, the opening of the README)
+   → Choose the review mode by total token count:
+        Small PR → batched mode: all files are sent to Gemini at once, so it sees the whole PR
+        Large PR → sequential mode: one call per file, with the other files' diffs attached as reference
+   → Gemini returns structured results in a fixed schema (category, confidence, quoted source code, suggestion, ...)
+   → Aggregate and sort
+   → Produce a Markdown report (in English)
 ```
 
-## 檔案說明
+## Files
 
-### 核心邏輯（CLI、API 版本共用）
-- `reviewer.py` — 呼叫 Gemini API：批次 / 逐檔兩種模式、`review_pr_files()` 依 token 數自動分流；
-  system prompt、few-shot 範例與 Pydantic schema 也都在這裡
-- `aggregator.py` — 彙整所有檔案的結果，依類別與結論排序，並算出整份 PR 的總結論
-- `report.py` — 把彙整結果轉成 Markdown 報告
+### Core logic (shared by the CLI and API versions)
+- `reviewer.py` — Calls the Gemini API: batched / sequential modes, with `review_pr_files()` routing automatically by token count;
+  the system prompts, few-shot examples, and Pydantic schemas also live here
+- `aggregator.py` — Aggregates the results of all files, sorts by category and verdict, and computes the overall verdict for the PR
+- `report.py` — Turns the aggregated result into a Markdown report
 
-### CLI 版本（審查本機 git repo）
-- `diff_reader.py` — 讀本機 `git diff`，解析成結構化資料
-- `context_builder.py` — 讀本機檔案內容與 README，組成 LLM 的上下文
-- `main.py` — CLI 入口
+### CLI version (reviews a local git repo)
+- `diff_reader.py` — Reads the local `git diff` and parses it into structured data
+- `context_builder.py` — Reads local file contents and the README to build the LLM's context
+- `main.py` — CLI entry point
 
-### API 版本（審查遠端 GitHub PR）
-- `github_diff_reader.py` — 透過 GitHub API 抓遠端 PR 的 diff 與基本資訊
-- `github_context_builder.py` — 透過 GitHub API 抓檔案內容與 README
-- `api.py` — 用 FastAPI 包裝，提供 `/review` 端點
-- `review_page.html` — 獨立的小網頁，輸入 PR 網址、呼叫本機 API
+### API version (reviews a remote GitHub PR)
+- `github_diff_reader.py` — Fetches the remote PR's diff and basic info through the GitHub API
+- `github_context_builder.py` — Fetches file contents and the README through the GitHub API
+- `api.py` — A FastAPI wrapper that provides the `/review` endpoint
+- `review_page.html` — A standalone small web page: enter a PR URL and it calls the local API
 
-### 已棄用的嘗試
-- `bookmarklet.js` / `bookmarklet.min.txt` — 原本想用瀏覽器書籤在 GitHub
-  頁面上直接呼叫 API，但會被 GitHub 的 CSP 安全機制擋掉，改用
-  `review_page.html` 取代。保留作紀錄。
+### Deprecated attempts
+- `bookmarklet.js` / `bookmarklet.min.txt` — The original idea was to call the API directly from a GitHub
+  page using a browser bookmark, but GitHub's CSP security policy blocks it, so
+  `review_page.html` replaced it. Kept for the record.
 
-## 審查結果
+## Review output
 
-每個問題（issue）包含：
+Each issue contains:
 
-| 欄位 | 說明 |
+| Field | Description |
 |---|---|
-| `category` | 7 類：`bug` / `security` / `performance` / `style` / `refactor` / `nitpick` / `question` |
-| `confidence` | `high` / `medium` / `low`，模型對這個問題有多確定 |
-| `evidence` | 逐字引用觸發問題的原始程式碼（用來降低模型憑空捏造問題的機率） |
-| `start_line` / `end_line` | 問題所在的行範圍 |
-| `comment` / `suggestion` / `suggested_code` | 問題描述、修改建議、可直接套用的程式碼（可為空） |
+| `category` | 7 categories: `bug` / `security` / `performance` / `style` / `refactor` / `nitpick` / `question` |
+| `confidence` | `high` / `medium` / `low`, how sure the model is about this issue |
+| `evidence` | The source code that triggers the issue, quoted verbatim (used to reduce the chance of the model inventing issues) |
+| `start_line` / `end_line` | The line range where the issue occurs |
+| `comment` / `suggestion` / `suggested_code` | The issue description, the suggested fix, and code that can be applied directly (may be empty) |
 
-每個檔案另有 `change_intent`（這個檔案的改動想做什麼）與 `recommendation`
-（`looks_good` / `minor_comments` / `needs_changes`）；整份 PR 的結論取所有檔案中最嚴重的一個。
+Each file also has a `change_intent` (what this file's change is trying to do) and a `recommendation`
+(`looks_good` / `minor_comments` / `needs_changes`); the verdict for the whole PR is the most severe one across all files.
 
-報告會先列出 PR 標題（僅 API 版本）、整體結論與檔案總覽表；有問題的檔案才展開細節，
-沒問題的檔案收在最後、每個檔案一行。報告與終端輸出、網頁介面皆為英文。
+The report first lists the PR title (API version only), the overall verdict, and a file overview table; only files with issues
+are expanded in detail, while files without issues are collected at the end, one line per file. The report, terminal output,
+and web interface are all in English.
 
-## 環境設定
+## Environment setup
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-export GEMINI_API_KEY=你的Gemini_key
+export GEMINI_API_KEY=your_Gemini_key
 ```
 
-## 使用方式
+## Usage
 
-### CLI 版本（審查本機 git repo）
+### CLI version (reviews a local git repo)
 
 ```bash
 python main.py --repo-path /path/to/repo --base main
 python main.py --repo-path . --output review.md
 ```
 
-不指定 `--base` 時，會審查尚未 commit 的變更。CLI 版本沒有 PR 標題/描述，
-只會帶入該 repo 的 README 當專案背景。
+Without `--base`, uncommitted changes are reviewed. The CLI version has no PR title/description,
+so only the repo's README is passed in as project context.
 
-### API 版本（審查遠端 GitHub PR）
+### API version (reviews a remote GitHub PR)
 
-1. 啟動 API 服務：
+1. Start the API service:
    ```bash
    uvicorn api:app --reload --port 8000
    ```
-2. 用 Chrome 打開 `review_page.html`（不要用 Safari，file:// 權限限制較嚴）
-3. 貼上 PR 網址，點 "Start review"
+2. Open `review_page.html` in Chrome (not Safari, whose file:// permissions are stricter)
+3. Paste a PR URL and click "Start review"
 
-目前僅支援**公開 repo**，未帶 GitHub token，會受匿名 API 速率限制
-（每小時約 60 次請求）。審查一個 PR 大約會用掉 3 + N 次請求
-（PR 資訊、diff、README，加上 N 個檔案的內容），檔案多時較容易碰到上限。
+Currently only **public repos** are supported, and no GitHub token is sent, so anonymous API rate limits apply
+(about 60 requests per hour). Reviewing one PR uses roughly 3 + N requests
+(PR info, diff, README, plus the contents of N files), so PRs with many files hit the limit more easily.
 
-## 已知限制 / 待改進方向
+## Known limitations / areas for improvement
 
-- 匿名呼叫 GitHub API，速率限制較低，也無法讀取私有 repo
-- 目前是手動觸發，尚未串接 webhook 自動觸發
-- 目前只回傳報告，尚未自動貼回 GitHub PR 當 inline comment
-- 目前只能在本機執行，尚未部署到雲端
-- 大 PR 走逐檔模式時，模型只看得到其他檔案的 diff，看不到它們的完整內容
-- README 只取開頭 6000 字元、PR 描述只取前 3000 字元，尚未做完整的專案架構摘要
-- 尚未建立 benchmark 量化審查品質（precision / recall），也還沒驗證
-  few-shot 與專案背景資訊實際帶來多少幫助
-- 逐檔模式每次呼叫都會帶上 few-shot 範例，大 PR 會增加一些 token 用量
-- `refactor`、`question` 兩個類別目前沒有專門的 few-shot 範例
+- GitHub API calls are anonymous, so the rate limit is low and private repos cannot be read
+- Reviews are triggered manually; automatic triggering via a webhook is not wired up yet
+- Only a report is returned; it is not yet posted back to the GitHub PR as inline comments
+- It can only run locally; it has not been deployed to the cloud yet
+- When a large PR goes through sequential mode, the model only sees the other files' diffs, not their full contents
+- Only the first 6000 characters of the README and the first 3000 characters of the PR description are used; a full project architecture summary has not been built yet
+- No benchmark has been built to quantify review quality (precision / recall), and it has not yet been verified how much
+  the few-shot examples and project context actually help
+- Sequential mode sends the few-shot examples on every call, which adds some token usage for large PRs
+- The `refactor` and `question` categories currently have no dedicated few-shot examples

@@ -1,19 +1,19 @@
 """
 api.py
-用 FastAPI 包裝現有的 PR review pipeline，提供一個本機可呼叫的 API。
+Wraps the existing PR review pipeline with FastAPI, providing an API that can be called locally.
 
-啟動方式:
+How to start:
     uvicorn api:app --reload --port 8000
 
-呼叫方式:
+How to call:
     curl -X POST http://localhost:8000/review \
         -H "Content-Type: application/json" \
         -d '{"pr_url": "https://github.com/owner/repo/pull/1"}'
 
-背景 Poller:
-    若設定了 GITHUB_TOKEN 環境變數，伺服器啟動後會自動開始輪詢
-    GitHub 通知，針對 @mention 的 PR 自動執行 review 並回覆留言。
-    可透過 POLL_INTERVAL_SECONDS 調整輪詢間隔（預設 15 秒）。
+Background poller:
+    If the GITHUB_TOKEN environment variable is set, the server starts polling
+    GitHub notifications after startup, automatically reviewing any PR that @mentions it and replying with a comment.
+    The polling interval can be adjusted with POLL_INTERVAL_SECONDS (default 15 seconds).
 """
 
 import asyncio
@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="PR Review Agent API", lifespan=lifespan)
 
-# 允許瀏覽器呼叫這支本機 API（僅供本機測試使用，不對外公開部署時無妨用 *）
+# Allow browsers to call this local API (for local testing only; using * is fine as long as it is not publicly deployed)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -93,15 +93,15 @@ class ReviewResponse(BaseModel):
 
 @app.get("/")
 def health_check():
-    """簡單的健康檢查，確認服務有啟動。"""
+    """Simple health check to confirm the service is up."""
     return {"status": "ok", "message": "PR Review Agent API is running"}
 
 
 @app.post("/review", response_model=ReviewResponse)
 def review_pr(request: ReviewRequest):
     """
-    輸入一個 GitHub PR 網址，回傳完整的 review 結果。
-    僅支援公開 repo（未帶 GitHub token，會受匿名 API 速率限制）。
+    Takes a GitHub PR URL and returns the full review result.
+    Only public repos are supported (no GitHub token is sent, so anonymous API rate limits apply).
     """
     try:
         file_diffs, metadata = get_parsed_pr_diff(request.pr_url)
@@ -119,7 +119,7 @@ def review_pr(request: ReviewRequest):
 
     file_contexts = build_context_for_files(owner, repo, head_sha, file_diffs)
 
-    # 專案背景：PR 標題/描述 + README 摘錄，讓模型知道這個 PR 想達成什麼、專案是做什麼的
+    # Project context: PR title/description + README excerpt, so the model knows what the PR is trying to achieve and what the project does
     project_context = {
         "pr_title": metadata.get("title") or "",
         "pr_description": truncate_text(metadata.get("body") or "", MAX_PR_DESCRIPTION_CHARS),
