@@ -35,13 +35,34 @@ Prompt 改進的部分（合併自 prompt-improvement 分支）：
 7. 專案背景（project_context）：可選地把 PR 標題/描述與 README 摘錄放進 prompt
    （<pr_info>、<project_readme> 標籤），讓模型知道這個 PR 想達成什麼、專案是做什麼的。
    不傳就跟以前完全一樣；這些內容同樣視為不可信的外部輸入。
+
+LangChain Deep Agent migration:
+The LLM call layer now runs through a LangChain Deep Agent (deepagents.create_deep_agent)
+backed by langchain-google-genai's ChatGoogleGenerativeAI (Gemini).
+- The system prompts, few-shot examples, Pydantic schemas, batch/per-file routing and output
+  format are identical to before; the only change is "call the genai client directly" ->
+  "call the agent".
+- The agent currently has no tools: the built-in filesystem / execute / task tools that Deep
+  Agents ships with are removed via HarnessProfile's excluded_tools (the officially documented
+  approach), and the general-purpose subagent is disabled. The model therefore sees exactly the
+  same system prompt as before and has nothing it can call.
+  To add a tool later, pass it to the `tools` argument of _build_agent.
 """
 
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from google import genai
+from deepagents import (
+    GeneralPurposeSubagentProfile,
+    HarnessProfile,
+    create_deep_agent,
+    register_harness_profile,
+)
+from deepagents.backends import StateBackend
+from deepagents.middleware.filesystem import FilesystemMiddleware
+from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 MODEL_NAME = "gemini-3.6-flash"
@@ -53,15 +74,63 @@ TEMPERATURE = 0.2
 # 之後可依實測效果、成本考量調整。
 BATCH_TOKEN_THRESHOLD = 6000
 
-_client = None
+# Deep Agents ships built-in filesystem tools (ls/read_file/write_file/edit_file/delete/glob/grep/
+# execute) and the task (subagent) tool. This agent doesn't need any tools yet, so, following the
+# official docs (https://docs.langchain.com/oss/python/deepagents/profiles), we hide them from the
+# model with a HarnessProfile's excluded_tools and disable the default general-purpose subagent
+# (which provides the task tool).
+# The tool names are read from deepagents itself so that built-in tools added in future releases
+# are excluded automatically.
+# Registered only for the model this project uses (provider:model), so other Gemini models are
+# unaffected.
+register_harness_profile(
+    f"google_genai:{MODEL_NAME}",
+    HarnessProfile(
+        excluded_tools=frozenset(
+            {t.name for t in FilesystemMiddleware(backend=StateBackend()).tools} | {"task"}
+        ),
+        general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
+    ),
+)
+
+_model = None
 
 
-def _get_client() -> genai.Client:
-    """延遲初始化 Gemini client，避免模組載入時就要求 API key。"""
-    global _client
-    if _client is None:
-        _client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-    return _client
+def _get_model() -> ChatGoogleGenerativeAI:
+    """Lazily initialize the Gemini model so that importing this module doesn't require an API key."""
+    global _model
+    if _model is None:
+        _model = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            temperature=TEMPERATURE,
+            google_api_key=os.environ.get("GEMINI_API_KEY"),
+        )
+    return _model
+
+
+@lru_cache(maxsize=None)
+def _build_agent(system_prompt: str, response_schema: type[BaseModel]):
+    """
+    Build (and cache) a Deep Agent:
+    - system_prompt is passed through unchanged (no profile prefix/suffix is added, so the model
+      receives exactly this text).
+    - response_format takes a Pydantic schema so Gemini returns structured output, equivalent to
+      the response_schema used before the migration.
+    - tools is currently empty; pass any future tools in here.
+    """
+    return create_deep_agent(
+        model=_get_model(),
+        tools=[],
+        system_prompt=system_prompt,
+        response_format=response_schema,
+    )
+
+
+def _run_agent(system_prompt: str, response_schema: type[BaseModel], messages: list[dict]) -> BaseModel:
+    """Run one review through the agent and return the parsed Pydantic object (FileReview or BatchReview)."""
+    agent = _build_agent(system_prompt, response_schema)
+    result = agent.invoke({"messages": messages})
+    return result["structured_response"]
 
 
 class Issue(BaseModel):
@@ -437,16 +506,14 @@ FEW_SHOT_EXAMPLES = [
 
 
 def build_few_shot_contents() -> list[dict]:
-    """把校準範例轉成 Gemini 多輪對話格式（user/model 交替），給單檔模式（review_file）用。"""
+    """Turn the calibration examples into multi-turn messages (alternating user/assistant) for per-file mode (review_file)."""
     contents: list[dict] = []
     for example in FEW_SHOT_EXAMPLES:
         user_text = build_user_message(
             example["filename"], example["language"], example["diff"], example["context"]
         )
-        contents.append({"role": "user", "parts": [{"text": user_text}]})
-        contents.append(
-            {"role": "model", "parts": [{"text": example["expected"].model_dump_json()}]}
-        )
+        contents.append({"role": "user", "content": user_text})
+        contents.append({"role": "assistant", "content": example["expected"].model_dump_json()})
     return contents
 
 
@@ -465,8 +532,8 @@ def build_batch_few_shot_contents() -> list[dict]:
         ]
     )
     return [
-        {"role": "user", "parts": [{"text": user_text}]},
-        {"role": "model", "parts": [{"text": expected.model_dump_json()}]},
+        {"role": "user", "content": user_text},
+        {"role": "assistant", "content": expected.model_dump_json()},
     ]
 
 
@@ -482,8 +549,7 @@ def count_total_tokens(file_contexts: dict[str, dict]) -> int:
     )
     if not combined_text.strip():
         return 0
-    response = _get_client().models.count_tokens(model=MODEL_NAME, contents=combined_text)
-    return response.total_tokens
+    return _get_model().get_num_tokens(combined_text)
 
 
 def review_file(
@@ -505,20 +571,9 @@ def review_file(
         filename, language, diff_text, context_text, other_files_diff, project_context
     )
 
-    contents = build_few_shot_contents() + [{"role": "user", "parts": [{"text": user_message}]}]
+    messages = build_few_shot_contents() + [{"role": "user", "content": user_message}]
 
-    response = _get_client().models.generate_content(
-        model=MODEL_NAME,
-        contents=contents,
-        config={
-            "system_instruction": system_prompt,
-            "response_mime_type": "application/json",
-            "response_schema": FileReview,
-            "temperature": TEMPERATURE,
-        },
-    )
-
-    parsed: FileReview = response.parsed
+    parsed: FileReview = _run_agent(system_prompt, FileReview, messages)
     result = parsed.model_dump()
     result["filename"] = filename
     return result
@@ -554,21 +609,10 @@ def review_all_files_batched(
     """
     system_prompt = build_system_prompt_batch()
     user_message = build_batch_user_message(file_contexts, project_context)
-    contents = build_batch_few_shot_contents() + [{"role": "user", "parts": [{"text": user_message}]}]
+    messages = build_batch_few_shot_contents() + [{"role": "user", "content": user_message}]
 
     print(f"Reviewing (batch mode, {len(file_contexts)} file(s)) ...")
-    response = _get_client().models.generate_content(
-        model=MODEL_NAME,
-        contents=contents,
-        config={
-            "system_instruction": system_prompt,
-            "response_mime_type": "application/json",
-            "response_schema": BatchReview,
-            "temperature": TEMPERATURE,
-        },
-    )
-
-    parsed: BatchReview = response.parsed
+    parsed: BatchReview = _run_agent(system_prompt, BatchReview, messages)
     return [item.model_dump() for item in parsed.files]
 
 
