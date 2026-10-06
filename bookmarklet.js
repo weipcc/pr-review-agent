@@ -1,24 +1,24 @@
 /**
  * bookmarklet.js
  *
- * 這不是要拿去執行的一般程式，是要轉成瀏覽器書籤用的。
- * 使用方式請看 README 或對話裡的說明。
+ * This is not a regular program to run; it is meant to be turned into a browser bookmark.
+ * See the README or the conversation notes for usage.
  *
- * 功能：在 GitHub PR 頁面點這個書籤，會讀取目前頁面網址，
- * 呼叫本機的 PR review API (http://localhost:8000/review)，
- * 並在新分頁顯示 Markdown 格式的 review 報告。
+ * What it does: when you click this bookmark on a GitHub PR page, it reads the current page URL,
+ * calls the local PR review API (http://localhost:8000/review),
+ * and shows the Markdown-formatted review report in a new tab.
  */
 (function () {
   const prUrl = window.location.href.split("#")[0].split("?")[0];
   const isPrPage = /github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(prUrl);
 
   if (!isPrPage) {
-    alert("請先切換到 GitHub 的 PR 頁面（網址要包含 /pull/數字），再點這個書籤。");
+    alert("Please switch to a GitHub PR page (the URL must contain /pull/<number>), then click this bookmark again.");
     return;
   }
 
   const resultWindow = window.open("", "_blank");
-  resultWindow.document.write("<p style='font-family:monospace;padding:20px;'>審查中，請稍候...</p>");
+  resultWindow.document.write("<p style='font-family:monospace;padding:20px;'>Reviewing, please wait...</p>");
 
   fetch("http://localhost:8000/review", {
     method: "POST",
@@ -28,7 +28,7 @@
     .then((res) => {
       if (!res.ok) {
         return res.json().then((err) => {
-          throw new Error(err.detail || "API 回傳錯誤");
+          throw new Error(err.detail || "API returned an error");
         });
       }
       return res.json();
@@ -46,7 +46,7 @@
     })
     .catch((err) => {
       resultWindow.document.body.innerHTML =
-        "<p style='font-family:monospace;padding:20px;color:red;'>呼叫失敗：" + err.message + "</p>" +
-        "<p style='font-family:monospace;padding:0 20px;'>請確認本機的 uvicorn 服務是否有正常啟動（http://localhost:8000）。</p>";
+        "<p style='font-family:monospace;padding:20px;color:red;'>Request failed: " + err.message + "</p>" +
+        "<p style='font-family:monospace;padding:0 20px;'>Please make sure the local uvicorn server is running (http://localhost:8000).</p>";
     });
 })();

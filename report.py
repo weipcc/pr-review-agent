@@ -1,16 +1,16 @@
 """
 report.py
-負責把 aggregator.py 產生的彙整結果，轉成人類可讀的 Markdown 報告。
+Turns the aggregated result produced by aggregator.py into a human-readable Markdown report.
 
-本版改動（本機實驗版，尚未上傳）：
-- 報告輸出語言統一改成英文（之前 LLM 內容有時會跟著被審查檔案的語言混入中文，
-  這裡除了模板文字翻成英文，也在 reviewer.py 的 system prompt 加了強制英文輸出的規則）
-- 排版改進：檔案清單最上面加一個總覽表格，讓讀者一眼看到「有哪些檔案、各自的結論、
-  各有幾個問題」，不用逐一往下捲；每個問題也拆成清楚的標籤行 + 引用 + 說明區塊，
-  取代原本擠在同一個項目符號裡的長句
-- 精簡篇幅：只有「有問題的檔案」才展開完整說明（change_intent + review + 每條 issue 的
-  證據/建議/代碼）；「沒有問題的檔案」收進報告最後一個一行摘要的清單，不再重複展開整段
-  說明。避免 PR 檔案數一多，報告長度跟著線性膨脹，稀釋掉真正需要注意的內容。
+Changes in this version (local experimental version, not yet uploaded):
+- The report output language is unified to English (previously the LLM content sometimes drifted into Chinese following the language of the files under review;
+  besides translating the template text to English here, a rule forcing English output was also added to the system prompt in reviewer.py)
+- Layout improvements: an overview table is added at the top of the file list so readers can see at a glance "which files, each file's verdict,
+  and how many issues each has" without scrolling through everything; each issue is also split into a clear label line + quote + explanation block,
+  replacing the long sentence previously crammed into a single bullet
+- Shorter reports: only "files with issues" get the full explanation (change_intent + review + each issue's
+  evidence/suggestion/code); "files without issues" go into a one-line-per-file summary list at the end of the report instead of repeating a full
+  explanation. This keeps report length from growing linearly with the number of files in a PR and diluting what actually needs attention.
 """
 
 CATEGORY_EMOJI = {
@@ -47,7 +47,7 @@ def _format_line_range(issue: dict) -> str:
 
 
 def _render_summary_table(files: list[dict]) -> list[str]:
-    """檔案總覽表格，讓讀者不用往下捲就能看到全貌。"""
+    """File overview table, so readers can see the whole picture without scrolling."""
     lines = ["| File | Recommendation | Issues |", "|---|---|---|"]
     for file_result in files:
         badge = RECOMMENDATION_BADGE.get(file_result.get("recommendation"), "")
@@ -59,7 +59,7 @@ def _render_summary_table(files: list[dict]) -> list[str]:
 
 
 def _render_compact_file(file_result: dict) -> str:
-    """沒有問題的檔案，只用一行摘要交代這個檔案改了什麼，不重複展開整段說明。"""
+    """For files without issues: a one-line summary of what the file changed, without repeating the full explanation."""
     badge = RECOMMENDATION_BADGE.get(file_result.get("recommendation"), "")
     emoji = badge.split(" ", 1)[0] if badge else ""
     filename = file_result["filename"]
@@ -101,7 +101,7 @@ def _render_issue(index: int, issue: dict) -> list[str]:
 
 
 def render_markdown(aggregated: dict) -> str:
-    """把彙整結果轉成完整的 Markdown 字串。"""
+    """Convert the aggregated result into a complete Markdown string."""
     lines = ["# PR Review Report", ""]
 
     pr_title = aggregated.get("pr_title")
@@ -123,8 +123,8 @@ def render_markdown(aggregated: dict) -> str:
     lines.append("---")
     lines.append("")
 
-    # 只有「有問題的檔案」才展開完整說明；「沒有問題的檔案」放進最後的一行摘要清單，
-    # 避免每個 clean 檔案都重複一遍 change_intent/summary，讓報告長度跟著檔案數線性膨脹。
+    # Only "files with issues" get the full explanation; "files without issues" go into the one-line summary list at the end,
+    # so every clean file does not repeat change_intent/summary and the report does not grow linearly with the number of files.
     detailed_files = [f for f in files if f["issues"]]
     clean_files = [f for f in files if not f["issues"]]
 
@@ -147,8 +147,8 @@ def render_markdown(aggregated: dict) -> str:
         for i, issue in enumerate(issues, 1):
             lines.extend(_render_issue(i, issue))
 
-        # 除非這是最後一段內容（後面既沒有其他有問題的檔案，也沒有 clean 檔案清單），
-        # 否則加分隔線；避免結尾出現孤立的 "---"。
+        # Unless this is the last block (no more files with issues follow, and there is no clean-files list),
+        # add a separator line; this avoids a dangling "---" at the end.
         is_last_detailed = index == len(detailed_files) - 1
         if not is_last_detailed or clean_files:
             lines.append("---")
@@ -165,6 +165,6 @@ def render_markdown(aggregated: dict) -> str:
 
 
 def save_report(content: str, output_path: str) -> None:
-    """把報告內容存成檔案。"""
+    """Save the report content to a file."""
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)

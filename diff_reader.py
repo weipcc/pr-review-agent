@@ -1,8 +1,8 @@
 """
 diff_reader.py
-負責從本地 git repo 讀取 diff，並解析成結構化資料。
+Reads the diff from a local git repo and parses it into structured data.
 
-輸出格式範例:
+Example output format:
 [
     {
         "filename": "app.py",
@@ -55,10 +55,10 @@ FILE_HEADER_RE = re.compile(r"^diff --git a/(.+) b/(.+)$")
 
 def get_raw_diff(repo_path: str, base: str = "HEAD") -> str:
     """
-    取得本地 git diff 的原始文字輸出。
+    Get the raw text output of a local git diff.
 
-    repo_path: 目標 repo 的路徑
-    base: 比較基準，例如 "main"、"HEAD"（預設 HEAD 代表比對 working directory 的未 commit 修改）
+    repo_path: path of the target repo
+    base: comparison baseline, e.g. "main" or "HEAD" (the default HEAD compares against uncommitted changes in the working directory)
     """
     if base == "HEAD":
         cmd = ["git", "-C", repo_path, "diff", "HEAD"]
@@ -72,7 +72,7 @@ def get_raw_diff(repo_path: str, base: str = "HEAD") -> str:
 
 
 def parse_diff(raw_diff: str) -> list[FileDiff]:
-    """把 git diff 的原始文字解析成結構化的 FileDiff 清單。"""
+    """Parse raw git diff text into a structured list of FileDiff objects."""
     files: list[FileDiff] = []
     current_file: FileDiff | None = None
     current_hunk: DiffHunk | None = None
@@ -121,19 +121,19 @@ def parse_diff(raw_diff: str) -> list[FileDiff]:
             )
             old_line_no += 1
             new_line_no += 1
-        # 其他如 "\ No newline at end of file" 直接忽略
+        # Anything else, such as "\ No newline at end of file", is simply ignored
 
     return files
 
 
 def get_parsed_diff(repo_path: str, base: str = "HEAD") -> list[FileDiff]:
-    """整合函式：直接回傳解析好的 diff 結構。"""
+    """Convenience function: directly return the parsed diff structure."""
     raw = get_raw_diff(repo_path, base)
     return parse_diff(raw)
 
 
 if __name__ == "__main__":
-    # 簡單測試：對目前資料夾跑一次
+    # Quick test: run once against the current folder
     diffs = get_parsed_diff(".")
     for f in diffs:
         print(f"File: {f.filename}, hunks: {len(f.hunks)}")

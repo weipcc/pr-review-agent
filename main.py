@@ -1,8 +1,8 @@
 """
 main.py
-CLI 入口。串接 diff_reader -> context_builder -> reviewer -> aggregator -> report。
+CLI entry point. Chains diff_reader -> context_builder -> reviewer -> aggregator -> report.
 
-使用範例:
+Usage examples:
     python main.py --repo-path /path/to/your/repo --base main
     python main.py --repo-path . --output review.md
 """
@@ -50,7 +50,7 @@ def main():
     print(f"Detected {len(file_diffs)} changed file(s). Building context...")
     file_contexts = build_context_for_files(args.repo_path, file_diffs)
 
-    # 本機模式沒有 PR 標題/描述，只帶 README 摘錄當專案背景
+    # Local mode has no PR title/description, so only the README excerpt is passed as project context
     project_context = {"readme": read_local_readme(args.repo_path)}
 
     print("Calling the LLM to review...")
