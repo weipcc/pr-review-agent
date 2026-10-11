@@ -22,11 +22,12 @@ from github import Github, GithubException
 def _run_review_pipeline(pr_url: str) -> str:
     """Run the full review pipeline and return the rendered markdown report."""
     from aggregator import aggregate_results
-    from context_builder import MAX_PR_DESCRIPTION_CHARS, truncate_text
-    from github_context_builder import build_context_for_files, get_readme
+    from context_builder import MAX_PR_DESCRIPTION_CHARS, build_diffs_for_files, truncate_text
+    from github_context_builder import get_readme
     from github_diff_reader import get_parsed_pr_diff
     from report import render_markdown
-    from reviewer import review_all_files
+    from reviewer import PRTooLargeError, check_pr_size, review_pr_files
+    from sandbox_tools import open_pr_sandbox
 
     file_diffs, metadata = get_parsed_pr_diff(pr_url)
     if not file_diffs:
@@ -36,14 +37,21 @@ def _run_review_pipeline(pr_url: str) -> str:
     repo = metadata["_repo"]
     head_sha = metadata["_head_sha"]
 
-    file_contexts = build_context_for_files(owner, repo, head_sha, file_diffs)
+    file_contexts = build_diffs_for_files(file_diffs)
     project_context = {
         "pr_title": metadata.get("title") or "",
         "pr_description": truncate_text(metadata.get("body") or "", MAX_PR_DESCRIPTION_CHARS),
         "readme": get_readme(owner, repo, head_sha),
     }
 
-    review_results = review_all_files(file_contexts, project_context)
+    try:
+        check_pr_size(file_contexts)  # before starting a sandbox, so oversized PRs cost nothing
+    except PRTooLargeError as e:
+        # Posted as the PR comment instead of a review.
+        return f"**PR too large to review.** {e}"
+
+    with open_pr_sandbox(metadata) as sandbox:
+        review_results = review_pr_files(file_contexts, project_context, sandbox=sandbox)
     aggregated = aggregate_results(review_results)
     aggregated["pr_title"] = project_context["pr_title"]
     aggregated["pr_url"] = pr_url

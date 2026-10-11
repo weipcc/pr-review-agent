@@ -1,16 +1,16 @@
 # PR Review Agent
 
 一個用 LLM（目前串接 Google Gemini API）自動審查 GitHub PR 的小工具，
-提供兩種使用方式：本機 CLI 版本、以及透過網頁呼叫的 API 版本。
+透過 API 審查遠端 GitHub PR（需要 E2B_API_KEY 與 GEMINI_API_KEY；agent 會在 E2B sandbox 中探索 PR 程式碼）。
 
 ## 架構
 
 ```
-輸入（PR 網址 / 本機 repo）
-   → 抓取 diff、檔案內容，以及專案背景（PR 標題/描述、README 開頭一段）
-   → 依總 token 數決定審查方式：
-        小 PR → 批次模式：所有檔案一次送給 Gemini，能看到整個 PR 的全貌
-        大 PR → 逐檔模式：一個檔案一次呼叫，但附上其他檔案的 diff 當參考
+輸入（PR 網址）
+   → 抓取 diff，以及專案背景（PR 標題/描述、README 開頭一段）
+   → 檢查所有 diff 的總 token 數：超過 BATCH_TOKEN_THRESHOLD 就不審查，
+     並回覆「PR 太大」（API 回 413；@mention 時貼成 PR 留言）
+   → 否則所有檔案一次送給 Gemini，agent 可在 E2B sandbox 中探索程式碼
    → Gemini 依固定 schema 回傳結構化結果（分類、信心、引用的原始碼、建議…）
    → 彙整並排序
    → 產生 Markdown 報告（英文）
@@ -18,20 +18,20 @@
 
 ## 檔案說明
 
-### 核心邏輯（CLI、API 版本共用）
-- `reviewer.py` — 呼叫 Gemini API：批次 / 逐檔兩種模式、`review_pr_files()` 依 token 數自動分流；
+### 核心邏輯
+- `reviewer.py` — 呼叫 Gemini API：`check_pr_size()` 擋掉過大的 PR、`review_pr_files()` 一次審查所有檔案；
   system prompt、few-shot 範例與 Pydantic schema 也都在這裡
 - `aggregator.py` — 彙整所有檔案的結果，依類別與結論排序，並算出整份 PR 的總結論
 - `report.py` — 把彙整結果轉成 Markdown 報告
 
-### CLI 版本（審查本機 git repo）
-- `diff_reader.py` — 讀本機 `git diff`，解析成結構化資料
-- `context_builder.py` — 讀本機檔案內容與 README，組成 LLM 的上下文
-- `main.py` — CLI 入口
+### Diff 解析
+- `diff_reader.py` — 把 git diff 文字解析成結構化資料
+- `context_builder.py` — 把 diff 組成 LLM 的輸入，並截斷 README / PR 描述
+- `sandbox_tools.py` — E2B sandbox（checkout PR、關閉網路）與唯一的 `run_bash` 工具
 
 ### API 版本（審查遠端 GitHub PR）
 - `github_diff_reader.py` — 透過 GitHub API 抓遠端 PR 的 diff 與基本資訊
-- `github_context_builder.py` — 透過 GitHub API 抓檔案內容與 README
+- `github_context_builder.py` — 透過 GitHub API 抓 README
 - `api.py` — 用 FastAPI 包裝，提供 `/review` 端點
 - `review_page.html` — 獨立的小網頁，輸入 PR 網址、呼叫本機 API
 
@@ -65,19 +65,11 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 export GEMINI_API_KEY=你的Gemini_key
+export E2B_API_KEY=你的E2B_key      # 必填：沒有 sandbox 就不會審查（.env 裡用 E2B_KEY 也可以）
+export GITHUB_TOKEN=你的GitHub_token  # 選填：讀私有 repo、啟用 @mention 輪詢
 ```
 
 ## 使用方式
-
-### CLI 版本（審查本機 git repo）
-
-```bash
-python main.py --repo-path /path/to/repo --base main
-python main.py --repo-path . --output review.md
-```
-
-不指定 `--base` 時，會審查尚未 commit 的變更。CLI 版本沒有 PR 標題/描述，
-只會帶入該 repo 的 README 當專案背景。
 
 ### API 版本（審查遠端 GitHub PR）
 
@@ -88,19 +80,21 @@ python main.py --repo-path . --output review.md
 2. 用 Chrome 打開 `review_page.html`（不要用 Safari，file:// 權限限制較嚴）
 3. 貼上 PR 網址，點 "Start review"
 
-目前僅支援**公開 repo**，未帶 GitHub token，會受匿名 API 速率限制
-（每小時約 60 次請求）。審查一個 PR 大約會用掉 3 + N 次請求
-（PR 資訊、diff、README，加上 N 個檔案的內容），檔案多時較容易碰到上限。
+讀取 PR 資訊、diff、README 是匿名呼叫 GitHub API（每小時約 60 次請求），
+一次審查約用 3 次請求，所以目前只支援**公開 repo**。
+
+審查流程：先檢查 diff 大小（太大就回 413 / 貼「PR 太大」留言），再建立 E2B sandbox，
+shallow checkout PR 後立刻關閉網路；agent 只有一個 `run_bash` 工具，
+最多 10 輪「LLM → 工具 → 結果」，用完後會被拿掉工具、強制輸出結果；單次工具輸出上限 5000 字元。
 
 ## 已知限制 / 待改進方向
 
-- 匿名呼叫 GitHub API，速率限制較低，也無法讀取私有 repo
+- 匿名呼叫 GitHub API，速率限制較低，也無法讀取私有 repo（sandbox 的 checkout 會用 GITHUB_TOKEN，但 diff/README 不會）
 - 目前是手動觸發，尚未串接 webhook 自動觸發
 - 目前只回傳報告，尚未自動貼回 GitHub PR 當 inline comment
 - 目前只能在本機執行，尚未部署到雲端
-- 大 PR 走逐檔模式時，模型只看得到其他檔案的 diff，看不到它們的完整內容
+- 超過 token 門檻的 PR 不會被審查，只會提示拆小
 - README 只取開頭 6000 字元、PR 描述只取前 3000 字元，尚未做完整的專案架構摘要
 - 尚未建立 benchmark 量化審查品質（precision / recall），也還沒驗證
   few-shot 與專案背景資訊實際帶來多少幫助
-- 逐檔模式每次呼叫都會帶上 few-shot 範例，大 PR 會增加一些 token 用量
 - `refactor`、`question` 兩個類別目前沒有專門的 few-shot 範例
