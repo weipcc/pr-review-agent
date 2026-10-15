@@ -162,9 +162,3 @@ def render_markdown(aggregated: dict) -> str:
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
-
-
-def save_report(content: str, output_path: str) -> None:
-    """把報告內容存成檔案。"""
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(content)

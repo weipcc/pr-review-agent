@@ -47,7 +47,7 @@ def sort_issues(issues: list[dict]) -> list[dict]:
 
 def aggregate_results(review_results: list[dict]) -> dict:
     """
-    輸入: review_file/review_all_files 產生的結果清單
+    輸入: review_file/review_pr_files 產生的結果清單
     輸出:
     {
         "files": [ {filename, change_intent, summary, recommendation, issues(排序後)} ... ],

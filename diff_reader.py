@@ -1,6 +1,6 @@
 """
 diff_reader.py
-負責從本地 git repo 讀取 diff，並解析成結構化資料。
+負責把 git diff 的原始文字解析成結構化資料。
 
 輸出格式範例:
 [
@@ -23,7 +23,6 @@ diff_reader.py
 """
 
 import re
-import subprocess
 from dataclasses import dataclass, field
 
 
@@ -51,24 +50,6 @@ class FileDiff:
 
 HUNK_HEADER_RE = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 FILE_HEADER_RE = re.compile(r"^diff --git a/(.+) b/(.+)$")
-
-
-def get_raw_diff(repo_path: str, base: str = "HEAD") -> str:
-    """
-    取得本地 git diff 的原始文字輸出。
-
-    repo_path: 目標 repo 的路徑
-    base: 比較基準，例如 "main"、"HEAD"（預設 HEAD 代表比對 working directory 的未 commit 修改）
-    """
-    if base == "HEAD":
-        cmd = ["git", "-C", repo_path, "diff", "HEAD"]
-    else:
-        cmd = ["git", "-C", repo_path, "diff", f"{base}...HEAD"]
-
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        raise RuntimeError(f"git diff failed: {result.stderr}")
-    return result.stdout
 
 
 def parse_diff(raw_diff: str) -> list[FileDiff]:
@@ -124,16 +105,3 @@ def parse_diff(raw_diff: str) -> list[FileDiff]:
         # 其他如 "\ No newline at end of file" 直接忽略
 
     return files
-
-
-def get_parsed_diff(repo_path: str, base: str = "HEAD") -> list[FileDiff]:
-    """整合函式：直接回傳解析好的 diff 結構。"""
-    raw = get_raw_diff(repo_path, base)
-    return parse_diff(raw)
-
-
-if __name__ == "__main__":
-    # 簡單測試：對目前資料夾跑一次
-    diffs = get_parsed_diff(".")
-    for f in diffs:
-        print(f"File: {f.filename}, hunks: {len(f.hunks)}")

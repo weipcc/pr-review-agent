@@ -17,23 +17,29 @@ api.py
 """
 
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 load_dotenv()
 
+# LOG_LEVEL=DEBUG logs the agent's output, tool calls and the first 100 chars of tool results.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.getLogger("pr_review").setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from aggregator import aggregate_results
-from context_builder import MAX_PR_DESCRIPTION_CHARS, truncate_text
-from github_context_builder import build_context_for_files, get_readme
+from context_builder import MAX_PR_DESCRIPTION_CHARS, build_diffs_for_files, truncate_text
+from github_context_builder import get_readme
 from github_diff_reader import get_parsed_pr_diff
 from mention_poller import poll_once
 from report import render_markdown
-from reviewer import review_all_files
+from reviewer import PRTooLargeError, check_pr_size, review_pr_files
+from sandbox_tools import open_pr_sandbox
 
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", 15))
 
@@ -41,7 +47,7 @@ POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", 15))
 async def _poll_loop() -> None:
     """Background task: run poll_once() on a fixed interval."""
     while True:
-        print(f"[poller] Checking for @mentions ...")
+        print("[poller] Checking for @mentions ...")
         try:
             await asyncio.to_thread(poll_once)
         except RuntimeError as exc:
@@ -117,7 +123,7 @@ def review_pr(request: ReviewRequest):
     repo = metadata["_repo"]
     head_sha = metadata["_head_sha"]
 
-    file_contexts = build_context_for_files(owner, repo, head_sha, file_diffs)
+    file_contexts = build_diffs_for_files(file_diffs)
 
     # 專案背景：PR 標題/描述 + README 摘錄，讓模型知道這個 PR 想達成什麼、專案是做什麼的
     project_context = {
@@ -127,7 +133,11 @@ def review_pr(request: ReviewRequest):
     }
 
     try:
-        review_results = review_all_files(file_contexts, project_context)
+        check_pr_size(file_contexts)  # before starting a sandbox, so oversized PRs cost nothing
+        with open_pr_sandbox(metadata) as sandbox:
+            review_results = review_pr_files(file_contexts, project_context, sandbox=sandbox)
+    except PRTooLargeError as e:
+        raise HTTPException(status_code=413, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"LLM review call failed: {e}")
 

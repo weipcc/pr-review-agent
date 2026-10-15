@@ -8,3 +8,4 @@ langchain>=1.0.0
 langchain-core>=1.0.0
 langchain-google-genai>=3.0.0
 deepagents>=0.7.0
+e2b>=2.0.0
