@@ -1,0 +1,25 @@
+{
+ "results": [
+  {
+   "filename": "src/networking.c",
+   "summary": "新增遮蔽日誌中使用者資料的邏輯時，在 snprintf 中錯誤使用三元運算子搭配逗號運算子，將導致嚴重執行期崩潰或編譯錯誤。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 2771,
+     "end_line": 2771,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在三元運算子中使用括號與逗號（如 `(\"fmt\", arg)`）屬於 C 語言的逗號運算子（comma operator），它只會回傳括號內最後一個表達式的值作為 snprintf 的第三個參數（格式化字串），而不會展開成多個函式參數。當條件成立時，第三個參數會被傳入 size_t 數值而非 const char * 格式化字串；條件不成立時也會傳入錯誤的指標，導致記憶體存取錯誤或崩潰（Segmentation fault）。"
+    }
+   ]
+  }
+ ],
+ "n_files": 1,
+ "input_tokens": 1826,
+ "output_tokens": 437,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 19.6,
+ "model": "gemini-3.8-flash"
+}

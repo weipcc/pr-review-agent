@@ -1,0 +1,29 @@
+{
+ "results": [
+  {
+   "change_intent": "Display local service flags in the -netinfo dashboard, formatting them as a list for the summary view and as service characters in the header when details are requested.",
+   "summary": "A temporary std::string from strprintf is bound to a std::string_view, creating a dangling view and leading to undefined behavior.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 585,
+     "end_line": 585,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "const std::string_view services{DetailsRequested() ? strprintf(\" - services %s\", FormatServices(networkinfo[\"localservicesnames\"])) : \"\"};",
+     "comment": "`strprintf` returns a temporary `std::string`. Binding it to `std::string_view` causes `services` to reference destroyed storage as soon as the temporary is deallocated at the end of the statement, resulting in undefined behavior when `services` is read on the next line.",
+     "suggestion": "Declare `services` as `const std::string` instead of `const std::string_view` so its lifetime extends across the subsequent `strprintf` call.",
+     "suggested_code": "const std::string services{DetailsRequested() ? strprintf(\" - services %s\", FormatServices(networkinfo[\"localservicesnames\"])) : \"\"};"
+    }
+   ],
+   "filename": "src/bitcoin-cli.cpp"
+  }
+ ],
+ "n_files": 1,
+ "input_tokens": 8865,
+ "output_tokens": 297,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 25.0,
+ "model": "gemini-3.8-flash"
+}

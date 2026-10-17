@@ -1,0 +1,534 @@
+diff --git a/libs/entitlement/asm-provider/src/main/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImpl.java b/libs/entitlement/asm-provider/src/main/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImpl.java
+index 9f10739486238..0bcbc19047c80 100644
+--- a/libs/entitlement/asm-provider/src/main/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImpl.java
++++ b/libs/entitlement/asm-provider/src/main/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImpl.java
+@@ -67,9 +67,19 @@ public MethodVisitor visitMethod(
+     private static final Type CLASS_TYPE = Type.getType(Class.class);
+ 
+     static MethodKey parseCheckerMethodSignature(String checkerMethodName, Type[] checkerMethodArgumentTypes) {
+-        var classNameStartIndex = checkerMethodName.indexOf('$');
+-        var classNameEndIndex = checkerMethodName.lastIndexOf('$');
++        boolean targetMethodIsStatic;
++        int classNameEndIndex = checkerMethodName.lastIndexOf("$$");
++        int methodNameStartIndex;
++        if (classNameEndIndex == -1) {
++            targetMethodIsStatic = false;
++            classNameEndIndex = checkerMethodName.lastIndexOf('$');
++            methodNameStartIndex = classNameEndIndex + 1;
++        } else {
++            targetMethodIsStatic = true;
++            methodNameStartIndex = classNameEndIndex + 2;
++        }
+ 
++        var classNameStartIndex = checkerMethodName.indexOf('$');
+         if (classNameStartIndex == -1 || classNameStartIndex >= classNameEndIndex) {
+             throw new IllegalArgumentException(
+                 String.format(
+@@ -82,15 +92,17 @@ static MethodKey parseCheckerMethodSignature(String checkerMethodName, Type[] ch
+             );
+         }
+ 
+-        // No "className" (check$$methodName) -> method is instance, and we'll get the class from the actual typed argument
+-        final boolean targetMethodIsStatic = classNameStartIndex + 1 != classNameEndIndex;
+         // No "methodName" (check$package_ClassName$) -> method is ctor
+         final boolean targetMethodIsCtor = classNameEndIndex + 1 == checkerMethodName.length();
+-        final String targetMethodName = targetMethodIsCtor ? "<init>" : checkerMethodName.substring(classNameEndIndex + 1);
++        final String targetMethodName = targetMethodIsCtor ? "<init>" : checkerMethodName.substring(methodNameStartIndex);
++
++        final String targetClassName = checkerMethodName.substring(classNameStartIndex + 1, classNameEndIndex).replace('_', '/');
++        if (targetClassName.isBlank()) {
++            throw new IllegalArgumentException(String.format(Locale.ROOT, "Checker method %s has no class name", checkerMethodName));
++        }
+ 
+-        final String targetClassName;
+         final List<String> targetParameterTypes;
+-        if (targetMethodIsStatic) {
++        if (targetMethodIsStatic || targetMethodIsCtor) {
+             if (checkerMethodArgumentTypes.length < 1 || CLASS_TYPE.equals(checkerMethodArgumentTypes[0]) == false) {
+                 throw new IllegalArgumentException(
+                     String.format(
+@@ -101,7 +113,6 @@ static MethodKey parseCheckerMethodSignature(String checkerMethodName, Type[] ch
+                 );
+             }
+ 
+-            targetClassName = checkerMethodName.substring(classNameStartIndex + 1, classNameEndIndex).replace('_', '/');
+             targetParameterTypes = Arrays.stream(checkerMethodArgumentTypes).skip(1).map(Type::getInternalName).toList();
+         } else {
+             if (checkerMethodArgumentTypes.length < 2
+@@ -117,10 +128,9 @@ static MethodKey parseCheckerMethodSignature(String checkerMethodName, Type[] ch
+                     )
+                 );
+             }
+-            var targetClassType = checkerMethodArgumentTypes[1];
+-            targetClassName = targetClassType.getInternalName();
+             targetParameterTypes = Arrays.stream(checkerMethodArgumentTypes).skip(2).map(Type::getInternalName).toList();
+         }
++        boolean hasReceiver = (targetMethodIsStatic || targetMethodIsCtor) == false;
+         return new MethodKey(targetClassName, targetMethodName, targetParameterTypes);
+     }
+ }
+diff --git a/libs/entitlement/asm-provider/src/main/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumenterImpl.java b/libs/entitlement/asm-provider/src/main/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumenterImpl.java
+index 00efab829b2bb..06408941ac96e 100644
+--- a/libs/entitlement/asm-provider/src/main/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumenterImpl.java
++++ b/libs/entitlement/asm-provider/src/main/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumenterImpl.java
+@@ -152,6 +152,7 @@ public MethodVisitor visitMethod(int access, String name, String descriptor, Str
+             if (isAnnotationPresent == false) {
+                 boolean isStatic = (access & ACC_STATIC) != 0;
+                 boolean isCtor = "<init>".equals(name);
++                boolean hasReceiver = (isStatic || isCtor) == false;
+                 var key = new MethodKey(className, name, Stream.of(Type.getArgumentTypes(descriptor)).map(Type::getInternalName).toList());
+                 var instrumentationMethod = checkMethods.get(key);
+                 if (instrumentationMethod != null) {
+diff --git a/libs/entitlement/asm-provider/src/test/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests.java b/libs/entitlement/asm-provider/src/test/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests.java
+index e3285cec8f883..ab0d96a8df96d 100644
+--- a/libs/entitlement/asm-provider/src/test/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests.java
++++ b/libs/entitlement/asm-provider/src/test/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests.java
+@@ -32,17 +32,17 @@ public class InstrumentationServiceImplTests extends ESTestCase {
+     static class TestTargetClass {}
+ 
+     interface TestChecker {
+-        void check$org_example_TestTargetClass$staticMethod(Class<?> clazz, int arg0, String arg1, Object arg2);
++        void check$org_example_TestTargetClass$$staticMethod(Class<?> clazz, int arg0, String arg1, Object arg2);
+ 
+-        void check$$instanceMethodNoArgs(Class<?> clazz, TestTargetClass that);
++        void check$org_example_TestTargetClass$instanceMethodNoArgs(Class<?> clazz, TestTargetClass that);
+ 
+-        void check$$instanceMethodWithArgs(Class<?> clazz, TestTargetClass that, int x, int y);
++        void check$org_example_TestTargetClass$instanceMethodWithArgs(Class<?> clazz, TestTargetClass that, int x, int y);
+     }
+ 
+     interface TestCheckerOverloads {
+-        void check$org_example_TestTargetClass$staticMethodWithOverload(Class<?> clazz, int x, int y);
++        void check$org_example_TestTargetClass$$staticMethodWithOverload(Class<?> clazz, int x, int y);
+ 
+-        void check$org_example_TestTargetClass$staticMethodWithOverload(Class<?> clazz, int x, String y);
++        void check$org_example_TestTargetClass$$staticMethodWithOverload(Class<?> clazz, int x, String y);
+     }
+ 
+     interface TestCheckerCtors {
+@@ -62,7 +62,7 @@ public void testInstrumentationTargetLookup() throws IOException {
+                 equalTo(
+                     new CheckMethod(
+                         "org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests$TestChecker",
+-                        "check$org_example_TestTargetClass$staticMethod",
++                        "check$org_example_TestTargetClass$$staticMethod",
+                         List.of("Ljava/lang/Class;", "I", "Ljava/lang/String;", "Ljava/lang/Object;")
+                     )
+                 )
+@@ -71,17 +71,11 @@ public void testInstrumentationTargetLookup() throws IOException {
+         assertThat(
+             checkMethods,
+             hasEntry(
+-                equalTo(
+-                    new MethodKey(
+-                        "org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests$TestTargetClass",
+-                        "instanceMethodNoArgs",
+-                        List.of()
+-                    )
+-                ),
++                equalTo(new MethodKey("org/example/TestTargetClass", "instanceMethodNoArgs", List.of())),
+                 equalTo(
+                     new CheckMethod(
+                         "org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests$TestChecker",
+-                        "check$$instanceMethodNoArgs",
++                        "check$org_example_TestTargetClass$instanceMethodNoArgs",
+                         List.of(
+                             "Ljava/lang/Class;",
+                             "Lorg/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests$TestTargetClass;"
+@@ -93,17 +87,11 @@ public void testInstrumentationTargetLookup() throws IOException {
+         assertThat(
+             checkMethods,
+             hasEntry(
+-                equalTo(
+-                    new MethodKey(
+-                        "org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests$TestTargetClass",
+-                        "instanceMethodWithArgs",
+-                        List.of("I", "I")
+-                    )
+-                ),
++                equalTo(new MethodKey("org/example/TestTargetClass", "instanceMethodWithArgs", List.of("I", "I"))),
+                 equalTo(
+                     new CheckMethod(
+                         "org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests$TestChecker",
+-                        "check$$instanceMethodWithArgs",
++                        "check$org_example_TestTargetClass$instanceMethodWithArgs",
+                         List.of(
+                             "Ljava/lang/Class;",
+                             "Lorg/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests$TestTargetClass;",
+@@ -127,7 +115,7 @@ public void testInstrumentationTargetLookupWithOverloads() throws IOException {
+                 equalTo(
+                     new CheckMethod(
+                         "org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests$TestCheckerOverloads",
+-                        "check$org_example_TestTargetClass$staticMethodWithOverload",
++                        "check$org_example_TestTargetClass$$staticMethodWithOverload",
+                         List.of("Ljava/lang/Class;", "I", "Ljava/lang/String;")
+                     )
+                 )
+@@ -140,7 +128,7 @@ public void testInstrumentationTargetLookupWithOverloads() throws IOException {
+                 equalTo(
+                     new CheckMethod(
+                         "org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests$TestCheckerOverloads",
+-                        "check$org_example_TestTargetClass$staticMethodWithOverload",
++                        "check$org_example_TestTargetClass$$staticMethodWithOverload",
+                         List.of("Ljava/lang/Class;", "I", "I")
+                     )
+                 )
+@@ -182,7 +170,7 @@ public void testInstrumentationTargetLookupWithCtors() throws IOException {
+ 
+     public void testParseCheckerMethodSignatureStaticMethod() {
+         var methodKey = InstrumentationServiceImpl.parseCheckerMethodSignature(
+-            "check$org_example_TestClass$staticMethod",
++            "check$org_example_TestClass$$staticMethod",
+             new Type[] { Type.getType(Class.class) }
+         );
+ 
+@@ -191,7 +179,7 @@ public void testParseCheckerMethodSignatureStaticMethod() {
+ 
+     public void testParseCheckerMethodSignatureStaticMethodWithArgs() {
+         var methodKey = InstrumentationServiceImpl.parseCheckerMethodSignature(
+-            "check$org_example_TestClass$staticMethod",
++            "check$org_example_TestClass$$staticMethod",
+             new Type[] { Type.getType(Class.class), Type.getType("I"), Type.getType(String.class) }
+         );
+ 
+@@ -200,7 +188,7 @@ public void testParseCheckerMethodSignatureStaticMethodWithArgs() {
+ 
+     public void testParseCheckerMethodSignatureStaticMethodInnerClass() {
+         var methodKey = InstrumentationServiceImpl.parseCheckerMethodSignature(
+-            "check$org_example_TestClass$InnerClass$staticMethod",
++            "check$org_example_TestClass$InnerClass$$staticMethod",
+             new Type[] { Type.getType(Class.class) }
+         );
+ 
+@@ -225,94 +213,80 @@ public void testParseCheckerMethodSignatureCtorWithArgs() {
+         assertThat(methodKey, equalTo(new MethodKey("org/example/TestClass", "<init>", List.of("I", "java/lang/String"))));
+     }
+ 
+-    public void testParseCheckerMethodSignatureIncorrectName() {
+-        var exception = assertThrows(
+-            IllegalArgumentException.class,
+-            () -> InstrumentationServiceImpl.parseCheckerMethodSignature("check$staticMethod", new Type[] { Type.getType(Class.class) })
+-        );
++    public void testParseCheckerMethodSignatureOneDollarSign() {
++        assertParseCheckerMethodSignatureThrows("has incorrect name format", "check$method", Type.getType(Class.class));
++    }
+ 
+-        assertThat(exception.getMessage(), containsString("has incorrect name format"));
++    public void testParseCheckerMethodSignatureMissingClass() {
++        assertParseCheckerMethodSignatureThrows("has incorrect name format", "check$$staticMethod", Type.getType(Class.class));
++    }
++
++    public void testParseCheckerMethodSignatureBlankClass() {
++        assertParseCheckerMethodSignatureThrows("no class name", "check$$$staticMethod", Type.getType(Class.class));
+     }
+ 
+     public void testParseCheckerMethodSignatureStaticMethodIncorrectArgumentCount() {
+-        var exception = assertThrows(
+-            IllegalArgumentException.class,
+-            () -> InstrumentationServiceImpl.parseCheckerMethodSignature("check$ClassName$staticMethod", new Type[] {})
+-        );
+-        assertThat(exception.getMessage(), containsString("It must have a first argument of Class<?> type"));
++        assertParseCheckerMethodSignatureThrows("It must have a first argument of Class<?> type", "check$ClassName$staticMethod");
+     }
+ 
+     public void testParseCheckerMethodSignatureStaticMethodIncorrectArgumentType() {
+-        var exception = assertThrows(
+-            IllegalArgumentException.class,
+-            () -> InstrumentationServiceImpl.parseCheckerMethodSignature(
+-                "check$ClassName$staticMethod",
+-                new Type[] { Type.getType(String.class) }
+-            )
++        assertParseCheckerMethodSignatureThrows(
++            "It must have a first argument of Class<?> type",
++            "check$ClassName$$staticMethod",
++            Type.getType(String.class)
+         );
+-        assertThat(exception.getMessage(), containsString("It must have a first argument of Class<?> type"));
+     }
+ 
+     public void testParseCheckerMethodSignatureInstanceMethod() {
+         var methodKey = InstrumentationServiceImpl.parseCheckerMethodSignature(
+-            "check$$instanceMethod",
++            "check$org_example_TestClass$instanceMethod",
+             new Type[] { Type.getType(Class.class), Type.getType(TestTargetClass.class) }
+         );
+ 
+-        assertThat(
+-            methodKey,
+-            equalTo(
+-                new MethodKey(
+-                    "org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests$TestTargetClass",
+-                    "instanceMethod",
+-                    List.of()
+-                )
+-            )
+-        );
++        assertThat(methodKey, equalTo(new MethodKey("org/example/TestClass", "instanceMethod", List.of())));
+     }
+ 
+     public void testParseCheckerMethodSignatureInstanceMethodWithArgs() {
+         var methodKey = InstrumentationServiceImpl.parseCheckerMethodSignature(
+-            "check$$instanceMethod",
++            "check$org_example_TestClass$instanceMethod",
+             new Type[] { Type.getType(Class.class), Type.getType(TestTargetClass.class), Type.getType("I"), Type.getType(String.class) }
+         );
+ 
+-        assertThat(
+-            methodKey,
+-            equalTo(
+-                new MethodKey(
+-                    "org/elasticsearch/entitlement/instrumentation/impl/InstrumentationServiceImplTests$TestTargetClass",
+-                    "instanceMethod",
+-                    List.of("I", "java/lang/String")
+-                )
+-            )
+-        );
++        assertThat(methodKey, equalTo(new MethodKey("org/example/TestClass", "instanceMethod", List.of("I", "java/lang/String"))));
+     }
+ 
+     public void testParseCheckerMethodSignatureInstanceMethodIncorrectArgumentTypes() {
+-        var exception = assertThrows(
+-            IllegalArgumentException.class,
+-            () -> InstrumentationServiceImpl.parseCheckerMethodSignature("check$$instanceMethod", new Type[] { Type.getType(String.class) })
++        assertParseCheckerMethodSignatureThrows(
++            "It must have a first argument of Class<?> type",
++            "check$org_example_TestClass$instanceMethod",
++            Type.getType(String.class)
+         );
+-        assertThat(exception.getMessage(), containsString("It must have a first argument of Class<?> type"));
+     }
+ 
+     public void testParseCheckerMethodSignatureInstanceMethodIncorrectArgumentCount() {
+-        var exception = assertThrows(
+-            IllegalArgumentException.class,
+-            () -> InstrumentationServiceImpl.parseCheckerMethodSignature("check$$instanceMethod", new Type[] { Type.getType(Class.class) })
++        assertParseCheckerMethodSignatureThrows(
++            "a second argument of the class containing the method to instrument",
++            "check$org_example_TestClass$instanceMethod",
++            Type.getType(Class.class)
+         );
+-        assertThat(exception.getMessage(), containsString("a second argument of the class containing the method to instrument"));
+     }
+ 
+     public void testParseCheckerMethodSignatureInstanceMethodIncorrectArgumentTypes2() {
++        assertParseCheckerMethodSignatureThrows(
++            "a second argument of the class containing the method to instrument",
++            "check$org_example_TestClass$instanceMethod",
++            Type.getType(Class.class),
++            Type.getType("I")
++        );
++    }
++
++    private static void assertParseCheckerMethodSignatureThrows(String messageText, String methodName, Type... methodArgs) {
+         var exception = assertThrows(
+             IllegalArgumentException.class,
+-            () -> InstrumentationServiceImpl.parseCheckerMethodSignature(
+-                "check$$instanceMethod",
+-                new Type[] { Type.getType(Class.class), Type.getType("I") }
+-            )
++            () -> InstrumentationServiceImpl.parseCheckerMethodSignature(methodName, methodArgs)
+         );
+-        assertThat(exception.getMessage(), containsString("a second argument of the class containing the method to instrument"));
++
++        assertThat(exception.getMessage(), containsString(messageText));
+     }
++
+ }
+diff --git a/libs/entitlement/asm-provider/src/test/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumenterTests.java b/libs/entitlement/asm-provider/src/test/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumenterTests.java
+index e9af1d152dd35..5a6bf409f1ac4 100644
+--- a/libs/entitlement/asm-provider/src/test/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumenterTests.java
++++ b/libs/entitlement/asm-provider/src/test/java/org/elasticsearch/entitlement/instrumentation/impl/InstrumenterTests.java
+@@ -85,9 +85,7 @@ public interface Testable {
+      * This is a placeholder for real class library methods.
+      * Without the java agent, we can't instrument the real methods, so we instrument this instead.
+      * <p>
+-     * Methods of this class must have the same signature and the same static/virtual condition as the corresponding real method.
+-     * They should assert that the arguments came through correctly.
+-     * They must not throw {@link TestException}.
++     * The instrumented copy of this class will not extend this class, but it will implement {@link Testable}.
+      */
+     public static class TestClassToInstrument implements Testable {
+ 
+@@ -108,31 +106,36 @@ public static void anotherStaticMethod(int arg) {}
+ 
+     /**
+      * Interface to test specific, "synthetic" cases (e.g. overloaded methods, overloaded constructors, etc.) that
+-     * may be not present/may be difficult to find or not clear in the production EntitlementChecker interface
++     * may be not present/may be difficult to find or not clear in the production EntitlementChecker interface.
++     * <p>
++     * This interface isn't subject to the {@code check$} method naming conventions because it doesn't
++     * participate in the automated scan that configures the instrumenter based on the method names;
++     * instead, we configure the instrumenter minimally as needed for each test.
+      */
+     public interface MockEntitlementChecker {
+-        void checkSomeStaticMethod(Class<?> clazz, int arg);
++        void checkSomeStaticMethod(Class<?> callerClass, int arg);
++
++        void checkSomeStaticMethodOverload(Class<?> callerClass, int arg, String anotherArg);
+ 
+-        void checkSomeStaticMethodOverload(Class<?> clazz, int arg, String anotherArg);
++        void checkAnotherStaticMethod(Class<?> callerClass, int arg);
+ 
+-        void checkAnotherStaticMethod(Class<?> clazz, int arg);
++        void checkSomeInstanceMethod(Class<?> callerClass, Testable that, int arg, String anotherArg);
+ 
+-        void checkSomeInstanceMethod(Class<?> clazz, Testable that, int arg, String anotherArg);
++        void checkCtor(Class<?> callerClass);
+ 
+-        void checkCtor(Class<?> clazz);
++        void checkCtorOverload(Class<?> callerClass, int arg);
+ 
+-        void checkCtorOverload(Class<?> clazz, int arg);
+     }
+ 
+     public static class TestEntitlementCheckerHolder {
+-        static TestEntitlementChecker checkerInstance = new TestEntitlementChecker();
++        static MockEntitlementCheckerImpl checkerInstance = new MockEntitlementCheckerImpl();
+ 
+         public static MockEntitlementChecker instance() {
+             return checkerInstance;
+         }
+     }
+ 
+-    public static class TestEntitlementChecker implements MockEntitlementChecker {
++    public static class MockEntitlementCheckerImpl implements MockEntitlementChecker {
+         /**
+          * This allows us to test that the instrumentation is correct in both cases:
+          * if the check throws, and if it doesn't.
+@@ -206,7 +209,7 @@ public void checkCtorOverload(Class<?> callerClass, int arg) {
+ 
+     @Before
+     public void resetInstance() {
+-        TestEntitlementCheckerHolder.checkerInstance = new TestEntitlementChecker();
++        TestEntitlementCheckerHolder.checkerInstance = new MockEntitlementCheckerImpl();
+     }
+ 
+     public void testStaticMethod() throws Exception {
+@@ -285,18 +288,16 @@ public void testConstructors() throws Exception {
+         assertEquals(1, TestEntitlementCheckerHolder.checkerInstance.checkCtorIntCallCount);
+     }
+ 
+-    /** This test doesn't replace classToInstrument in-place but instead loads a separate
+-     * class with the same class name plus a "_NEW" suffix (classToInstrument.class.getName() + "_NEW")
+-     * that contains the instrumentation. Because of this, we need to configure the Transformer to use a
+-     * MethodKey and instrumentationMethod with slightly different signatures (using the common interface
+-     * Testable) which is not what would happen when it's run by the agent.
++    /**
++     * These tests don't replace classToInstrument in-place but instead load a separate class with the same class name.
++     * This requires a configuration slightly different from what we'd use in production.
+      */
+     private static InstrumenterImpl createInstrumenter(Map<String, Executable> methods) throws NoSuchMethodException {
+         Map<MethodKey, CheckMethod> checkMethods = new HashMap<>();
+         for (var entry : methods.entrySet()) {
+             checkMethods.put(getMethodKey(entry.getValue()), getCheckMethod(entry.getKey(), entry.getValue()));
+         }
+-        String checkerClass = Type.getInternalName(InstrumenterTests.MockEntitlementChecker.class);
++        String checkerClass = Type.getInternalName(MockEntitlementChecker.class);
+         String handleClass = Type.getInternalName(InstrumenterTests.TestEntitlementCheckerHolder.class);
+         String getCheckerClassMethodDescriptor = Type.getMethodDescriptor(Type.getObjectType(checkerClass));
+ 
+diff --git a/libs/entitlement/bridge/src/main/java/org/elasticsearch/entitlement/bridge/EntitlementChecker.java b/libs/entitlement/bridge/src/main/java/org/elasticsearch/entitlement/bridge/EntitlementChecker.java
+index d549c0d8906af..d44b4667f6821 100644
+--- a/libs/entitlement/bridge/src/main/java/org/elasticsearch/entitlement/bridge/EntitlementChecker.java
++++ b/libs/entitlement/bridge/src/main/java/org/elasticsearch/entitlement/bridge/EntitlementChecker.java
+@@ -13,12 +13,13 @@
+ import java.net.URLStreamHandlerFactory;
+ import java.util.List;
+ 
++@SuppressWarnings("unused") // Called from instrumentation code inserted by the Entitlements agent
+ public interface EntitlementChecker {
+ 
+     // Exit the JVM process
+-    void check$$exit(Class<?> callerClass, Runtime runtime, int status);
++    void check$java_lang_Runtime$exit(Class<?> callerClass, Runtime runtime, int status);
+ 
+-    void check$$halt(Class<?> callerClass, Runtime runtime, int status);
++    void check$java_lang_Runtime$halt(Class<?> callerClass, Runtime runtime, int status);
+ 
+     // URLClassLoader ctor
+     void check$java_net_URLClassLoader$(Class<?> callerClass, URL[] urls);
+@@ -32,8 +33,8 @@ public interface EntitlementChecker {
+     void check$java_net_URLClassLoader$(Class<?> callerClass, String name, URL[] urls, ClassLoader parent, URLStreamHandlerFactory factory);
+ 
+     // Process creation
+-    void check$$start(Class<?> callerClass, ProcessBuilder that);
++    void check$java_lang_ProcessBuilder$start(Class<?> callerClass, ProcessBuilder that);
+ 
+-    void check$java_lang_ProcessBuilder$startPipeline(Class<?> callerClass, List<ProcessBuilder> builders);
++    void check$java_lang_ProcessBuilder$$startPipeline(Class<?> callerClass, List<ProcessBuilder> builders);
+ 
+ }
+diff --git a/libs/entitlement/qa/src/javaRestTest/java/org/elasticsearch/entitlement/qa/EntitlementsDeniedIT.java b/libs/entitlement/qa/src/javaRestTest/java/org/elasticsearch/entitlement/qa/EntitlementsDeniedIT.java
+index 7f2bf792ac063..b17a57512cde0 100644
+--- a/libs/entitlement/qa/src/javaRestTest/java/org/elasticsearch/entitlement/qa/EntitlementsDeniedIT.java
++++ b/libs/entitlement/qa/src/javaRestTest/java/org/elasticsearch/entitlement/qa/EntitlementsDeniedIT.java
+@@ -32,7 +32,7 @@ public class EntitlementsDeniedIT extends ESRestTestCase {
+         .systemProperty("es.entitlements.enabled", "true")
+         .setting("xpack.security.enabled", "false")
+         // Logs in libs/entitlement/qa/build/test-results/javaRestTest/TEST-org.elasticsearch.entitlement.qa.EntitlementsDeniedIT.xml
+-        // .setting("logger.org.elasticsearch.entitlement", "TRACE")
++        .setting("logger.org.elasticsearch.entitlement", "TRACE")
+         .build();
+ 
+     @Override
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/instrumentation/MethodKey.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/instrumentation/MethodKey.java
+index 256a4d709d9dc..caaa10bec52dd 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/instrumentation/MethodKey.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/instrumentation/MethodKey.java
+@@ -16,6 +16,6 @@
+  *
+  * @param className      the "internal name" of the class: includes the package info, but with periods replaced by slashes
+  * @param methodName     the method name
+- * @param parameterTypes a list of "internal names" for the parameter types
++ * @param parameterTypes a list of "internal names" for the parameter types that appear in the method's descriptor (not the receiver)
+  */
+ public record MethodKey(String className, String methodName, List<String> parameterTypes) {}
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/api/ElasticsearchEntitlementChecker.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/api/ElasticsearchEntitlementChecker.java
+index 7c72e0335a3e0..7ae7bc4238454 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/api/ElasticsearchEntitlementChecker.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/api/ElasticsearchEntitlementChecker.java
+@@ -29,12 +29,12 @@ public ElasticsearchEntitlementChecker(PolicyManager policyManager) {
+     }
+ 
+     @Override
+-    public void check$$exit(Class<?> callerClass, Runtime runtime, int status) {
++    public void check$java_lang_Runtime$exit(Class<?> callerClass, Runtime runtime, int status) {
+         policyManager.checkExitVM(callerClass);
+     }
+ 
+     @Override
+-    public void check$$halt(Class<?> callerClass, Runtime runtime, int status) {
++    public void check$java_lang_Runtime$halt(Class<?> callerClass, Runtime runtime, int status) {
+         policyManager.checkExitVM(callerClass);
+     }
+ 
+@@ -70,12 +70,12 @@ public ElasticsearchEntitlementChecker(PolicyManager policyManager) {
+     }
+ 
+     @Override
+-    public void check$$start(Class<?> callerClass, ProcessBuilder processBuilder) {
++    public void check$java_lang_ProcessBuilder$start(Class<?> callerClass, ProcessBuilder processBuilder) {
+         policyManager.checkStartProcess(callerClass);
+     }
+ 
+     @Override
+-    public void check$java_lang_ProcessBuilder$startPipeline(Class<?> callerClass, List<ProcessBuilder> builders) {
++    public void check$java_lang_ProcessBuilder$$startPipeline(Class<?> callerClass, List<ProcessBuilder> builders) {
+         policyManager.checkStartProcess(callerClass);
+     }
+ }
+diff --git a/libs/entitlement/src/main23/java/org/elasticsearch/entitlement/runtime/api/Java23ElasticsearchEntitlementChecker.java b/libs/entitlement/src/main23/java/org/elasticsearch/entitlement/runtime/api/Java23ElasticsearchEntitlementChecker.java
+index 912d76ecfc01a..706a6649de329 100644
+--- a/libs/entitlement/src/main23/java/org/elasticsearch/entitlement/runtime/api/Java23ElasticsearchEntitlementChecker.java
++++ b/libs/entitlement/src/main23/java/org/elasticsearch/entitlement/runtime/api/Java23ElasticsearchEntitlementChecker.java
+@@ -19,8 +19,8 @@ public Java23ElasticsearchEntitlementChecker(PolicyManager policyManager) {
+     }
+ 
+     @Override
+-    public void check$$exit(Class<?> callerClass, Runtime runtime, int status) {
++    public void check$java_lang_Runtime$exit(Class<?> callerClass, Runtime runtime, int status) {
+         // TODO: this is just an example, we shouldn't really override a method implemented in the superclass
+-        super.check$$exit(callerClass, runtime, status);
++        super.check$java_lang_Runtime$exit(callerClass, runtime, status);
+     }
+ }

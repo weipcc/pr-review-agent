@@ -1,0 +1,55 @@
+{
+ "results": [
+  {
+   "change_intent": "Add support for adapting DBNResource representing an IFile to an InputStream.",
+   "summary": "The InputStream adapter implementation throws a RuntimeException on CoreException instead of logging and returning null per the IAdaptable contract, and omits the exception from the log call.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 426,
+     "end_line": 429,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "} catch (CoreException e) {\n                    log.error(\"Error get file content\");\n                    throw new RuntimeException(e);\n                }",
+     "comment": "Implementations of IAdaptable.getAdapter are expected to return null when an object cannot be adapted, rather than throwing unchecked exceptions. Throwing a RuntimeException will bypass caller null checks (e.g., in DBNPathBase.dropNodes) and abort the entire copy/drop operation if reading a file fails. In addition, the exception e is omitted from log.error, losing the cause and stack trace.",
+     "suggestion": "Log the caught CoreException with its stack trace and return null instead of throwing RuntimeException.",
+     "suggested_code": "} catch (CoreException e) {\n                    log.error(\"Error getting file content\", e);\n                    return null;\n                }"
+    }
+   ],
+   "filename": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java"
+  },
+  {
+   "change_intent": "Allow copying nodes that do not provide a Path adapter by streaming their content via an InputStream adapter.",
+   "summary": "Introduces support for copying nodes via InputStream, but fails to close the opened input stream, resulting in a resource leak.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 292,
+     "end_line": 298,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "try {\n                        InputStream adapter = node.getAdapter(InputStream.class);\n                        if (adapter != null) {\n                            String fileName = node.getNodeDisplayName();\n                            copyInputStream(adapter, folder, fileName);\n                        }\n                    }",
+     "comment": "The InputStream returned by node.getAdapter(InputStream.class) is never closed. Neither Files.copy nor this method closes the stream, causing a resource leak.",
+     "suggestion": "Wrap the InputStream acquisition in a try-with-resources statement so that it is properly closed once copying completes.",
+     "suggested_code": "try (InputStream adapter = node.getAdapter(InputStream.class)) {\n                        if (adapter != null) {\n                            String fileName = node.getNodeDisplayName();\n                            copyInputStream(adapter, folder, fileName);\n                        }\n                    }"
+    },
+    {
+     "start_line": 363,
+     "end_line": 364,
+     "category": "nitpick",
+     "confidence": "medium",
+     "evidence": "private void copyInputStream(InputStream inputStream, Path folder, String str) throws IOException {\n        Path targetFile = folder.resolve(str);",
+     "comment": "The parameter name 'str' is non-descriptive.",
+     "suggestion": "Rename 'str' to 'fileName' to clarify its purpose.",
+     "suggested_code": "private void copyInputStream(InputStream inputStream, Path folder, String fileName) throws IOException {\n        Path targetFile = folder.resolve(fileName);"
+    }
+   ],
+   "filename": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java"
+  }
+ ],
+ "n_files": 2,
+ "elapsed_s": 56.3,
+ "calls": 2,
+ "input_tokens": 15885,
+ "output_tokens": 795
+}

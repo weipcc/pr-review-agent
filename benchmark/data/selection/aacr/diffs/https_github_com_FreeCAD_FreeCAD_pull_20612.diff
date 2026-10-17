@@ -1,0 +1,142 @@
+diff --git a/src/Mod/TechDraw/App/CosmeticExtension.cpp b/src/Mod/TechDraw/App/CosmeticExtension.cpp
+index 0d9c9ec44696..6f835d0ce159 100644
+--- a/src/Mod/TechDraw/App/CosmeticExtension.cpp
++++ b/src/Mod/TechDraw/App/CosmeticExtension.cpp
+@@ -66,16 +66,17 @@ TechDraw::DrawViewPart*  CosmeticExtension::getOwner()
+ void CosmeticExtension::deleteCosmeticElements(std::vector<std::string> removables)
+ {
+     // Base::Console().Message("CEx::deleteCosmeticElements(%d removables)\n", removables.size());
++    DrawViewPart* viewPart = getOwner();
+     for (auto& name : removables) {
+         if (DU::getGeomTypeFromName(name) == "Vertex" &&
+-         DU::isCosmeticVertex(getOwner(), name)) {
++         viewPart->isCosmeticVertex(name)) {
+          CosmeticVertex* vert = getCosmeticVertexBySelection(name);
+          removeCosmeticVertex(vert->getTagAsString());
+          continue;
+         }
+         if (DU::getGeomTypeFromName(name) == "Edge" &&
+-         ( DU::isCosmeticEdge(getOwner(), name)  ||
+-           DU::isCenterLine(getOwner(), name) ) ) {
++         ( viewPart->isCosmeticEdge(name)  ||
++           viewPart->isCenterLine(name))) {
+              CosmeticEdge* edge = getCosmeticEdgeBySelection(name);
+              if (edge) {
+                  // if not edge, something has gone very wrong!
+diff --git a/src/Mod/TechDraw/App/DrawUtil.cpp b/src/Mod/TechDraw/App/DrawUtil.cpp
+index 545be9a94ce0..ca0a4d7f4591 100644
+--- a/src/Mod/TechDraw/App/DrawUtil.cpp
++++ b/src/Mod/TechDraw/App/DrawUtil.cpp
+@@ -1852,40 +1852,6 @@ std::string DrawUtil::translateArbitrary(std::string context, std::string baseNa
+     return qTranslated.toStdString() + suffix;
+ }
+ 
+-// true if owner->element is a cosmetic vertex
+-bool DrawUtil::isCosmeticVertex(App::DocumentObject* owner, std::string element)
+-{
+-    auto ownerView = static_cast<TechDraw::DrawViewPart*>(owner);
+-    auto vertexIndex = DrawUtil::getIndexFromName(element);
+-    auto vertex = ownerView->getProjVertexByIndex(vertexIndex);
+-    if (vertex) {
+-        return vertex->getCosmetic();
+-    }
+-    return false;
+-}
+-
+-// true if owner->element is a cosmetic edge
+-bool DrawUtil::isCosmeticEdge(App::DocumentObject* owner, std::string element)
+-{
+-    auto ownerView = static_cast<TechDraw::DrawViewPart*>(owner);
+-    auto edge = ownerView->getEdge(element);
+-    if (edge && edge->source() == SourceType::COSMETICEDGE && edge->getCosmetic()) {
+-        return true;
+-    }
+-    return false;
+-}
+-
+-// true if owner->element is a center line
+-bool DrawUtil::isCenterLine(App::DocumentObject* owner, std::string element)
+-{
+-    auto ownerView = static_cast<TechDraw::DrawViewPart*>(owner);
+-    auto edge = ownerView->getEdge(element);
+-    if (edge && edge->source() == SourceType::CENTERLINE && edge->getCosmetic()) {
+-        return true;
+-    }
+-    return false;
+-}
+-
+ //! convert a filespec (string) containing '\' to only use '/'.
+ //! prevents situation where '\' is interpreted as an escape of the next character in Python
+ //! commands.
+diff --git a/src/Mod/TechDraw/App/DrawUtil.h b/src/Mod/TechDraw/App/DrawUtil.h
+index 8e7c90b88c15..3b7f01331fca 100644
+--- a/src/Mod/TechDraw/App/DrawUtil.h
++++ b/src/Mod/TechDraw/App/DrawUtil.h
+@@ -249,10 +249,6 @@ class TechDrawExport DrawUtil
+ 
+     static std::string translateArbitrary(std::string context, std::string baseName, std::string uniqueName);
+ 
+-    static bool isCosmeticVertex(App::DocumentObject* owner, std::string element);
+-    static bool isCosmeticEdge(App::DocumentObject* owner, std::string element);
+-    static bool isCenterLine(App::DocumentObject* owner, std::string element);
+-
+     static Base::Vector3d  toAppSpace(const DrawViewPart& dvp, const Base::Vector3d& inPoint);
+     static Base::Vector3d  toAppSpace(const DrawViewPart& dvp, const QPointF& inPoint);
+ 
+diff --git a/src/Mod/TechDraw/App/DrawViewPart.cpp b/src/Mod/TechDraw/App/DrawViewPart.cpp
+index 8ba33a5b4d28..4c9d36b10e1e 100644
+--- a/src/Mod/TechDraw/App/DrawViewPart.cpp
++++ b/src/Mod/TechDraw/App/DrawViewPart.cpp
+@@ -1498,6 +1498,37 @@ void DrawViewPart::handleChangedPropertyType(Base::XMLReader &reader, const char
+     }
+ }
+ 
++// true if owner->element is a cosmetic vertex
++bool DrawViewPart::isCosmeticVertex(const std::string& element)
++{
++    auto vertexIndex = DrawUtil::getIndexFromName(element);
++    auto vertex = getProjVertexByIndex(vertexIndex);
++    if (vertex) {
++        return vertex->getCosmetic();
++    }
++    return false;
++}
++
++// true if owner->element is a cosmetic edge
++bool DrawViewPart::isCosmeticEdge(const std::string& element)
++{
++    auto edge = getEdge(element);
++    if (edge && edge->source() == SourceType::COSMETICEDGE && edge->getCosmetic()) {
++        return true;
++    }
++    return false;
++}
++
++// true if owner->element is a center line
++bool DrawViewPart::isCenterLine(const std::string& element)
++{
++    auto edge = getEdge(element);
++    if (edge && edge->source() == SourceType::CENTERLINE && edge->getCosmetic()) {
++        return true;
++    }
++    return false;
++}
++
+ // debugging ----------------------------------------------------------------------------
+ 
+ void DrawViewPart::dumpVerts(std::string text)
+diff --git a/src/Mod/TechDraw/App/DrawViewPart.h b/src/Mod/TechDraw/App/DrawViewPart.h
+index 71f5da4b6eeb..c1bf992e5c9c 100644
+--- a/src/Mod/TechDraw/App/DrawViewPart.h
++++ b/src/Mod/TechDraw/App/DrawViewPart.h
+@@ -239,6 +239,10 @@ class TechDrawExport DrawViewPart: public DrawView, public CosmeticExtension
+     virtual bool waitingForResult() const;
+     void progressValueChanged(int v);
+ 
++    bool isCosmeticVertex(const std::string& element);
++    bool isCosmeticEdge(const std::string& element);
++    bool isCenterLine(const std::string& element);
++
+ public Q_SLOTS:
+     void onHlrFinished(void);
+     void onFacesFinished(void);

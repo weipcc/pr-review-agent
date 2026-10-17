@@ -1,0 +1,146 @@
+diff --git a/player/command.c b/player/command.c
+index ff35a9d1c7780..86acd3bf281db 100644
+--- a/player/command.c
++++ b/player/command.c
+@@ -7693,8 +7693,7 @@ void mp_option_change_callback(void *ctx, struct m_config_option *co, int flags,
+ {
+     struct MPContext *mpctx = ctx;
+     struct MPOpts *opts = mpctx->opts;
+-    bool init = !co;
+-    void *opt_ptr = init ? NULL : co->data; // NULL on start
++    void *opt_ptr = !co ? NULL : co->data; // NULL on start
+ 
+     if (co)
+         mp_notify_property(mpctx, co->name);
+@@ -7704,6 +7703,35 @@ void mp_option_change_callback(void *ctx, struct m_config_option *co, int flags,
+     if (self_update)
+         return;
+ 
++    // Coalesce redundant updates and only keep the newest one.
++    bool drop = false;
++    for (int i = 0; i < mpctx->num_option_callbacks; i++) {
++        if ((mpctx->option_callbacks[i].co && opt_ptr == mpctx->option_callbacks[i].co->data) ||
++            (flags && flags == mpctx->option_callbacks[i].flags))
++            drop = true;
++        if (!drop)
++            continue;
++        if (i < mpctx->num_option_callbacks - 1)
++            mpctx->option_callbacks[i] = mpctx->option_callbacks[i + 1];
++        if (i == mpctx->num_option_callbacks - 1) {
++            mpctx->option_callbacks[i].co = co;
++            mpctx->option_callbacks[i].flags = flags;
++        }
++    }
++
++    if (!drop) {
++        struct mp_option_callback callback = {.co = co, .flags = flags};
++        MP_TARRAY_APPEND(mpctx, mpctx->option_callbacks, mpctx->num_option_callbacks, callback);
++    }
++}
++
++void mp_option_run_callback(struct MPContext *mpctx, int index)
++{
++    struct MPOpts *opts = mpctx->opts;
++    struct m_config_option *co = mpctx->option_callbacks[index].co;
++    void *opt_ptr = co ? co->data : NULL;
++    int flags = mpctx->option_callbacks[index].flags;
++
+     if (flags & UPDATE_TERM)
+         mp_update_logging(mpctx, false);
+ 
+@@ -7747,7 +7775,7 @@ void mp_option_change_callback(void *ctx, struct m_config_option *co, int flags,
+     if (flags & UPDATE_SUB_EXTS)
+         mp_update_subtitle_exts(mpctx->opts);
+ 
+-    if (init || opt_ptr == &opts->ipc_path || opt_ptr == &opts->ipc_client) {
++    if (opt_ptr == &opts->ipc_path || opt_ptr == &opts->ipc_client) {
+         mp_uninit_ipc(mpctx->ipc_ctx);
+         mpctx->ipc_ctx = mp_init_ipc(mpctx->clients, mpctx->global);
+     }
+diff --git a/player/command.h b/player/command.h
+index 48b4518553fda..72145775a9b14 100644
+--- a/player/command.h
++++ b/player/command.h
+@@ -66,6 +66,11 @@ struct mp_cmd_ctx {
+     void *on_completion_priv; // for free use by on_completion callback
+ };
+ 
++struct mp_option_callback {
++    struct m_config_option *co;
++    int flags;
++};
++
+ void run_command(struct MPContext *mpctx, struct mp_cmd *cmd,
+                  struct mp_abort_entry *abort,
+                  void (*on_completion)(struct mp_cmd_ctx *cmd),
+@@ -82,6 +87,7 @@ int mp_property_do(const char* name, int action, void* val,
+ 
+ void mp_option_change_callback(void *ctx, struct m_config_option *co, int flags,
+                                bool self_update);
++void mp_option_run_callback(struct MPContext *mpctx, int index);
+ 
+ void mp_notify(struct MPContext *mpctx, int event, void *arg);
+ void mp_notify_property(struct MPContext *mpctx, const char *property);
+diff --git a/player/core.h b/player/core.h
+index e9dd9de768e14..fd6a46ba2c6fe 100644
+--- a/player/core.h
++++ b/player/core.h
+@@ -441,6 +441,9 @@ typedef struct MPContext {
+     struct command_ctx *command_ctx;
+     struct encode_lavc_context *encode_lavc_ctx;
+ 
++    struct mp_option_callback *option_callbacks;
++    int num_option_callbacks;
++
+     struct mp_ipc_ctx *ipc_ctx;
+ 
+     int64_t builtin_script_ids[6];
+diff --git a/player/main.c b/player/main.c
+index 624d0c927ffe1..914907731314e 100644
+--- a/player/main.c
++++ b/player/main.c
+@@ -412,6 +412,8 @@ int mp_initialize(struct MPContext *mpctx, char **options)
+         mp_smtc_init(mp_new_client(mpctx->clients, "SystemMediaTransportControls"));
+ #endif
+ 
++    mpctx->ipc_ctx = mp_init_ipc(mpctx->clients, mpctx->global);
++
+     if (opts->encode_opts->file && opts->encode_opts->file[0]) {
+         mpctx->encode_lavc_ctx = encode_lavc_init(mpctx->global);
+         if(!mpctx->encode_lavc_ctx) {
+diff --git a/player/playloop.c b/player/playloop.c
+index ff2c00a7ca183..f1a6006d6803a 100644
+--- a/player/playloop.c
++++ b/player/playloop.c
+@@ -121,6 +121,14 @@ static void mp_process_input(struct MPContext *mpctx)
+         mp_notify(mpctx, MP_EVENT_INPUT_PROCESSED, NULL);
+ }
+ 
++// Process any queued option callbacks.
++static void handle_option_callbacks(struct MPContext *mpctx)
++{
++    for (int i = 0; i < mpctx->num_option_callbacks; i++)
++        mp_option_run_callback(mpctx, i);
++    mpctx->num_option_callbacks = 0;
++}
++
+ double get_relative_time(struct MPContext *mpctx)
+ {
+     int64_t new_time = mp_time_ns();
+@@ -1289,6 +1297,8 @@ void run_playloop(struct MPContext *mpctx)
+ 
+     mp_process_input(mpctx);
+ 
++    handle_option_callbacks(mpctx);
++
+     handle_chapter_change(mpctx);
+ 
+     handle_force_window(mpctx, false);
+@@ -1300,6 +1310,7 @@ void mp_idle(struct MPContext *mpctx)
+     handle_clipboard_updates(mpctx);
+     mp_wait_events(mpctx);
+     mp_process_input(mpctx);
++    handle_option_callbacks(mpctx);
+     handle_command_updates(mpctx);
+     handle_update_cache(mpctx);
+     handle_cursor_autohide(mpctx);

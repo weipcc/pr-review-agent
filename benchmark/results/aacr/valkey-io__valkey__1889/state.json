@@ -1,0 +1,41 @@
+{
+ "owner": "valkey-io",
+ "repo": "valkey",
+ "full": "valkey-io/valkey",
+ "pr_number": 1889,
+ "title": "Redact protocol error log when hide-user-data-from-log enabled",
+ "body": "In this code logic: https://github.com/valkey-io/valkey/blob/unstable/src/networking.c#L2767-L2773, `c->querybuf + c->qb_pos` may also include user data.  \r\nUpdate the log message when config `hide-user-data-from-log` is enabled.",
+ "base_sha": "ea2e48a807e1d4a1a5a684a2a699eda1934a0c6f",
+ "review_sha": "36f37c0bafa72c091a9a3725b9a026a056130892",
+ "head_now": "1b77cf58dbd9743fb398a703a7ba25acb7283ed4",
+ "raw_diff": "diff --git a/src/networking.c b/src/networking.c\nindex a049936fa90..7d0e6ecf527 100644\n--- a/src/networking.c\n+++ b/src/networking.c\n@@ -2765,11 +2765,15 @@ static void setProtocolError(const char *errstr, client *c) {\n         char buf[256];\n         buf[0] = '\\0';\n         if (c->querybuf && sdslen(c->querybuf) - c->qb_pos < PROTO_DUMP_LEN) {\n-            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%s'\", c->querybuf + c->qb_pos);\n+            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%s'\",\n+                     server.hide_user_data_from_log ? \"[hide_user_data_from_log]Redacted\" : (c->querybuf + c->qb_pos));\n         } else if (c->querybuf) {\n-            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'\",\n-                     PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,\n-                     PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2);\n+            snprintf(buf, sizeof(buf), server.hide_user_data_from_log ?\n+                     (\"Query buffer during protocol error: [hide_user_data_from_log]Redacted %zu bytes\",\n+                      sdslen(c->querybuf) - c->qb_pos) :\n+                     (\"Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'\",\n+                      PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,\n+                      PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2));\n         }\n \n         /* Remove non printable chars. */\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "src/networking.c",
+   "body": "The current implementation processes the query buffer before checking `server.hide_user_data_from_log` in `setProtocolError`, risking exposure of sensitive user data in logs. Move the redaction check to the beginning of buffer handling logic to immediately skip data processing when enabled.",
+   "from_line": 2773,
+   "to_line": 2773,
+   "category": "Security Vulnerability",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -2765,11 +2765,15 @@ static void setProtocolError(const char *errstr, client *c) {\n         char buf[256];\n         buf[0] = '\\0';\n         if (c->querybuf && sdslen(c->querybuf) - c->qb_pos < PROTO_DUMP_LEN) {\n-            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%s'\", c->querybuf + c->qb_pos);\n+            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%s'\",\n+                     server.hide_user_data_from_log ? \"[hide_user_data_from_log]Redacted\" : (c->querybuf + c->qb_pos));\n         } else if (c->querybuf) {\n-            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'\",\n-                     PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,\n-                     PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2);\n+            snprintf(buf, sizeof(buf), server.hide_user_data_from_log ?\n+                     (\"Query buffer during protocol error: [hide_user_data_from_log]Redacted %zu bytes\",\n+                      sdslen(c->querybuf) - c->qb_pos) :\n+                     (\"Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'\",\n+                      PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,\n+                      PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2));\n         }\n \n         /* Remove non printable chars. */",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 1,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "src/networking.c",
+   "body": "The snprintf ternary expression for redacting long query buffers has mismatched types and incorrect argument structure, failing to suppress user data exposure when `server.hide_user_data_from_log` is enabled and causing potential crashes.",
+   "from_line": 2776,
+   "to_line": 2776,
+   "category": "Code Defect",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -2765,11 +2765,15 @@ static void setProtocolError(const char *errstr, client *c) {\n         char buf[256];\n         buf[0] = '\\0';\n         if (c->querybuf && sdslen(c->querybuf) - c->qb_pos < PROTO_DUMP_LEN) {\n-            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%s'\", c->querybuf + c->qb_pos);\n+            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%s'\",\n+                     server.hide_user_data_from_log ? \"[hide_user_data_from_log]Redacted\" : (c->querybuf + c->qb_pos));\n         } else if (c->querybuf) {\n-            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'\",\n-                     PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,\n-                     PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2);\n+            snprintf(buf, sizeof(buf), server.hide_user_data_from_log ?\n+                     (\"Query buffer during protocol error: [hide_user_data_from_log]Redacted %zu bytes\",\n+                      sdslen(c->querybuf) - c->qb_pos) :\n+                     (\"Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'\",\n+                      PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,\n+                      PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2));\n         }\n \n         /* Remove non printable chars. */",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "C"
+}

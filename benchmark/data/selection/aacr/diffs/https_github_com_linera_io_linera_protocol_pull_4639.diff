@@ -1,0 +1,85 @@
+diff --git a/linera-core/src/chain_worker/mod.rs b/linera-core/src/chain_worker/mod.rs
+index e9567903325b..436f5c102668 100644
+--- a/linera-core/src/chain_worker/mod.rs
++++ b/linera-core/src/chain_worker/mod.rs
+@@ -14,5 +14,8 @@ pub(crate) use self::state::CrossChainUpdateHelper;
+ pub(crate) use self::{
+     actor::{ChainWorkerActor, ChainWorkerRequest},
+     config::ChainWorkerConfig,
+-    state::BlockOutcome,
++    state::{
++        BlockOutcome, CHAIN_INFO_RECEIVED_LOG_MAX_ENTRIES_DEFAULT,
++        CHAIN_INFO_RECEIVED_LOG_MAX_ENTRIES_VAR,
++    },
+ };
+diff --git a/linera-core/src/chain_worker/state.rs b/linera-core/src/chain_worker/state.rs
+index b3f0664e1c45..d4bac0790c19 100644
+--- a/linera-core/src/chain_worker/state.rs
++++ b/linera-core/src/chain_worker/state.rs
+@@ -48,6 +48,12 @@ use crate::{
+     worker::{NetworkActions, Notification, Reason, WorkerError},
+ };
+ 
++/// The maximum number of entries in a `received_log` included in a `ChainInfo` response.
++// TODO(#4638): Revisit the number.
++pub const CHAIN_INFO_RECEIVED_LOG_MAX_ENTRIES_DEFAULT: usize = 1000;
++pub const CHAIN_INFO_RECEIVED_LOG_MAX_ENTRIES_VAR: &str =
++    "LINERA_CHAIN_INFO_RECEIVED_LOG_MAX_ENTRIES";
++
+ /// The state of the chain worker.
+ pub(crate) struct ChainWorkerState<StorageClient>
+ where
+@@ -1411,7 +1417,12 @@ where
+         info.requested_sent_certificate_hashes = hashes;
+         if let Some(start) = query.request_received_log_excluding_first_n {
+             let start = usize::try_from(start).map_err(|_| ArithmeticError::Overflow)?;
+-            info.requested_received_log = chain.received_log.read(start..).await?;
++            let max_entries = std::env::var(CHAIN_INFO_RECEIVED_LOG_MAX_ENTRIES_VAR)
++                .ok()
++                .and_then(|var| var.parse().ok())
++                .unwrap_or(CHAIN_INFO_RECEIVED_LOG_MAX_ENTRIES_DEFAULT);
++            let end = (start.saturating_add(max_entries)).min(chain.received_log.count());
++            info.requested_received_log = chain.received_log.read(start..end).await?;
+         }
+         if query.request_manager_values {
+             info.manager.add_values(&chain.manager);
+diff --git a/linera-core/src/client/mod.rs b/linera-core/src/client/mod.rs
+index db91a6664e85..e9a202ecfb38 100644
+--- a/linera-core/src/client/mod.rs
++++ b/linera-core/src/client/mod.rs
+@@ -69,6 +69,9 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
+ use tracing::{debug, error, info, instrument, trace, warn, Instrument as _};
+ 
+ use crate::{
++    chain_worker::{
++        CHAIN_INFO_RECEIVED_LOG_MAX_ENTRIES_DEFAULT, CHAIN_INFO_RECEIVED_LOG_MAX_ENTRIES_VAR,
++    },
+     data_types::{ChainInfo, ChainInfoQuery, ChainInfoResponse, ClientOutcome, RoundTimeout},
+     environment::Environment,
+     local_node::{LocalChainInfoExt as _, LocalNodeClient, LocalNodeError},
+@@ -842,9 +845,22 @@ impl<Env: Environment> Client<Env> {
+         let (max_epoch, committees) = self.admin_committees().await?;
+ 
+         // Retrieve the list of newly received certificates from this validator.
+-        let query = ChainInfoQuery::new(chain_id).with_received_log_excluding_first_n(tracker);
+-        let info = remote_node.handle_chain_info_query(query).await?;
+-        let remote_log = info.requested_received_log;
++        let mut remote_log = Vec::new();
++        let mut offset = tracker;
++        let max_entries = std::env::var(CHAIN_INFO_RECEIVED_LOG_MAX_ENTRIES_VAR)
++            .ok()
++            .and_then(|var| var.parse().ok())
++            .unwrap_or(CHAIN_INFO_RECEIVED_LOG_MAX_ENTRIES_DEFAULT);
++        loop {
++            let query = ChainInfoQuery::new(chain_id).with_received_log_excluding_first_n(offset);
++            let info = remote_node.handle_chain_info_query(query).await?;
++            let received_entries = info.requested_received_log.len();
++            offset += received_entries as u64;
++            remote_log.extend(info.requested_received_log);
++            if received_entries < max_entries {
++                break;
++            }
++        }
+         let remote_heights = Self::heights_per_chain(&remote_log);
+ 
+         // Obtain the next block height we need in the local node, for each chain.

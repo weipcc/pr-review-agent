@@ -1,0 +1,298 @@
+diff --git a/web/src/service-worker/broadcast-channel.ts b/web/src/service-worker/broadcast-channel.ts
+new file mode 100644
+index 00000000000000..e1a30b203b7bf6
+--- /dev/null
++++ b/web/src/service-worker/broadcast-channel.ts
+@@ -0,0 +1,18 @@
++import { cancelLoad, getCachedOrFetch } from './cache';
++
++export const installBroadcastChannelListener = () => {
++  const broadcast = new BroadcastChannel('immich');
++  // eslint-disable-next-line  unicorn/prefer-add-event-listener
++  broadcast.onmessage = (event) => {
++    if (!event.data) {
++      return;
++    }
++    const urlstring = event.data.url;
++    const url = new URL(urlstring, event.origin);
++    if (event.data.type === 'cancel') {
++      cancelLoad(url.toString());
++    } else if (event.data.type === 'preload') {
++      getCachedOrFetch(url);
++    }
++  };
++};
+diff --git a/web/src/service-worker/cache.ts b/web/src/service-worker/cache.ts
+new file mode 100644
+index 00000000000000..3a2e92c9739a72
+--- /dev/null
++++ b/web/src/service-worker/cache.ts
+@@ -0,0 +1,106 @@
++import { build, files, version } from '$service-worker';
++
++const useCache = true;
++const CACHE = `cache-${version}`;
++
++export const APP_RESOURCES = [
++  ...build, // the app itself
++  ...files, // everything in `static`
++];
++
++export const isURL = (request: URL | RequestInfo): request is URL => (request as URL).href !== undefined;
++export const isRequest = (request: RequestInfo): request is Request => (request as Request).url !== undefined;
++
++export async function deleteOldCaches() {
++  for (const key of await caches.keys()) {
++    if (key !== CACHE) {
++      await caches.delete(key);
++    }
++  }
++}
++
++export async function addFilesToCache() {
++  const cache = await caches.open(CACHE);
++  await cache.addAll(APP_RESOURCES);
++}
++
++const pendingLoads = new Map<string, AbortController>();
++
++export async function cancelLoad(urlString: string) {
++  const pending = pendingLoads.get(urlString);
++  if (pending) {
++    pending.abort();
++    pendingLoads.delete(urlString);
++  }
++}
++
++export async function getCachedOrFetch(request: URL | Request | string, cancelable: boolean = false) {
++  const cached = await checkCache(request);
++  if (cached.response) {
++    return cached.response;
++  }
++
++  try {
++    if (!cancelable) {
++      const response = await fetch(request);
++      checkResponse(response);
++      return response;
++    }
++
++    return await fetchWithCancellation(request, cached.cache);
++  } catch {
++    return new Response(undefined, {
++      status: 499,
++      statusText: 'Request canceled: Instructions unclear, accidentally interrupted myself',
++    });
++  }
++}
++
++async function fetchWithCancellation(request: URL | Request | string, cache: Cache) {
++  const cacheKey = getCacheKey(request);
++  const cancelToken = new AbortController();
++
++  try {
++    pendingLoads.set(cacheKey, cancelToken);
++    const response = await fetch(request, {
++      signal: cancelToken.signal,
++    });
++
++    checkResponse(response);
++    setCached(response, cache, cacheKey);
++    return response;
++  } finally {
++    pendingLoads.delete(cacheKey);
++  }
++}
++
++async function checkCache(url: URL | Request | string) {
++  if (!useCache) {
++    return;
++  }
++  const cache = await caches.open(CACHE);
++  const response = await cache.match(url);
++  return { cache, response };
++}
++
++async function setCached(response: Response, cache: Cache, cacheKey: URL | Request | string) {
++  if (response.status === 200) {
++    cache.put(cacheKey, response.clone());
++  }
++}
++
++function checkResponse(response: Response) {
++  if (!(response instanceof Response)) {
++    throw new TypeError('invalid response from fetch');
++  }
++}
++
++function getCacheKey(request: URL | Request | string) {
++  if (isURL(request)) {
++    return request.toString();
++  } else if (isRequest(request)) {
++    return request.url;
++  } else {
++    return request;
++  }
++}
+diff --git a/web/src/service-worker/fetch-event.ts b/web/src/service-worker/fetch-event.ts
+new file mode 100644
+index 00000000000000..9ac53c8c14aa3b
+--- /dev/null
++++ b/web/src/service-worker/fetch-event.ts
+@@ -0,0 +1,38 @@
++import { APP_RESOURCES, getCachedOrFetch } from './cache';
++
++function isAssetRequest(pathname: string): boolean {
++  return /^\/api\/assets\/[a-f0-9-]+\/(original|thumbnail)/.test(pathname);
++}
++
++function isIgnoredFileType(pathname: string): boolean {
++  return /\.(png|ico|txt|json|ts|ttf|css|js|svelte)$/.test(pathname);
++}
++
++function isIgnoredPath(pathname: string): boolean {
++  return /^\/(src|api)(\/.*)?$/.test(pathname) || /^\/(node_modules|@vite|@id)(\/.*)?$/.test(pathname);
++}
++
++export function handleFetchEvent(event: FetchEvent): void {
++  if (event.request.method !== 'GET') {
++    return;
++  }
++
++  const url = new URL(event.request.url);
++
++  if (APP_RESOURCES.includes(url.pathname)) {
++    event.respondWith(getCachedOrFetch(event.request));
++    return;
++  }
++
++  if (isAssetRequest(url.pathname)) {
++    event.respondWith(getCachedOrFetch(event.request, true));
++    return;
++  }
++
++  if (isIgnoredFileType(url.pathname) || isIgnoredPath(url.pathname)) {
++    return;
++  }
++
++  const slash = new URL('/', url.origin);
++  event.respondWith(getCachedOrFetch(slash));
++}
+diff --git a/web/src/service-worker/index.ts b/web/src/service-worker/index.ts
+index 797f4754b6dc39..796b06b7df4fbe 100644
+--- a/web/src/service-worker/index.ts
++++ b/web/src/service-worker/index.ts
+@@ -2,85 +2,25 @@
+ /// <reference no-default-lib="true"/>
+ /// <reference lib="esnext" />
+ /// <reference lib="webworker" />
+-import { version } from '$service-worker';
++import { installBroadcastChannelListener } from './broadcast-channel';
++import { addFilesToCache, deleteOldCaches } from './cache';
++import { handleFetchEvent } from './fetch-event';
+ 
+-const useCache = true;
+ const sw = globalThis as unknown as ServiceWorkerGlobalScope;
+-const pendingLoads = new Map<string, AbortController>();
+ 
+-// Create a unique cache name for this deployment
+-const CACHE = `cache-${version}`;
+-
+-sw.addEventListener('install', (event) => {
+-  event.waitUntil(sw.skipWaiting());
+-});
+-
+-sw.addEventListener('activate', (event) => {
++const handleActivate = (event: ExtendableEvent) => {
+   event.waitUntil(sw.clients.claim());
+   // Remove previous cached data from disk
+   event.waitUntil(deleteOldCaches());
+-});
+-
+-sw.addEventListener('fetch', (event) => {
+-  if (event.request.method !== 'GET') {
+-    return;
+-  }
+-  const url = new URL(event.request.url);
+-  if (/^\/api\/assets\/[a-f0-9-]+\/(original|thumbnail)/.test(url.pathname)) {
+-    event.respondWith(immichAsset(url));
+-  }
+-});
+-
+-async function deleteOldCaches() {
+-  for (const key of await caches.keys()) {
+-    if (key !== CACHE) {
+-      await caches.delete(key);
+-    }
+-  }
+-}
+-
+-async function immichAsset(url: URL) {
+-  const cache = await caches.open(CACHE);
+-  let response = useCache ? await cache.match(url) : undefined;
+-  if (response) {
+-    return response;
+-  }
+-  try {
+-    const cancelToken = new AbortController();
+-    const request = fetch(url, {
+-      signal: cancelToken.signal,
+-    });
+-    pendingLoads.set(url.toString(), cancelToken);
+-    response = await request;
+-    if (!(response instanceof Response)) {
+-      throw new TypeError('invalid response from fetch');
+-    }
+-    if (response.status === 200) {
+-      cache.put(url, response.clone());
+-    }
+-    return response;
+-  } catch {
+-    return Response.error();
+-  } finally {
+-    pendingLoads.delete(url.toString());
+-  }
+-}
++};
+ 
+-const broadcast = new BroadcastChannel('immich');
+-// eslint-disable-next-line  unicorn/prefer-add-event-listener
+-broadcast.onmessage = (event) => {
+-  if (!event.data) {
+-    return;
+-  }
+-  const urlstring = event.data.url;
+-  const url = new URL(urlstring, event.origin);
+-  if (event.data.type === 'cancel') {
+-    const pending = pendingLoads.get(url.toString());
+-    if (pending) {
+-      pending.abort();
+-      pendingLoads.delete(url.toString());
+-    }
+-  } else if (event.data.type === 'preload') {
+-    immichAsset(url);
+-  }
++const handleInstall = (event: ExtendableEvent) => {
++  event.waitUntil(sw.skipWaiting());
++  // Create a new cache and add all files to it
++  event.waitUntil(addFilesToCache());
+ };
++
++sw.addEventListener('install', handleInstall);
++sw.addEventListener('activate', handleActivate);
++sw.addEventListener('fetch', handleFetchEvent);
++installBroadcastChannelListener();
+diff --git a/web/svelte.config.js b/web/svelte.config.js
+index 96c6eedffd7fa3..1d6527fdf0149f 100644
+--- a/web/svelte.config.js
++++ b/web/svelte.config.js
+@@ -14,6 +14,9 @@ const config = {
+   },
+   preprocess: vitePreprocess(),
+   kit: {
++    paths: {
++      relative: false,
++    },
+     adapter: adapter({
+       fallback: 'index.html',
+       precompress: true,

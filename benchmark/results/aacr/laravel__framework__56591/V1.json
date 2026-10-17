@@ -1,0 +1,17 @@
+{
+ "results": [
+  {
+   "filename": "src/Illuminate/Database/Console/Migrations/MigrateMakeCommand.php",
+   "summary": "在 Windows 作業系統環境下，將輸出的 migration 檔案路徑中的正斜線轉換為反斜線，改動簡潔且無副作用。",
+   "recommendation": "n/a",
+   "issues": []
+  }
+ ],
+ "n_files": 1,
+ "input_tokens": 1986,
+ "output_tokens": 48,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 5.2,
+ "model": "gemini-3.8-flash"
+}

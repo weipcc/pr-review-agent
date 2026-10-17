@@ -1,0 +1,359 @@
+diff --git a/DOCS/interface-changes/forced.txt b/DOCS/interface-changes/forced.txt
+new file mode 100644
+index 0000000000000..b03742b55c5b6
+--- /dev/null
++++ b/DOCS/interface-changes/forced.txt
+@@ -0,0 +1 @@
++add `forced` flag to track add commands
+diff --git a/DOCS/man/input.rst b/DOCS/man/input.rst
+index dcf1298788389..e10d5a9c23482 100644
+--- a/DOCS/man/input.rst
++++ b/DOCS/man/input.rst
+@@ -673,6 +673,10 @@ Track Manipulation
+ 
+         Marks the track as suitable for the visually impaired.
+ 
++    <forced>
++
++        Marks the track as forced.
++
+     <attached-picture> (only for ``video-add``)
+ 
+         Marks the track as an attached picture, same as ``albumart`` argument
+diff --git a/common/common.h b/common/common.h
+index 80fb5bfb0f6b6..49fee1202a325 100644
+--- a/common/common.h
++++ b/common/common.h
+@@ -91,6 +91,14 @@ enum video_sync {
+     VS_NONE,
+ };
+ 
++enum track_flags {
++    // starts at 4, for cmd_track_add backwards compatibility
++    TRACK_HEARING_IMPAIRED = 1 << 2,
++    TRACK_VISUAL_IMPAIRED = 1 << 3,
++    TRACK_ATTACHED_PICTURE = 1 << 4,
++    TRACK_FORCED = 1 << 5,
++};
++
+ #define VS_IS_DISP(x) ((x) == VS_DISP_RESAMPLE ||       \
+                        (x) == VS_DISP_RESAMPLE_VDROP || \
+                        (x) == VS_DISP_RESAMPLE_NONE ||  \
+diff --git a/misc/language.c b/misc/language.c
+index d7cdffebd3447..0b55a5f1527cc 100644
+--- a/misc/language.c
++++ b/misc/language.c
+@@ -297,15 +297,15 @@ int mp_match_lang(char **langs, const char *lang)
+     return best_score;
+ }
+ 
+-bstr mp_guess_lang_from_filename(bstr name, int *lang_start, bool *hearing_impaired)
++bstr mp_guess_lang_from_filename(bstr name, int *lang_start, enum track_flags *flags)
+ {
+     name = bstr_strip(bstr_strip_ext(name));
+ 
+     if (lang_start)
+         *lang_start = -1;
+ 
+-    if (hearing_impaired)
+-        *hearing_impaired = false;
++    if (flags)
++        *flags = 0;
+ 
+     if (name.len < 2)
+         return (bstr){0};
+@@ -324,8 +324,7 @@ bstr mp_guess_lang_from_filename(bstr name, int *lang_start, bool *hearing_impai
+         i--;
+     }
+ 
+-    bool *hi = hearing_impaired ? hearing_impaired : &(bool){0};
+-    bool checked_hi = false;
++    enum track_flags *f = flags ? flags : &(enum track_flags){0};
+ 
+     while (true) {
+         while (i >= 0 && mp_isalpha(name.start[i])) {
+@@ -333,17 +332,22 @@ bstr mp_guess_lang_from_filename(bstr name, int *lang_start, bool *hearing_impai
+             i--;
+         }
+ 
+-        if (i >= 0 && lang_length >= 2 && !checked_hi && name.start[i] == delimiter) {
+-            checked_hi = true;
++        if (i >= 0 && lang_length >= 2 && name.start[i] == delimiter) {
++            bool matched = false;
+             static const char *const suffixes[] = { "sdh", "hi", "cc" };
+             bstr tag = { name.start + i + 1, lang_length };
+             for (int n = 0; n < MP_ARRAY_SIZE(suffixes); n++) {
+                 if (!bstrcasecmp0(tag, suffixes[n])) {
+-                    *hi = true;
++                    *f |= TRACK_HEARING_IMPAIRED;
++                    matched = true;
+                     break;
+                 }
+             }
+-            if (*hi) {
++            if (!bstrcasecmp0(tag, "forced")) {
++                *f |= TRACK_FORCED;
++                matched = true;
++            }
++            if (matched) {
+                 lang_length = 0;
+                 i -= (delimiter != '.') ? 2 : 1;
+                 continue;
+diff --git a/misc/language.h b/misc/language.h
+index e15f06dd34eb1..dde014b99cb8b 100644
+--- a/misc/language.h
++++ b/misc/language.h
+@@ -21,10 +21,11 @@
+ #define MP_LANGUAGE_H
+ 
+ #include "misc/bstr.h"
++#include "common/common.h"
+ 
+ // Result numerically higher => better match. 0 == no match.
+ int mp_match_lang(char **langs, const char *lang);
+ char **mp_get_user_langs(void);
+-bstr mp_guess_lang_from_filename(bstr name, int *lang_start, bool *hearing_impaired);
++bstr mp_guess_lang_from_filename(bstr name, int *lang_start, enum track_flags *flags);
+ 
+ #endif /* MP_LANGUAGE_H */
+diff --git a/player/command.c b/player/command.c
+index 2baad028552c6..9156bdb43bca4 100644
+--- a/player/command.c
++++ b/player/command.c
+@@ -6305,6 +6305,7 @@ static void cmd_track_reload(void *p)
+         flags |= t->attached_picture ? TRACK_ATTACHED_PICTURE : 0;
+         flags |= t->hearing_impaired_track ? TRACK_HEARING_IMPAIRED : 0;
+         flags |= t->visual_impaired_track ? TRACK_VISUAL_IMPAIRED : 0;
++        flags |= t->forced_track ? TRACK_FORCED : 0;
+         mp_remove_track(mpctx, t);
+         nt_num = mp_add_external_file(mpctx, filename, type, cmd->abort->cancel,
+                                       flags);
+@@ -6319,9 +6320,12 @@ static void cmd_track_reload(void *p)
+     struct track *nt = mpctx->tracks[nt_num];
+ 
+     if (!nt->lang) {
++        enum track_flags flags = 0;
+         bstr lang = mp_guess_lang_from_filename(bstr0(nt->external_filename), NULL,
+-                                                &nt->hearing_impaired_track);
++                                                &flags);
+         nt->lang = bstrto0(nt, lang);
++        nt->hearing_impaired_track = flags & TRACK_HEARING_IMPAIRED;
++        nt->forced_track = flags & TRACK_FORCED;
+     }
+ 
+     mp_switch_track(mpctx, nt->type, nt, 0);
+@@ -7155,7 +7159,8 @@ const struct mp_cmd_def mp_cmds[] = {
+             {"flags", OPT_FLAGS(v.i,
+                 {"select", 0}, {"auto", 1}, {"cached", 2},
+                 {"hearing-impaired", TRACK_HEARING_IMPAIRED},
+-                {"visual-impaired", TRACK_VISUAL_IMPAIRED}),
++                {"visual-impaired", TRACK_VISUAL_IMPAIRED},
++                {"forced", TRACK_FORCED}),
+                 .flags = MP_CMD_OPT_ARG},
+             {"title", OPT_STRING(v.s), .flags = MP_CMD_OPT_ARG},
+             {"lang", OPT_STRING(v.s), .flags = MP_CMD_OPT_ARG},
+@@ -7171,7 +7176,8 @@ const struct mp_cmd_def mp_cmds[] = {
+             {"flags", OPT_FLAGS(v.i,
+                 {"select", 0}, {"auto", 1}, {"cached", 2},
+                 {"hearing-impaired", TRACK_HEARING_IMPAIRED},
+-                {"visual-impaired", TRACK_VISUAL_IMPAIRED}),
++                {"visual-impaired", TRACK_VISUAL_IMPAIRED},
++                {"forced", TRACK_FORCED}),
+                 .flags = MP_CMD_OPT_ARG},
+             {"title", OPT_STRING(v.s), .flags = MP_CMD_OPT_ARG},
+             {"lang", OPT_STRING(v.s), .flags = MP_CMD_OPT_ARG},
+@@ -7188,7 +7194,8 @@ const struct mp_cmd_def mp_cmds[] = {
+                 {"select", 0}, {"auto", 1}, {"cached", 2},
+                 {"hearing-impaired", TRACK_HEARING_IMPAIRED},
+                 {"visual-impaired", TRACK_VISUAL_IMPAIRED},
+-                {"attached-picture", TRACK_ATTACHED_PICTURE}),
++                {"attached-picture", TRACK_ATTACHED_PICTURE},
++                {"forced", TRACK_FORCED}),
+                 .flags = MP_CMD_OPT_ARG},
+             {"title", OPT_STRING(v.s), .flags = MP_CMD_OPT_ARG},
+             {"lang", OPT_STRING(v.s), .flags = MP_CMD_OPT_ARG},
+diff --git a/player/core.h b/player/core.h
+index de49806fd04e6..f8b68321a9b2a 100644
+--- a/player/core.h
++++ b/player/core.h
+@@ -491,13 +491,6 @@ struct mp_abort_entry {
+ #define WHITE_CIRCLE "\xe2\x97\x8b"
+ #define BLACK_CIRCLE "\xe2\x97\x8f"
+ 
+-enum track_flags {
+-    // starts at 4, for cmd_track_add backwards compatibility
+-    TRACK_HEARING_IMPAIRED = 1 << 2,
+-    TRACK_VISUAL_IMPAIRED = 1 << 3,
+-    TRACK_ATTACHED_PICTURE = 1 << 4,
+-};
+-
+ // audio.c
+ void reset_audio_state(struct MPContext *mpctx);
+ void reinit_audio_chain(struct MPContext *mpctx);
+diff --git a/player/external_files.c b/player/external_files.c
+index e5e11b4277eb8..83f4c5d729860 100644
+--- a/player/external_files.c
++++ b/player/external_files.c
+@@ -155,8 +155,8 @@ static void append_dir_subtitles(struct mpv_global *global, struct MPOpts *opts,
+ 
+         bstr lang = {0};
+         int start = 0;
+-        bool hearing_impaired = false;
+-        lang = mp_guess_lang_from_filename(dename, &start, &hearing_impaired);
++        enum track_flags flags = 0;
++        lang = mp_guess_lang_from_filename(dename, &start, &flags);
+         if (bstr_case_startswith(tmp_fname_trim, f_fname_trim)) {
+             if (lang.len && start == f_fname_trim.len)
+                 prio |= 16; // exact movie name + followed by lang
+@@ -201,7 +201,7 @@ static void append_dir_subtitles(struct mpv_global *global, struct MPOpts *opts,
+                 sub->priority = prio;
+                 sub->fname    = subpath;
+                 sub->lang     = lang.len ? bstrdup0(*slist, lang) : NULL;
+-                sub->hearing_impaired = hearing_impaired;
++                sub->flags    = flags;
+             } else
+                 talloc_free(subpath);
+         }
+diff --git a/player/external_files.h b/player/external_files.h
+index 7801e3e43b013..f6af9325ba2b6 100644
+--- a/player/external_files.h
++++ b/player/external_files.h
+@@ -20,12 +20,14 @@
+ 
+ #include <stdbool.h>
+ 
++#include "common/common.h"
++
+ struct subfn {
+     int type; // STREAM_SUB/STREAM_AUDIO/STREAM_VIDEO(coverart)
+     int priority;
+     char *fname;
+     char *lang;
+-    bool hearing_impaired;
++    enum track_flags flags;
+ };
+ 
+ struct mpv_global;
+diff --git a/player/loadfile.c b/player/loadfile.c
+index b6b71fdbcabbb..96c84bd458eb8 100644
+--- a/player/loadfile.c
++++ b/player/loadfile.c
+@@ -917,6 +917,7 @@ int mp_add_external_file(struct MPContext *mpctx, char *filename,
+         t->no_auto_select = t->no_default;
+         t->hearing_impaired_track = flags & TRACK_HEARING_IMPAIRED;
+         t->visual_impaired_track = flags & TRACK_VISUAL_IMPAIRED;
++        t->forced_track = flags & TRACK_FORCED;
+         // if we found video, and we are loading cover art, flag as such.
+         t->attached_picture = t->type == STREAM_VIDEO && (flags & TRACK_ATTACHED_PICTURE);
+         if (first_num < 0 && (filter == STREAM_TYPE_COUNT || sh->type == filter))
+@@ -987,8 +988,7 @@ void autoload_external_files(struct MPContext *mpctx, struct mp_cancel *cancel)
+         if (e->type == STREAM_VIDEO && (sc[STREAM_VIDEO] || !sc[STREAM_AUDIO]))
+             goto skip;
+ 
+-        enum track_flags flags = 0;
+-        flags |= e->hearing_impaired ? TRACK_HEARING_IMPAIRED : 0;
++        enum track_flags flags = e->flags;
+         // when given filter is set to video, we are loading up cover art
+         flags |= e->type == STREAM_VIDEO ? TRACK_ATTACHED_PICTURE : 0;
+         int first = mp_add_external_file(mpctx, e->fname, e->type, cancel, flags);
+diff --git a/test/language.c b/test/language.c
+index 2e58b8ff1bc6c..cf8c647872acb 100644
+--- a/test/language.c
++++ b/test/language.c
+@@ -57,47 +57,60 @@ int main(void)
+ 
+     void *ta_ctx = talloc_new(NULL);
+ 
+-#define TEST_LANG_GUESS(filename, expected_lang, expected_start, expected_hi)  \
+-    do {                                                                       \
+-        int start;                                                             \
+-        bool hearing_impaired;                                                 \
+-        bstr lang = mp_guess_lang_from_filename(bstr0(filename), &start,       \
+-                                                &hearing_impaired);            \
+-        assert_string_equal(bstrto0(ta_ctx, lang), expected_lang);             \
+-        assert_int_equal(start, expected_start);                               \
+-        assert_true(hearing_impaired == expected_hi);                          \
++#define TEST_LANG_GUESS(filename, expected_lang, expected_start, expected_flags)  \
++    do {                                                                          \
++        int start;                                                                \
++        enum track_flags flags;                                                   \
++        bstr lang = mp_guess_lang_from_filename(bstr0(filename), &start, &flags); \
++        assert_string_equal(bstrto0(ta_ctx, lang), expected_lang);                \
++        assert_int_equal(start, expected_start);                                  \
++        assert_int_equal(flags, expected_flags);                                  \
+     } while (0)
+ 
+-    TEST_LANG_GUESS("foo.en.srt", "en", 3, false);
+-    TEST_LANG_GUESS("foo.eng.srt", "eng", 3, false);
+-    TEST_LANG_GUESS("foo.e.srt", "", -1, false);
+-    TEST_LANG_GUESS("foo.engg.srt", "", -1, false);
+-    TEST_LANG_GUESS("foo.00.srt", "", -1, false);
+-    TEST_LANG_GUESS("foo.srt", "", -1, false);
+-    TEST_LANG_GUESS(NULL, "", -1, false);
++    TEST_LANG_GUESS("foo.en.srt", "en", 3, 0);
++    TEST_LANG_GUESS("foo.eng.srt", "eng", 3, 0);
++    TEST_LANG_GUESS("foo.e.srt", "", -1, 0);
++    TEST_LANG_GUESS("foo.engg.srt", "", -1, 0);
++    TEST_LANG_GUESS("foo.00.srt", "", -1, 0);
++    TEST_LANG_GUESS("foo.srt", "", -1, 0);
++    TEST_LANG_GUESS(NULL, "", -1, 0);
+ 
+-    TEST_LANG_GUESS("foo.en-US.srt", "en-US", 3, false);
+-    TEST_LANG_GUESS("foo.en-US.hi.srt", "en-US", 3, true);
+-    TEST_LANG_GUESS("foo.en-US.sdh.srt", "en-US", 3, true);
+-    TEST_LANG_GUESS("foo.en-simple.srt", "en-simple", 3, false);
+-    TEST_LANG_GUESS("foo.sgn-FSL.srt", "sgn-FSL", 3, false);
+-    TEST_LANG_GUESS("foo.gsw-u-sd-chzh.srt", "gsw-u-sd-chzh", 3, false);
+-    TEST_LANG_GUESS("foo.en-.srt", "", -1, false);
+-    TEST_LANG_GUESS("foo.en-US-.srt", "", -1, false);
+-    TEST_LANG_GUESS("foo.en-aaaaaaaaa.srt", "", -1, false);
+-    TEST_LANG_GUESS("foo.en-0.srt", "", -1, false);
++    TEST_LANG_GUESS("foo.en-US.srt", "en-US", 3, 0);
++    TEST_LANG_GUESS("foo.en-US.hi.srt", "en-US", 3, TRACK_HEARING_IMPAIRED);
++    TEST_LANG_GUESS("foo.en-US.sdh.srt", "en-US", 3, TRACK_HEARING_IMPAIRED);
++    TEST_LANG_GUESS("foo.en-US.forced.srt", "en-US", 3, TRACK_FORCED);
++    TEST_LANG_GUESS("foo.en-US.forced.sdh.srt", "en-US", 3, TRACK_HEARING_IMPAIRED | TRACK_FORCED);
++    TEST_LANG_GUESS("foo.en-US.sdh.forced.srt", "en-US", 3, TRACK_HEARING_IMPAIRED | TRACK_FORCED);
++    TEST_LANG_GUESS("foo.en-simple.srt", "en-simple", 3, 0);
++    TEST_LANG_GUESS("foo.sgn-FSL.srt", "sgn-FSL", 3, 0);
++    TEST_LANG_GUESS("foo.gsw-u-sd-chzh.srt", "gsw-u-sd-chzh", 3, 0);
++    TEST_LANG_GUESS("foo.en-.srt", "", -1, 0);
++    TEST_LANG_GUESS("foo.en-US-.srt", "", -1, 0);
++    TEST_LANG_GUESS("foo.en-aaaaaaaaa.srt", "", -1, 0);
++    TEST_LANG_GUESS("foo.en-0.srt", "", -1, 0);
+ 
+-    TEST_LANG_GUESS("foo[en].srt", "en", 3, false);
+-    TEST_LANG_GUESS("foo[en-US].srt", "en-US", 3, false);
+-    TEST_LANG_GUESS("foo[en-US][hi].srt", "en-US", 3, true);
+-    TEST_LANG_GUESS("foo[en-US][sdh].srt", "en-US", 3, true);
+-    TEST_LANG_GUESS("foo[].srt", "", -1, false);
++    TEST_LANG_GUESS("foo[en].srt", "en", 3, 00);
++    TEST_LANG_GUESS("foo[en-US].srt", "en-US", 3, 0);
++    TEST_LANG_GUESS("foo[en-US][hi].srt", "en-US", 3, TRACK_HEARING_IMPAIRED);
++    TEST_LANG_GUESS("foo[en-US][sdh].srt", "en-US", 3, TRACK_HEARING_IMPAIRED);
++    TEST_LANG_GUESS("foo[en-US][forced].srt", "en-US", 3, TRACK_FORCED);
++    TEST_LANG_GUESS("foo[en-US][forced][sdh].srt", "en-US", 3, TRACK_HEARING_IMPAIRED | TRACK_FORCED);
++    TEST_LANG_GUESS("foo[en-US][sdh][forced].srt", "en-US", 3, TRACK_HEARING_IMPAIRED | TRACK_FORCED);
++    TEST_LANG_GUESS("foo[].srt", "", -1, 0);
+ 
+-    TEST_LANG_GUESS("foo(en).srt", "en", 3, false);
+-    TEST_LANG_GUESS("foo(en-US).srt", "en-US", 3, false);
+-    TEST_LANG_GUESS("foo(en-US)(hi).srt", "en-US", 3, true);
+-    TEST_LANG_GUESS("foo(en-US)(sdh).srt", "en-US", 3, true);
+-    TEST_LANG_GUESS("foo().srt", "", -1, false);
++    TEST_LANG_GUESS("foo(en).srt", "en", 3, 0);
++    TEST_LANG_GUESS("foo(en-US).srt", "en-US", 3, 0);
++    TEST_LANG_GUESS("foo(en-US)(hi).srt", "en-US", 3, TRACK_HEARING_IMPAIRED);
++    TEST_LANG_GUESS("foo(en-US)(sdh).srt", "en-US", 3, TRACK_HEARING_IMPAIRED);
++    TEST_LANG_GUESS("foo(en-US)(forced).srt", "en-US", 3, TRACK_FORCED);
++    TEST_LANG_GUESS("foo(en-US)(forced)(sdh).srt", "en-US", 3, TRACK_HEARING_IMPAIRED | TRACK_FORCED);
++    TEST_LANG_GUESS("foo(en-US)(sdh)(forced).srt", "en-US", 3, TRACK_HEARING_IMPAIRED | TRACK_FORCED);
++    TEST_LANG_GUESS("foo().srt", "", -1, 0);
++
++    TEST_LANG_GUESS("foo.hi.forced.srt", "", -1, TRACK_HEARING_IMPAIRED | TRACK_FORCED);
++    TEST_LANG_GUESS("foo.forced.hi.srt", "", -1, TRACK_HEARING_IMPAIRED | TRACK_FORCED);
++    TEST_LANG_GUESS("foo.hi.srt", "", -1, TRACK_HEARING_IMPAIRED);
++    TEST_LANG_GUESS("foo.forced.srt", "", -1, TRACK_FORCED);
+ 
+     talloc_free(ta_ctx);
+ }

@@ -1,0 +1,262 @@
+diff --git a/server/src/queries/album.repository.sql b/server/src/queries/album.repository.sql
+index dbf27866be722e..ba4511566d3a25 100644
+--- a/server/src/queries/album.repository.sql
++++ b/server/src/queries/album.repository.sql
+@@ -201,19 +201,23 @@ order by
+ 
+ -- AlbumRepository.getMetadataForIds
+ select
+-  "albums"."id" as "albumId",
+-  min("assets"."localDateTime") as "startDate",
+-  max("assets"."localDateTime") as "endDate",
++  "album_assets"."albumsId" as "albumId",
++  min(
++    ("assets"."localDateTime" AT TIME ZONE 'UTC'::text)::date
++  ) as "startDate",
++  max(
++    ("assets"."localDateTime" AT TIME ZONE 'UTC'::text)::date
++  ) as "endDate",
++  max("assets"."updatedAt") as "lastModifiedAssetTimestamp",
+   count("assets"."id")::int as "assetCount"
+ from
+-  "albums"
+-  inner join "albums_assets_assets" as "album_assets" on "album_assets"."albumsId" = "albums"."id"
+-  inner join "assets" on "assets"."id" = "album_assets"."assetsId"
++  "assets"
++  inner join "albums_assets_assets" as "album_assets" on "album_assets"."assetsId" = "assets"."id"
+ where
+-  "albums"."id" in ($1)
++  "album_assets"."albumsId" in ($1)
+   and "assets"."deletedAt" is null
+ group by
+-  "albums"."id"
++  "album_assets"."albumsId"
+ 
+ -- AlbumRepository.getOwned
+ select
+diff --git a/server/src/repositories/album.repository.ts b/server/src/repositories/album.repository.ts
+index 1fe2938fcc0b78..e9075c0de13c4a 100644
+--- a/server/src/repositories/album.repository.ts
++++ b/server/src/repositories/album.repository.ts
+@@ -12,6 +12,7 @@ export interface AlbumAssetCount {
+   assetCount: number;
+   startDate: Date | null;
+   endDate: Date | null;
++  lastModifiedAssetTimestamp: Date | null;
+ }
+ 
+ export interface AlbumInfoOptions {
+@@ -132,18 +133,21 @@ export class AlbumRepository {
+       return [];
+     }
+ 
+-    return this.db
+-      .selectFrom('albums')
+-      .innerJoin('albums_assets_assets as album_assets', 'album_assets.albumsId', 'albums.id')
+-      .innerJoin('assets', 'assets.id', 'album_assets.assetsId')
+-      .select('albums.id as albumId')
+-      .select((eb) => eb.fn.min('assets.localDateTime').as('startDate'))
+-      .select((eb) => eb.fn.max('assets.localDateTime').as('endDate'))
+-      .select((eb) => sql<number>`${eb.fn.count('assets.id')}::int`.as('assetCount'))
+-      .where('albums.id', 'in', ids)
+-      .where('assets.deletedAt', 'is', null)
+-      .groupBy('albums.id')
+-      .execute();
++    return (
++      this.db
++        .selectFrom('assets')
++        .innerJoin('albums_assets_assets as album_assets', 'album_assets.assetsId', 'assets.id')
++        .select('album_assets.albumsId as albumId')
++        .select((eb) => eb.fn.min(sql<Date>`("assets"."localDateTime" AT TIME ZONE 'UTC'::text)::date`).as('startDate'))
++        .select((eb) => eb.fn.max(sql<Date>`("assets"."localDateTime" AT TIME ZONE 'UTC'::text)::date`).as('endDate'))
++        // lastModifiedAssetTimestamp is only used in mobile app, please remove if not need
++        .select((eb) => eb.fn.max('assets.updatedAt').as('lastModifiedAssetTimestamp'))
++        .select((eb) => sql<number>`${eb.fn.count('assets.id')}::int`.as('assetCount'))
++        .where('album_assets.albumsId', 'in', ids)
++        .where('assets.deletedAt', 'is', null)
++        .groupBy('album_assets.albumsId')
++        .execute()
++    );
+   }
+ 
+   @GenerateSql({ params: [DummyValue.UUID] })
+diff --git a/server/src/repositories/asset.repository.ts b/server/src/repositories/asset.repository.ts
+index 94af400d0560da..8919bc8297cc36 100644
+--- a/server/src/repositories/asset.repository.ts
++++ b/server/src/repositories/asset.repository.ts
+@@ -728,17 +728,6 @@ export class AssetRepository {
+     return paginationHelper(items as any as AssetEntity[], pagination.take);
+   }
+ 
+-  getLastUpdatedAssetForAlbumId(albumId: string): Promise<AssetEntity | undefined> {
+-    return this.db
+-      .selectFrom('assets')
+-      .selectAll('assets')
+-      .innerJoin('albums_assets_assets', 'assets.id', 'albums_assets_assets.assetsId')
+-      .where('albums_assets_assets.albumsId', '=', asUuid(albumId))
+-      .orderBy('updatedAt', 'desc')
+-      .limit(1)
+-      .executeTakeFirst() as Promise<AssetEntity | undefined>;
+-  }
+-
+   getStatistics(ownerId: string, { isArchived, isFavorite, isTrashed }: AssetStatsOptions): Promise<AssetStats> {
+     return this.db
+       .selectFrom('assets')
+diff --git a/server/src/services/album.service.spec.ts b/server/src/services/album.service.spec.ts
+index 62d1326cabc69f..a0fbfc081765f1 100644
+--- a/server/src/services/album.service.spec.ts
++++ b/server/src/services/album.service.spec.ts
+@@ -41,8 +41,20 @@ describe(AlbumService.name, () => {
+     it('gets list of albums for auth user', async () => {
+       mocks.album.getOwned.mockResolvedValue([albumStub.empty, albumStub.sharedWithUser]);
+       mocks.album.getMetadataForIds.mockResolvedValue([
+-        { albumId: albumStub.empty.id, assetCount: 0, startDate: null, endDate: null },
+-        { albumId: albumStub.sharedWithUser.id, assetCount: 0, startDate: null, endDate: null },
++        {
++          albumId: albumStub.empty.id,
++          assetCount: 0,
++          startDate: null,
++          endDate: null,
++          lastModifiedAssetTimestamp: null,
++        },
++        {
++          albumId: albumStub.sharedWithUser.id,
++          assetCount: 0,
++          startDate: null,
++          endDate: null,
++          lastModifiedAssetTimestamp: null,
++        },
+       ]);
+ 
+       const result = await sut.getAll(authStub.admin, {});
+@@ -59,6 +71,7 @@ describe(AlbumService.name, () => {
+           assetCount: 1,
+           startDate: new Date('1970-01-01'),
+           endDate: new Date('1970-01-01'),
++          lastModifiedAssetTimestamp: new Date('1970-01-01'),
+         },
+       ]);
+ 
+@@ -71,7 +84,13 @@ describe(AlbumService.name, () => {
+     it('gets list of albums that are shared', async () => {
+       mocks.album.getShared.mockResolvedValue([albumStub.sharedWithUser]);
+       mocks.album.getMetadataForIds.mockResolvedValue([
+-        { albumId: albumStub.sharedWithUser.id, assetCount: 0, startDate: null, endDate: null },
++        {
++          albumId: albumStub.sharedWithUser.id,
++          assetCount: 0,
++          startDate: null,
++          endDate: null,
++          lastModifiedAssetTimestamp: null,
++        },
+       ]);
+ 
+       const result = await sut.getAll(authStub.admin, { shared: true });
+@@ -83,7 +102,13 @@ describe(AlbumService.name, () => {
+     it('gets list of albums that are NOT shared', async () => {
+       mocks.album.getNotShared.mockResolvedValue([albumStub.empty]);
+       mocks.album.getMetadataForIds.mockResolvedValue([
+-        { albumId: albumStub.empty.id, assetCount: 0, startDate: null, endDate: null },
++        {
++          albumId: albumStub.empty.id,
++          assetCount: 0,
++          startDate: null,
++          endDate: null,
++          lastModifiedAssetTimestamp: null,
++        },
+       ]);
+ 
+       const result = await sut.getAll(authStub.admin, { shared: false });
+@@ -101,6 +126,7 @@ describe(AlbumService.name, () => {
+         assetCount: 1,
+         startDate: new Date('1970-01-01'),
+         endDate: new Date('1970-01-01'),
++        lastModifiedAssetTimestamp: new Date('1970-01-01'),
+       },
+     ]);
+ 
+@@ -447,6 +473,7 @@ describe(AlbumService.name, () => {
+           assetCount: 1,
+           startDate: new Date('1970-01-01'),
+           endDate: new Date('1970-01-01'),
++          lastModifiedAssetTimestamp: new Date('1970-01-01'),
+         },
+       ]);
+ 
+@@ -468,6 +495,7 @@ describe(AlbumService.name, () => {
+           assetCount: 1,
+           startDate: new Date('1970-01-01'),
+           endDate: new Date('1970-01-01'),
++          lastModifiedAssetTimestamp: new Date('1970-01-01'),
+         },
+       ]);
+ 
+@@ -489,6 +517,7 @@ describe(AlbumService.name, () => {
+           assetCount: 1,
+           startDate: new Date('1970-01-01'),
+           endDate: new Date('1970-01-01'),
++          lastModifiedAssetTimestamp: new Date('1970-01-01'),
+         },
+       ]);
+ 
+diff --git a/server/src/services/album.service.ts b/server/src/services/album.service.ts
+index 722745ebd242e4..994912f2c759f9 100644
+--- a/server/src/services/album.service.ts
++++ b/server/src/services/album.service.ts
+@@ -58,19 +58,15 @@ export class AlbumService extends BaseService {
+       albumMetadata[metadata.albumId] = metadata;
+     }
+ 
+-    return Promise.all(
+-      albums.map(async (album) => {
+-        const lastModifiedAsset = await this.assetRepository.getLastUpdatedAssetForAlbumId(album.id);
+-        return {
+-          ...mapAlbumWithoutAssets(album),
+-          sharedLinks: undefined,
+-          startDate: albumMetadata[album.id]?.startDate ?? undefined,
+-          endDate: albumMetadata[album.id]?.endDate ?? undefined,
+-          assetCount: albumMetadata[album.id]?.assetCount ?? 0,
+-          lastModifiedAssetTimestamp: lastModifiedAsset?.updatedAt,
+-        };
+-      }),
+-    );
++    return albums.map((album) => ({
++      ...mapAlbumWithoutAssets(album),
++      sharedLinks: undefined,
++      startDate: albumMetadata[album.id]?.startDate ?? undefined,
++      endDate: albumMetadata[album.id]?.endDate ?? undefined,
++      assetCount: albumMetadata[album.id]?.assetCount ?? 0,
++      // lastModifiedAssetTimestamp is only used in mobile app, please remove if not need
++      lastModifiedAssetTimestamp: albumMetadata[album.id]?.lastModifiedAssetTimestamp ?? undefined,
++    }));
+   }
+ 
+   async get(auth: AuthDto, id: string, dto: AlbumInfoDto): Promise<AlbumResponseDto> {
+@@ -79,14 +75,13 @@ export class AlbumService extends BaseService {
+     const withAssets = dto.withoutAssets === undefined ? true : !dto.withoutAssets;
+     const album = await this.findOrFail(id, { withAssets });
+     const [albumMetadataForIds] = await this.albumRepository.getMetadataForIds([album.id]);
+-    const lastModifiedAsset = await this.assetRepository.getLastUpdatedAssetForAlbumId(album.id);
+ 
+     return {
+       ...mapAlbum(album, withAssets, auth),
+       startDate: albumMetadataForIds?.startDate ?? undefined,
+       endDate: albumMetadataForIds?.endDate ?? undefined,
+       assetCount: albumMetadataForIds?.assetCount ?? 0,
+-      lastModifiedAssetTimestamp: lastModifiedAsset?.updatedAt,
++      lastModifiedAssetTimestamp: albumMetadataForIds?.lastModifiedAssetTimestamp ?? undefined,
+     };
+   }
+ 
+diff --git a/server/test/repositories/asset.repository.mock.ts b/server/test/repositories/asset.repository.mock.ts
+index 531f8d56f17a9c..1114a70f9fe963 100644
+--- a/server/test/repositories/asset.repository.mock.ts
++++ b/server/test/repositories/asset.repository.mock.ts
+@@ -21,7 +21,6 @@ export const newAssetRepositoryMock = (): Mocked<RepositoryInterface<AssetReposi
+     getByChecksums: vitest.fn(),
+     getUploadAssetIdByChecksum: vitest.fn(),
+     getRandom: vitest.fn(),
+-    getLastUpdatedAssetForAlbumId: vitest.fn(),
+     getAll: vitest.fn().mockResolvedValue({ items: [], hasNextPage: false }),
+     getAllByDeviceId: vitest.fn(),
+     getLivePhotoCount: vitest.fn(),

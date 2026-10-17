@@ -1,0 +1,28 @@
+{
+ "owner": "facebook",
+ "repo": "react",
+ "full": "facebook/react",
+ "pr_number": 33059,
+ "title": "Add test for multiple form submissions",
+ "body": "Test for #30041 and #33055",
+ "base_sha": "88b976740467f9dfabae03c79a8eff9033c35050",
+ "review_sha": "be58f26f9a6e579d8df36d901a59249d9ac1393f",
+ "head_now": "48c5c131c6efbb131003b69abc41309a92da663e",
+ "raw_diff": "diff --git a/packages/react-dom/src/__tests__/ReactDOMForm-test.js b/packages/react-dom/src/__tests__/ReactDOMForm-test.js\nindex 93edccf9bcef..f4a9355b102c 100644\n--- a/packages/react-dom/src/__tests__/ReactDOMForm-test.js\n+++ b/packages/react-dom/src/__tests__/ReactDOMForm-test.js\n@@ -1670,6 +1670,48 @@ describe('ReactDOMForm', () => {\n     expect(divRef.current.textContent).toEqual('Current username: acdlite');\n   });\n \n+  it.only('multiple form submissions in rapid succession do not throw', async () => {\n+    const submitFormTwiceButtonRef = React.createRef();\n+    let actionCounter = 0;\n+    function App() {\n+      const formRef = React.createRef();\n+      // Submits the form twice in quick succession\n+      // This simulates a user clicking a button twice in rapid succession\n+      async function submitFormTwice() {\n+        formRef.current.requestSubmit();\n+        await new Promise(res => setTimeout(res, 1));\n+        formRef.current.requestSubmit();\n+      }\n+\n+      // This is a userspace action. it must take a non-zero amount of time to\n+      // allow the form to be submitted again before the first one finishes.\n+      // Otherwise, the form transitions will be batched and will not run concurrently.\n+      async function submitForm() {\n+        actionCounter++;\n+        return new Promise(res => setTimeout(res, 1));\n+      }\n+\n+      return (\n+        <>\n+          <form ref={formRef} action={submitForm}>\n+            <button type=\"submit\">Submit</button>\n+          </form>\n+          <button ref={submitFormTwiceButtonRef} onClick={submitFormTwice}>\n+            Submit twice\n+          </button>\n+        </>\n+      );\n+    }\n+\n+    const root = ReactDOMClient.createRoot(container);\n+    await act(() => root.render(<App />));\n+\n+    await act(async () => {\n+      submitFormTwiceButtonRef.current.click();\n+    });\n+    expect(actionCounter).toBe(2);\n+  });\n+\n   it(\n     'requestFormReset works with inputs that are not descendants ' +\n       'of the form element',\ndiff --git a/packages/react-reconciler/src/ReactFiberHooks.js b/packages/react-reconciler/src/ReactFiberHooks.js\nindex 967be9be94fa..e92801f5fc1a 100644\n--- a/packages/react-reconciler/src/ReactFiberHooks.js\n+++ b/packages/react-reconciler/src/ReactFiberHooks.js\n@@ -3261,7 +3261,7 @@ export function startHostTransition<F>(\n \n function ensureFormComponentIsStateful(formFiber: Fiber) {\n   const existingStateHook: Hook | null = formFiber.memoizedState;\n-  if (existingStateHook !== null) {\n+  if (existingStateHook !== null && existingStateHook.next !== null) {\n     // This fiber was already upgraded to be stateful.\n     return existingStateHook;\n   }\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "packages/react-reconciler/src/ReactFiberHooks.js",
+   "body": "The added condition requiring `existingStateHook.next !== null` may cause the memoized state to be ignored for form components with a single state hook.",
+   "from_line": 3264,
+   "to_line": 3264,
+   "category": "Code Defect",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -3261,7 +3261,7 @@ export function startHostTransition<F>(\n \n function ensureFormComponentIsStateful(formFiber: Fiber) {\n   const existingStateHook: Hook | null = formFiber.memoizedState;\n-  if (existingStateHook !== null) {\n+  if (existingStateHook !== null && existingStateHook.next !== null) {\n     // This fiber was already upgraded to be stateful.\n     return existingStateHook;\n   }",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "JavaScript"
+}

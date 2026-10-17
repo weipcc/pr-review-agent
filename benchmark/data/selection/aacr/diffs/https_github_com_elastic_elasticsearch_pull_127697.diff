@@ -1,0 +1,187 @@
+diff --git a/server/src/main/java/org/elasticsearch/cluster/ClusterChangedEvent.java b/server/src/main/java/org/elasticsearch/cluster/ClusterChangedEvent.java
+index f1f3b7354055c..8285900f0b00f 100644
+--- a/server/src/main/java/org/elasticsearch/cluster/ClusterChangedEvent.java
++++ b/server/src/main/java/org/elasticsearch/cluster/ClusterChangedEvent.java
+@@ -13,9 +13,11 @@
+ import org.elasticsearch.cluster.metadata.IndexGraveyard.IndexGraveyardDiff;
+ import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.elasticsearch.cluster.metadata.Metadata;
++import org.elasticsearch.cluster.metadata.ProjectId;
+ import org.elasticsearch.cluster.metadata.ProjectMetadata;
+ import org.elasticsearch.cluster.node.DiscoveryNodes;
+ import org.elasticsearch.cluster.routing.IndexRoutingTable;
++import org.elasticsearch.common.util.set.Sets;
+ import org.elasticsearch.gateway.GatewayService;
+ import org.elasticsearch.index.Index;
+ 
+@@ -41,6 +43,8 @@ public class ClusterChangedEvent {
+ 
+     private final DiscoveryNodes.Delta nodesDelta;
+ 
++    private final ProjectsDelta projectsDelta;
++
+     public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState) {
+         Objects.requireNonNull(source, "source must not be null");
+         Objects.requireNonNull(state, "state must not be null");
+@@ -49,6 +53,7 @@ public ClusterChangedEvent(String source, ClusterState state, ClusterState previ
+         this.state = state;
+         this.previousState = previousState;
+         this.nodesDelta = state.nodes().delta(previousState.nodes());
++        this.projectsDelta = calculateProjectDelta(previousState.metadata(), state.metadata());
+     }
+ 
+     /**
+@@ -237,6 +242,13 @@ public boolean nodesChanged() {
+         return nodesRemoved() || nodesAdded();
+     }
+ 
++    /**
++     * Returns the {@link ProjectsDelta} between the previous cluster state and the new cluster state.
++     */
++    public ProjectsDelta projectDelta() {
++        return projectsDelta;
++    }
++
+     /**
+      * Determines whether or not the current cluster state represents an entirely
+      * new cluster, either when a node joins a cluster for the first time or when
+@@ -336,4 +348,32 @@ private List<Index> indicesDeletedFromTombstones() {
+             .toList();
+     }
+ 
++    private static ProjectsDelta calculateProjectDelta(Metadata previousMetadata, Metadata currentMetadata) {
++        if (previousMetadata == currentMetadata
++            || (previousMetadata.projects().size() == 1
++                && previousMetadata.hasProject(ProjectId.DEFAULT)
++                && currentMetadata.projects().size() == 1
++                && currentMetadata.hasProject(ProjectId.DEFAULT))) {
++            return ProjectsDelta.EMPTY;
++        }
++
++        final Set<ProjectId> added = Collections.unmodifiableSet(
++            Sets.difference(currentMetadata.projects().keySet(), previousMetadata.projects().keySet())
++        );
++        final Set<ProjectId> removed = Collections.unmodifiableSet(
++            Sets.difference(previousMetadata.projects().keySet(), currentMetadata.projects().keySet())
++        );
++        // TODO: Enable the following assertions once tests no longer add or remove default projects
++        // assert added.contains(ProjectId.DEFAULT) == false;
++        // assert removed.contains(ProjectId.DEFAULT) == false;
++        return new ProjectsDelta(added, removed);
++    }
++
++    public record ProjectsDelta(Set<ProjectId> added, Set<ProjectId> removed) {
++        private static final ProjectsDelta EMPTY = new ProjectsDelta(Set.of(), Set.of());
++
++        public boolean isEmpty() {
++            return added.isEmpty() && removed.isEmpty();
++        }
++    }
+ }
+diff --git a/server/src/test/java/org/elasticsearch/cluster/ClusterChangedEventTests.java b/server/src/test/java/org/elasticsearch/cluster/ClusterChangedEventTests.java
+index c08c82e27fa8b..8c04ddd6163ff 100644
+--- a/server/src/test/java/org/elasticsearch/cluster/ClusterChangedEventTests.java
++++ b/server/src/test/java/org/elasticsearch/cluster/ClusterChangedEventTests.java
+@@ -14,7 +14,9 @@
+ import org.elasticsearch.cluster.metadata.IndexGraveyard;
+ import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.elasticsearch.cluster.metadata.Metadata;
++import org.elasticsearch.cluster.metadata.ProjectId;
+ import org.elasticsearch.cluster.metadata.ProjectMetadata;
++import org.elasticsearch.cluster.metadata.ReservedStateMetadata;
+ import org.elasticsearch.cluster.node.DiscoveryNode;
+ import org.elasticsearch.cluster.node.DiscoveryNodeRole;
+ import org.elasticsearch.cluster.node.DiscoveryNodeUtils;
+@@ -520,6 +522,65 @@ public void testChangedCustomMetadataSetMultiProject() {
+         assertEquals(Set.of(IndexGraveyard.TYPE, project2Custom.getWriteableName()), event.changedCustomProjectMetadataSet());
+     }
+ 
++    public void testProjectsDelta() {
++        final var state0 = ClusterState.builder(TEST_CLUSTER_NAME).build();
++
++        // No project changes
++        final var state1 = ClusterState.builder(state0)
++            .metadata(Metadata.builder(state0.metadata()).put(ReservedStateMetadata.builder("test").build()))
++            .build();
++        ClusterChangedEvent event = new ClusterChangedEvent("test", state1, state0);
++        assertTrue(event.projectDelta().isEmpty());
++
++        // Add projects
++        final List<ProjectId> projectIds = randomList(1, 5, ESTestCase::randomUniqueProjectId);
++        Metadata.Builder metadataBuilder = Metadata.builder(state1.metadata());
++        for (ProjectId projectId : projectIds) {
++            metadataBuilder.put(ProjectMetadata.builder(projectId));
++        }
++        final var state2 = ClusterState.builder(state1).metadata(metadataBuilder.build()).build();
++        event = new ClusterChangedEvent("test", state2, state1);
++        assertThat(event.projectDelta().added(), containsInAnyOrder(projectIds.toArray()));
++        assertThat(event.projectDelta().removed(), empty());
++
++        // Add more projects and delete one
++        final var removedProjectIds = randomNonEmptySubsetOf(projectIds);
++        final List<ProjectId> moreProjectIds = randomList(1, 3, ESTestCase::randomUniqueProjectId);
++        metadataBuilder = Metadata.builder(state2.metadata());
++        GlobalRoutingTable.Builder routingTableBuilder = GlobalRoutingTable.builder(state2.globalRoutingTable());
++        for (ProjectId projectId : removedProjectIds) {
++            metadataBuilder.removeProject(projectId);
++            routingTableBuilder.removeProject(projectId);
++        }
++        for (ProjectId projectId : moreProjectIds) {
++            metadataBuilder.put(ProjectMetadata.builder(projectId));
++        }
++
++        final var state3 = ClusterState.builder(state2).metadata(metadataBuilder.build()).routingTable(routingTableBuilder.build()).build();
++
++        event = new ClusterChangedEvent("test", state3, state2);
++        assertThat(event.projectDelta().added(), containsInAnyOrder(moreProjectIds.toArray()));
++        assertThat(event.projectDelta().removed(), containsInAnyOrder(removedProjectIds.toArray()));
++
++        // Remove all projects
++        final List<ProjectId> remainingProjects = state3.metadata()
++            .projects()
++            .keySet()
++            .stream()
++            .filter(projectId -> ProjectId.DEFAULT.equals(projectId) == false)
++            .toList();
++        metadataBuilder = Metadata.builder(state3.metadata());
++        routingTableBuilder = GlobalRoutingTable.builder(state3.globalRoutingTable());
++        for (ProjectId projectId : remainingProjects) {
++            metadataBuilder.removeProject(projectId);
++            routingTableBuilder.removeProject(projectId);
++        }
++        final var state4 = ClusterState.builder(state3).metadata(metadataBuilder.build()).routingTable(routingTableBuilder.build()).build();
++        event = new ClusterChangedEvent("test", state4, state3);
++        assertThat(event.projectDelta().added(), empty());
++        assertThat(event.projectDelta().removed(), containsInAnyOrder(remainingProjects.toArray()));
++    }
++
+     private static class CustomClusterMetadata2 extends TestClusterCustomMetadata {
+         protected CustomClusterMetadata2(String data) {
+             super(data);
+diff --git a/x-pack/plugin/ml/src/test/java/org/elasticsearch/xpack/ml/inference/persistence/TrainedModelCacheMetadataServiceTests.java b/x-pack/plugin/ml/src/test/java/org/elasticsearch/xpack/ml/inference/persistence/TrainedModelCacheMetadataServiceTests.java
+index b333b3596aba5..387c6f36af1ee 100644
+--- a/x-pack/plugin/ml/src/test/java/org/elasticsearch/xpack/ml/inference/persistence/TrainedModelCacheMetadataServiceTests.java
++++ b/x-pack/plugin/ml/src/test/java/org/elasticsearch/xpack/ml/inference/persistence/TrainedModelCacheMetadataServiceTests.java
+@@ -74,6 +74,7 @@ public void testRefreshCacheVersionOnMasterNode() {
+         ClusterState clusterState = mock(ClusterState.class);
+         when(clusterState.clusterRecovered()).thenReturn(true);
+         when(clusterState.nodes()).thenReturn(clusterNodes);
++        when(clusterState.metadata()).thenReturn(Metadata.EMPTY_METADATA);
+ 
+         modelCacheMetadataService.clusterChanged(new ClusterChangedEvent("test", clusterState, ClusterState.EMPTY_STATE));
+ 
+diff --git a/x-pack/plugin/security/src/test/java/org/elasticsearch/xpack/security/support/QueryableBuiltInRolesSynchronizerTests.java b/x-pack/plugin/security/src/test/java/org/elasticsearch/xpack/security/support/QueryableBuiltInRolesSynchronizerTests.java
+index eca0e875ffbf1..5d3430cbef640 100644
+--- a/x-pack/plugin/security/src/test/java/org/elasticsearch/xpack/security/support/QueryableBuiltInRolesSynchronizerTests.java
++++ b/x-pack/plugin/security/src/test/java/org/elasticsearch/xpack/security/support/QueryableBuiltInRolesSynchronizerTests.java
+@@ -330,8 +330,8 @@ public void testSecurityIndexDeleted() {
+ 
+         synchronizer.clusterChanged(event(currentClusterState, previousClusterState));
+ 
+-        verify(previousClusterState, times(1)).metadata();
+-        verify(currentClusterState, times(1)).metadata();
++        verify(previousClusterState, times(2)).metadata();
++        verify(currentClusterState, times(2)).metadata();
+         verifyNoMoreInteractions(nativeRolesStore, featureService, taskQueue, reservedRolesProvider, threadPool, clusterService);
+     }
+ 

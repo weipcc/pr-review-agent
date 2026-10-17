@@ -1,0 +1,66 @@
+{
+ "results": [
+  {
+   "change_intent": "Add an integration test verifying installation, listing, updating, and uninstallation of a local extension.",
+   "summary": "Adds an end-to-end integration test for extension CLI commands; looks good overall.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "integration-tests/extensions-install.test.ts"
+  },
+  {
+   "change_intent": "Add a runCommand helper to TestRig to run arbitrary CLI subcommands with optional stdin.",
+   "summary": "Introduces runCommand on TestRig to support executing CLI subcommands in tests.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "integration-tests/test-helper.ts"
+  }
+ ],
+ "n_files": 2,
+ "input_tokens": 86184,
+ "output_tokens": 926,
+ "calls": null,
+ "tool_calls": [
+  {
+   "command": "sed -n '280,315p' integration-tests/test-helper.ts",
+   "output_preview": "[exit code: 0]\n                // Not in telemetry object, keep the line\n                filteredLines.push(line);\n              }\n            }\n\n            result = filteredLines.join('\\n');\n          }\n\n          // Check if this is a JSON output test - if so, don't include stderr\n          // as it would corrupt the JSON\n          const isJsonOutput =\n            commandArgs.includes('--output"
+  },
+  {
+   "command": "sed -n '220,285p' integration-tests/test-helper.ts",
+   "output_preview": "[exit code: 0]\n      child.stdin!.write(execOptions.input);\n    }\n\n    if (\n      typeof promptOrOptions === 'object' &&\n      !promptOrOptions.stdinDoesNotEnd\n    ) {\n      child.stdin!.end();\n    }\n\n    child.stdout!.on('data', (data: Buffer) => {\n      stdout += data;\n      if (env.KEEP_OUTPUT === 'true' || env.VERBOSE === 'true') {\n        process.stdout.write(data);\n      }\n    });\n\n    child"
+  },
+  {
+   "command": "sed -n '150,225p' integration-tests/test-helper.ts",
+   "output_preview": "[exit code: 0]\n        target: 'local',\n        otlpEndpoint: '',\n        outfile: telemetryPath,\n      },\n      sandbox: env.GEMINI_SANDBOX !== 'false' ? env.GEMINI_SANDBOX : false,\n      ...options.settings, // Allow tests to override/add settings\n    };\n    writeFileSync(\n      join(geminiDir, 'settings.json'),\n      JSON.stringify(settings, null, 2),\n    );\n  }\n\n  createFile(fileName: string, "
+  },
+  {
+   "command": "grep -rn 'cleanup' integration-tests/",
+   "output_preview": "[exit code: 0]\nintegration-tests/extensions-install.test.ts:51:  await rig.cleanup();\nintegration-tests/test-helper.ts:371:  async cleanup() {\nintegration-tests/test-helper.ts:377:        // Ignore cleanup errors\nintegration-tests/json-output.test.ts:19:    await rig.cleanup();\nintegration-tests/utf-bom-encoding.test.ts:64:    await rig.cleanup();\n"
+  },
+  {
+   "command": "sed -n '365,400p' integration-tests/test-helper.ts",
+   "output_preview": "[exit code: 0]\n      console.log(content);\n      console.log(`--- END FILE: ${filePath} ---`);\n    }\n    return content;\n  }\n\n  async cleanup() {\n    // Clean up test directory\n    if (this.testDir && !env.KEEP_OUTPUT) {\n      try {\n        execSync(`rm -rf ${this.testDir}`);\n      } catch (error) {\n        // Ignore cleanup errors\n        if (env.VERBOSE === 'true') {\n          console.warn('Clea"
+  },
+  {
+   "command": "grep -rn 'extensions install' .",
+   "output_preview": "[exit code: 0]\n./packages/cli/src/commands/extensions/list.ts:15:      console.log('No extensions installed.');\n./packages/cli/src/commands/extensions/install.test.ts:21:describe('extensions install command', () => {\n./packages/cli/src/ui/components/views/ExtensionsList.tsx:18:    return <Text>No extensions installed.</Text>;\n./packages/cli/src/ui/components/views/ExtensionsList.test.tsx:54:  it('"
+  },
+  {
+   "command": "grep -rn 'ExtensionStorage' .",
+   "output_preview": "[exit code: 0]\n./packages/cli/src/config/extension.ts:65:export class ExtensionStorage {\n./packages/cli/src/config/extension.ts:74:      ExtensionStorage.getUserExtensionsDir(),\n./packages/cli/src/config/extension.ts:159:    ExtensionStorage.getUserExtensionsDir(),\n./packages/cli/src/config/extension.ts:299:    ExtensionStorage.getUserExtensionsDir(),\n./packages/cli/src/config/extension.ts:392:   "
+  },
+  {
+   "command": "sed -n '65,95p' packages/cli/src/config/extension.ts",
+   "output_preview": "[exit code: 0]\nexport class ExtensionStorage {\n  private readonly extensionName: string;\n\n  constructor(extensionName: string) {\n    this.extensionName = extensionName;\n  }\n\n  getExtensionDir(): string {\n    return path.join(\n      ExtensionStorage.getUserExtensionsDir(),\n      this.extensionName,\n    );\n  }\n\n  getConfigPath(): string {\n    return path.join(this.getExtensionDir(), EXTENSIONS_CONFI"
+  },
+  {
+   "command": "sed -n '120,165p' integration-tests/test-helper.ts",
+   "output_preview": "[exit code: 0]\n    this.bundlePath = join(__dirname, '..', 'bundle/gemini.js');\n    this.testDir = null;\n  }\n\n  // Get timeout based on environment\n  getDefaultTimeout() {\n    if (env.CI) return 60000; // 1 minute in CI\n    if (env.GEMINI_SANDBOX) return 30000; // 30s in containers\n    return 15000; // 15s locally\n  }\n\n  setup(\n    testName: string,\n    options: { settings?: Record<string, unknown"
+  },
+  {
+   "command": "grep -rn 'getExtensionsDir' .",
+   "output_preview": "[exit code: 0]\n./packages/cli/src/config/extension.ts:85:    return storage.getExtensionsDir();\n./packages/cli/src/config/extension.ts:189:  const extensionsDir = storage.getExtensionsDir();\n./packages/core/src/config/storage.ts:109:  getExtensionsDir(): string {\n./packages/core/src/config/storage.ts:114:    return path.join(this.getExtensionsDir(), 'gemini-extension.json');\n"
+  }
+ ],
+ "elapsed_s": 41.7,
+ "model": "gemini-3.8-flash"
+}

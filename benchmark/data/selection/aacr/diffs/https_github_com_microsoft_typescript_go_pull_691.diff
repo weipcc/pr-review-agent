@@ -1,0 +1,137 @@
+diff --git a/internal/checker/checker.go b/internal/checker/checker.go
+index c484837ca5b..dbf81b50a02 100644
+--- a/internal/checker/checker.go
++++ b/internal/checker/checker.go
+@@ -10826,7 +10826,39 @@ func (c *Checker) isPropertyAccessible(node *ast.Node, isSuper bool, isWrite boo
+ }
+ 
+ func (c *Checker) containerSeemsToBeEmptyDomElement(containingType *Type) bool {
+-	return false // !!!
++	if c.compilerOptions.Lib == nil || slices.Contains(c.compilerOptions.Lib, "lib.dom.d.ts") {
++		return false
++	}
++	return everyContainedType(containingType, func(t *Type) bool {
++		if t.symbol == nil {
++			return false
++		}
++
++		name := t.symbol.Name
++
++		switch name {
++		case "EventTarget", "Node", "Element":
++			return true
++		}
++
++		name, ok := strings.CutPrefix(name, "HTML")
++		if !ok {
++			return false
++		}
++
++		name, ok = strings.CutSuffix(name, "Element")
++		if !ok {
++			return false
++		}
++
++		for _, r := range name {
++			if !stringutil.IsASCIILetter(r) {
++				return false
++			}
++		}
++
++		return true
++	}) && c.isEmptyObjectType(containingType)
+ }
+ 
+ func (c *Checker) checkAndReportErrorForExtendingInterface(errorLocation *ast.Node) bool {
+@@ -24531,6 +24563,13 @@ func everyType(t *Type, f func(*Type) bool) bool {
+ 	return f(t)
+ }
+ 
++func everyContainedType(t *Type, f func(*Type) bool) bool {
++	if t.flags&TypeFlagsUnionOrIntersection != 0 {
++		return core.Every(t.Types(), f)
++	}
++	return f(t)
++}
++
+ func (c *Checker) filterType(t *Type, f func(*Type) bool) *Type {
+ 	if t.flags&TypeFlagsUnion != 0 {
+ 		types := t.Types()
+diff --git a/testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt b/testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt
+index 4a39c996373..3663ff4a7da 100644
+--- a/testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt
++++ b/testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt
+@@ -1,7 +1,7 @@
+-missingDomElements.ts(6,24): error TS2339: Property 'textContent' does not exist on type 'Element'.
+-missingDomElements.ts(7,28): error TS2339: Property 'textContent' does not exist on type 'HTMLElement'.
+-missingDomElements.ts(8,33): error TS2339: Property 'textContent' does not exist on type 'HTMLInputElement'.
+-missingDomElements.ts(9,47): error TS2339: Property 'textContent' does not exist on type 'EventTarget & HTMLInputElement'.
++missingDomElements.ts(6,24): error TS2812: Property 'textContent' does not exist on type 'Element'. Try changing the 'lib' compiler option to include 'dom'.
++missingDomElements.ts(7,28): error TS2812: Property 'textContent' does not exist on type 'HTMLElement'. Try changing the 'lib' compiler option to include 'dom'.
++missingDomElements.ts(8,33): error TS2812: Property 'textContent' does not exist on type 'HTMLInputElement'. Try changing the 'lib' compiler option to include 'dom'.
++missingDomElements.ts(9,47): error TS2812: Property 'textContent' does not exist on type 'EventTarget & HTMLInputElement'. Try changing the 'lib' compiler option to include 'dom'.
+ missingDomElements.ts(16,32): error TS2339: Property 'textContent' does not exist on type 'HTMLElementFake'.
+ missingDomElements.ts(17,21): error TS2339: Property 'textContent' does not exist on type 'Node'.
+ 
+@@ -14,16 +14,16 @@ missingDomElements.ts(17,21): error TS2339: Property 'textContent' does not exis
+     
+     ({} as any as Element).textContent;
+                            ~~~~~~~~~~~
+-!!! error TS2339: Property 'textContent' does not exist on type 'Element'.
++!!! error TS2812: Property 'textContent' does not exist on type 'Element'. Try changing the 'lib' compiler option to include 'dom'.
+     ({} as any as HTMLElement).textContent;
+                                ~~~~~~~~~~~
+-!!! error TS2339: Property 'textContent' does not exist on type 'HTMLElement'.
++!!! error TS2812: Property 'textContent' does not exist on type 'HTMLElement'. Try changing the 'lib' compiler option to include 'dom'.
+     ({} as any as HTMLInputElement).textContent;
+                                     ~~~~~~~~~~~
+-!!! error TS2339: Property 'textContent' does not exist on type 'HTMLInputElement'.
++!!! error TS2812: Property 'textContent' does not exist on type 'HTMLInputElement'. Try changing the 'lib' compiler option to include 'dom'.
+     ({} as any as EventTarget & HTMLInputElement).textContent
+                                                   ~~~~~~~~~~~
+-!!! error TS2339: Property 'textContent' does not exist on type 'EventTarget & HTMLInputElement'.
++!!! error TS2812: Property 'textContent' does not exist on type 'EventTarget & HTMLInputElement'. Try changing the 'lib' compiler option to include 'dom'.
+     
+     interface HTMLElementFake {}
+     interface Node {
+diff --git a/testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt.diff b/testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt.diff
+deleted file mode 100644
+index abd6c01518b..00000000000
+--- a/testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt.diff
++++ /dev/null
+@@ -1,35 +0,0 @@
+---- old.missingDomElements.errors.txt
+-+++ new.missingDomElements.errors.txt
+-@@= skipped -0, +0 lines =@@
+--missingDomElements.ts(6,24): error TS2812: Property 'textContent' does not exist on type 'Element'. Try changing the 'lib' compiler option to include 'dom'.
+--missingDomElements.ts(7,28): error TS2812: Property 'textContent' does not exist on type 'HTMLElement'. Try changing the 'lib' compiler option to include 'dom'.
+--missingDomElements.ts(8,33): error TS2812: Property 'textContent' does not exist on type 'HTMLInputElement'. Try changing the 'lib' compiler option to include 'dom'.
+--missingDomElements.ts(9,47): error TS2812: Property 'textContent' does not exist on type 'EventTarget & HTMLInputElement'. Try changing the 'lib' compiler option to include 'dom'.
+-+missingDomElements.ts(6,24): error TS2339: Property 'textContent' does not exist on type 'Element'.
+-+missingDomElements.ts(7,28): error TS2339: Property 'textContent' does not exist on type 'HTMLElement'.
+-+missingDomElements.ts(8,33): error TS2339: Property 'textContent' does not exist on type 'HTMLInputElement'.
+-+missingDomElements.ts(9,47): error TS2339: Property 'textContent' does not exist on type 'EventTarget & HTMLInputElement'.
+- missingDomElements.ts(16,32): error TS2339: Property 'textContent' does not exist on type 'HTMLElementFake'.
+- missingDomElements.ts(17,21): error TS2339: Property 'textContent' does not exist on type 'Node'.
+- 
+-@@= skipped -13, +13 lines =@@
+-     
+-     ({} as any as Element).textContent;
+-                            ~~~~~~~~~~~
+--!!! error TS2812: Property 'textContent' does not exist on type 'Element'. Try changing the 'lib' compiler option to include 'dom'.
+-+!!! error TS2339: Property 'textContent' does not exist on type 'Element'.
+-     ({} as any as HTMLElement).textContent;
+-                                ~~~~~~~~~~~
+--!!! error TS2812: Property 'textContent' does not exist on type 'HTMLElement'. Try changing the 'lib' compiler option to include 'dom'.
+-+!!! error TS2339: Property 'textContent' does not exist on type 'HTMLElement'.
+-     ({} as any as HTMLInputElement).textContent;
+-                                     ~~~~~~~~~~~
+--!!! error TS2812: Property 'textContent' does not exist on type 'HTMLInputElement'. Try changing the 'lib' compiler option to include 'dom'.
+-+!!! error TS2339: Property 'textContent' does not exist on type 'HTMLInputElement'.
+-     ({} as any as EventTarget & HTMLInputElement).textContent
+-                                                   ~~~~~~~~~~~
+--!!! error TS2812: Property 'textContent' does not exist on type 'EventTarget & HTMLInputElement'. Try changing the 'lib' compiler option to include 'dom'.
+-+!!! error TS2339: Property 'textContent' does not exist on type 'EventTarget & HTMLInputElement'.
+-     
+-     interface HTMLElementFake {}
+-     interface Node {

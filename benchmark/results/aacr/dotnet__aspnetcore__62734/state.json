@@ -1,0 +1,67 @@
+{
+ "owner": "dotnet",
+ "repo": "aspnetcore",
+ "full": "dotnet/aspnetcore",
+ "pr_number": 62734,
+ "title": "#62732 Fix password validation in PasswordHasher`1: add bound check for salt size before array allocation",
+ "body": "# Add bound check for salt size before array allocation\r\n\r\n## Description\r\n\r\nTo prevent memory allocation of arbitrary-sized array, in case when password hash is corrupted or intentionally modified.\r\n\r\nBytes 9-13 of password hash (`AspNetUsers.PasswordHash`) contain a 32-bit number. It is read during password verification, and array of that size is immediately allocated.\r\n\r\nFixes #62732\r\n",
+ "base_sha": "8bb2b2067815996d9a8224ee38aa80a79f797827",
+ "review_sha": "742f022e92563bd6fb87d1c752f25fd14e1b2a43",
+ "head_now": "edc2fe30d3a401335f6cfd22e46f4db920a2cd0a",
+ "raw_diff": "diff --git a/src/Identity/Extensions.Core/src/PasswordHasher.cs b/src/Identity/Extensions.Core/src/PasswordHasher.cs\nindex cdd9a1ff3cec..0ca24182a41d 100644\n--- a/src/Identity/Extensions.Core/src/PasswordHasher.cs\n+++ b/src/Identity/Extensions.Core/src/PasswordHasher.cs\n@@ -249,6 +249,8 @@ private static bool VerifyHashedPasswordV2(byte[] hashedPassword, string passwor\n \n     private static bool VerifyHashedPasswordV3(byte[] hashedPassword, string password, out int iterCount, out KeyDerivationPrf prf)\n     {\n+        const int MaxSaltSize = 1024 * 8; // 8 KiB\n+\n         iterCount = default(int);\n         prf = default(KeyDerivationPrf);\n \n@@ -260,7 +262,7 @@ private static bool VerifyHashedPasswordV3(byte[] hashedPassword, string passwor\n             int saltLength = (int)ReadNetworkByteOrder(hashedPassword, 9);\n \n             // Read the salt: must be >= 128 bits\n-            if (saltLength < 128 / 8)\n+            if (saltLength < 128 / 8 || saltLength > MaxSaltSize)\n             {\n                 return false;\n             }\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/Identity/Extensions.Core/src/PasswordHasher.cs",
+   "body": "Adding an upper bound to saltLength is a good DoS hardening. Two follow-ups to consider:\n1) Compatibility: if any existing stored hashes (or other implementations) might legitimately have salts > 8KiB, this change will start rejecting them. If this is a library, consider documenting the limit or basing it on an existing spec/versioned header.\n2) Placement/consistency: there are other length reads in this format (e.g., subkey length). Consider applying similar upper bounds there too, so an attacker can’t shift the allocation pressure to a different field.\n\nIf possible, reuse a shared constant (e.g., a private const at class scope) to keep limits consistent across methods/versions.\n\n```suggestion\n        // Consider promoting to a class-level constant (and adding similar bounds for other length fields)\n        private const int MaxSaltSize = 8 * 1024; // 8 KiB\n        \n        // ...\n        // in method:\n        // (remove the local const)\n```",
+   "from_line": 252,
+   "to_line": 255,
+   "category": "Security Vulnerability",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -249,6 +249,8 @@ private static bool VerifyHashedPasswordV2(byte[] hashedPassword, string passwor\n \n     private static bool VerifyHashedPasswordV3(byte[] hashedPassword, string password, out int iterCount, out KeyDerivationPrf prf)\n     {\n+        const int MaxSaltSize = 1024 * 8; // 8 KiB\n+\n         iterCount = default(int);\n         prf = default(KeyDerivationPrf);",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 1,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "src/Identity/Extensions.Core/src/PasswordHasher.cs",
+   "body": "The manual bounds check for salt extraction should be replaced with span-based slicing (`AsSpan(13, saltLength)`) to leverage runtime bounds validation and eliminate error-prone manual length checks.",
+   "from_line": 260,
+   "to_line": 260,
+   "category": "Code Defect",
+   "context": "File Level",
+   "diff_hunk": "@@ -260,7 +262,7 @@ private static bool VerifyHashedPasswordV3(byte[] hashedPassword, string passwor\n             int saltLength = (int)ReadNetworkByteOrder(hashedPassword, 9);\n \n             // Read the salt: must be >= 128 bits\n-            if (saltLength < 128 / 8)\n+            if (saltLength < 128 / 8 || saltLength > MaxSaltSize)\n             {\n                 return false;\n             }",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 2,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/Identity/Extensions.Core/src/PasswordHasher.cs",
+   "body": "The salt length upper bound validation is a good security improvement to prevent DoS attacks. However, consider adding a validation to ensure the hashedPassword array has sufficient bytes to contain the declared saltLength before allocating the salt array. This would prevent unnecessary memory allocation and potential exception handling overhead for malformed payloads. Suggestion: Add a check `if (hashedPassword.Length < 13 + saltLength) { return false; }` before the salt allocation.\n\n```suggestion\n            // Read the salt: must be >= 128 bits\n            if (saltLength < 128 / 8 || saltLength > MaxSaltSize)\n            {\n                return false;\n            }\n            // Verify the payload has enough bytes for the declared salt length\n            if (hashedPassword.Length < 13 + saltLength)\n            {\n                return false;\n            }\n            byte[] salt = new byte[saltLength];\n            Buffer.BlockCopy(hashedPassword, 13, salt, 0, salt.Length);\n```",
+   "from_line": 264,
+   "to_line": 270,
+   "category": "Security Vulnerability",
+   "context": "File Level",
+   "diff_hunk": "@@ -260,7 +262,7 @@ private static bool VerifyHashedPasswordV3(byte[] hashedPassword, string passwor\n             int saltLength = (int)ReadNetworkByteOrder(hashedPassword, 9);\n \n             // Read the salt: must be >= 128 bits\n-            if (saltLength < 128 / 8)\n+            if (saltLength < 128 / 8 || saltLength > MaxSaltSize)\n             {\n                 return false;\n             }",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 3,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "src/Identity/Extensions.Core/src/PasswordHasher.cs",
+   "body": "Replace the magic number `128 / 8` for minimum salt size validation with a named constant (e.g., `MinSaltSize`) to improve code clarity and maintainability.",
+   "from_line": 265,
+   "to_line": 265,
+   "category": "Maintainability and Readability",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -260,7 +262,7 @@ private static bool VerifyHashedPasswordV3(byte[] hashedPassword, string passwor\n             int saltLength = (int)ReadNetworkByteOrder(hashedPassword, 9);\n \n             // Read the salt: must be >= 128 bits\n-            if (saltLength < 128 / 8)\n+            if (saltLength < 128 / 8 || saltLength > MaxSaltSize)\n             {\n                 return false;\n             }",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "C#"
+}

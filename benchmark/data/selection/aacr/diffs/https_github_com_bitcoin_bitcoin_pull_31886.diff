@@ -1,0 +1,77 @@
+diff --git a/src/bitcoin-cli.cpp b/src/bitcoin-cli.cpp
+index 14a0cb245fab..56f2a906b5f6 100644
+--- a/src/bitcoin-cli.cpp
++++ b/src/bitcoin-cli.cpp
+@@ -463,6 +463,17 @@ class NetinfoRequestHandler : public BaseRequestHandler
+         }
+         return str;
+     }
++    static std::string ServicesList(const UniValue& services)
++    {
++        std::string str{services.size() ? services[0].get_str() : ""};
++        for (size_t i{1}; i < services.size(); ++i) {
++            str += ", " + services[i].get_str();
++        }
++        for (auto& c: str) {
++            c = (c == '_' ? ' ' : ToLower(c));
++        }
++        return str;
++    }
+ 
+ public:
+     static constexpr int ID_PEERINFO = 0;
+@@ -555,7 +566,8 @@ class NetinfoRequestHandler : public BaseRequestHandler
+         }
+ 
+         // Generate report header.
+-        std::string result{strprintf("%s client %s%s - server %i%s\n\n", CLIENT_NAME, FormatFullVersion(), ChainToString(), networkinfo["protocolversion"].getInt<int>(), networkinfo["subversion"].get_str())};
++        const std::string services{DetailsRequested() ? strprintf(" - services %s", FormatServices(networkinfo["localservicesnames"])) : ""};
++        std::string result{strprintf("%s client %s%s - server %i%s%s\n\n", CLIENT_NAME, FormatFullVersion(), ChainToString(), networkinfo["protocolversion"].getInt<int>(), networkinfo["subversion"].get_str(), services)};
+ 
+         // Report detailed peer connections list sorted by direction and minimum ping time.
+         if (DetailsRequested() && !m_peers.empty()) {
+@@ -636,7 +648,10 @@ class NetinfoRequestHandler : public BaseRequestHandler
+             }
+         }
+ 
+-        // Report local addresses, ports, and scores.
++        // Report local services, addresses, ports, and scores.
++        if (!DetailsRequested()) {
++            result += strprintf("\n\nLocal services: %s", ServicesList(networkinfo["localservicesnames"]));
++        }
+         result += "\n\nLocal addresses";
+         const std::vector<UniValue>& local_addrs{networkinfo["localaddresses"].getValues()};
+         if (local_addrs.empty()) {
+diff --git a/test/functional/interface_bitcoin_cli.py b/test/functional/interface_bitcoin_cli.py
+index 5b27f0b85000..734f3110af3a 100755
+--- a/test/functional/interface_bitcoin_cli.py
++++ b/test/functional/interface_bitcoin_cli.py
+@@ -81,6 +81,19 @@ def set_test_params(self):
+     def skip_test_if_missing_module(self):
+         self.skip_if_no_cli()
+ 
++    def test_netinfo(self):
++        """Test -netinfo output format."""
++        self.log.info("Test -netinfo header and separate local services line")
++        out = self.nodes[0].cli('-netinfo').send_cli().splitlines()
++        assert out[0].startswith(f"{self.config['environment']['CLIENT_NAME']} client ")
++        assert any(re.match(r"^Local services:.+network", line) for line in out)
++
++        self.log.info("Test -netinfo local services are moved to header if details are requested")
++        det = self.nodes[0].cli('-netinfo', '1').send_cli().splitlines()
++        self.log.debug(f"Test -netinfo 1 header output: {det[0]}")
++        assert re.match(rf"^{re.escape(self.config['environment']['CLIENT_NAME'])} client.+services nwl2?$", det[0])
++        assert not any(line.startswith("Local services:") for line in det)
++
+     def run_test(self):
+         """Main test logic"""
+         self.generate(self.nodes[0], BLOCKS)
+@@ -377,6 +390,8 @@ def run_test(self):
+             self.log.info("*** Wallet not compiled; cli getwalletinfo and -getinfo wallet tests skipped")
+             self.generate(self.nodes[0], 25)  # maintain block parity with the wallet_compiled conditional branch
+ 
++        self.test_netinfo()
++
+         self.log.info("Test -version with node stopped")
+         self.stop_node(0)
+         cli_response = self.nodes[0].cli('-version').send_cli()

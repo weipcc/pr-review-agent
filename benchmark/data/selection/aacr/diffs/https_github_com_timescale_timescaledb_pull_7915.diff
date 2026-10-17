@@ -1,0 +1,590 @@
+diff --git a/.unreleased/pr_7915 b/.unreleased/pr_7915
+new file mode 100644
+index 00000000000..2210e914b41
+--- /dev/null
++++ b/.unreleased/pr_7915
+@@ -0,0 +1 @@
++Implements: #7915 New option `refresh_newest_first` to CAgg refresh policy API
+diff --git a/sql/policy_api.sql b/sql/policy_api.sql
+index bfb3ed9877e..0810814a265 100644
+--- a/sql/policy_api.sql
++++ b/sql/policy_api.sql
+@@ -90,7 +90,8 @@ CREATE OR REPLACE FUNCTION @extschema@.add_continuous_aggregate_policy(
+     timezone TEXT = NULL,
+     include_tiered_data BOOL = NULL,
+     buckets_per_batch INTEGER = NULL,
+-    max_batches_per_execution INTEGER = NULL
++    max_batches_per_execution INTEGER = NULL,
++    refresh_newest_first BOOL = NULL
+ )
+ RETURNS INTEGER
+ AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
+diff --git a/sql/updates/latest-dev.sql b/sql/updates/latest-dev.sql
+index fcd131391fe..5ad7dcac21b 100644
+--- a/sql/updates/latest-dev.sql
++++ b/sql/updates/latest-dev.sql
+@@ -1,4 +1,33 @@
+-
+ DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk_table;
+ DROP FUNCTION IF EXISTS _timescaledb_functions.create_chunk_table;
+ 
++-- New option `refresh_newest_first` for incremental cagg refresh policy
++DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
++    continuous_aggregate REGCLASS,
++    start_offset "any",
++    end_offset "any",
++    schedule_interval INTERVAL,
++    if_not_exists BOOL,
++    initial_start TIMESTAMPTZ,
++    timezone TEXT,
++    include_tiered_data BOOL,
++    buckets_per_batch INTEGER,
++    max_batches_per_execution INTEGER
++);
++
++CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
++    continuous_aggregate REGCLASS,
++    start_offset "any",
++    end_offset "any",
++    schedule_interval INTERVAL,
++    if_not_exists BOOL = false,
++    initial_start TIMESTAMPTZ = NULL,
++    timezone TEXT = NULL,
++    include_tiered_data BOOL = NULL,
++    buckets_per_batch INTEGER = NULL,
++    max_batches_per_execution INTEGER = NULL,
++    refresh_newest_first BOOL = NULL
++)
++RETURNS INTEGER
++AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
++LANGUAGE C VOLATILE;
+diff --git a/sql/updates/reverse-dev.sql b/sql/updates/reverse-dev.sql
+index 808ae8baef7..1a5d07f71fd 100644
+--- a/sql/updates/reverse-dev.sql
++++ b/sql/updates/reverse-dev.sql
+@@ -1,3 +1,33 @@
+-
+ CREATE FUNCTION _timescaledb_internal.create_chunk_table(hypertable REGCLASS, slices JSONB, schema_name NAME, table_name NAME) RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE;
+ CREATE FUNCTION _timescaledb_functions.create_chunk_table(hypertable REGCLASS, slices JSONB, schema_name NAME, table_name NAME) RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE;
++
++-- Revert new option `refresh_newest_first` from incremental cagg refresh policy
++DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
++    continuous_aggregate REGCLASS,
++    start_offset "any",
++    end_offset "any",
++    schedule_interval INTERVAL,
++    if_not_exists BOOL,
++    initial_start TIMESTAMPTZ,
++    timezone TEXT,
++    include_tiered_data BOOL,
++    buckets_per_batch INTEGER,
++    max_batches_per_execution INTEGER,
++    refresh_newest_first BOOL
++);
++
++CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
++    continuous_aggregate REGCLASS,
++    start_offset "any",
++    end_offset "any",
++    schedule_interval INTERVAL,
++    if_not_exists BOOL = false,
++    initial_start TIMESTAMPTZ = NULL,
++    timezone TEXT = NULL,
++    include_tiered_data BOOL = NULL,
++    buckets_per_batch INTEGER = NULL,
++    max_batches_per_execution INTEGER = NULL
++)
++RETURNS INTEGER
++AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
++LANGUAGE C VOLATILE;
+diff --git a/tsl/src/bgw_policy/continuous_aggregate_api.c b/tsl/src/bgw_policy/continuous_aggregate_api.c
+index 793c2035299..07f975aca7d 100644
+--- a/tsl/src/bgw_policy/continuous_aggregate_api.c
++++ b/tsl/src/bgw_policy/continuous_aggregate_api.c
+@@ -168,6 +168,18 @@ policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config)
+ 	return res;
+ }
+ 
++bool
++policy_refresh_cagg_get_refresh_newest_first(const Jsonb *config)
++{
++	bool found;
++	bool res = ts_jsonb_get_bool_field(config, POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST, &found);
++
++	if (!found)
++		res = true; /* default value */
++
++	return res;
++}
++
+ /* returns false if a policy could not be found */
+ bool
+ policy_refresh_cagg_exists(int32 materialization_id)
+@@ -521,7 +533,8 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
+ 								 Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
+ 								 TimestampTz initial_start, const char *timezone,
+ 								 NullableDatum include_tiered_data, NullableDatum buckets_per_batch,
+-								 NullableDatum max_batches_per_execution)
++								 NullableDatum max_batches_per_execution,
++								 NullableDatum refresh_newest_first)
+ {
+ 	NameData application_name;
+ 	NameData proc_name, proc_schema, check_name, check_schema, owner;
+@@ -650,6 +663,11 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
+ 						   POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION,
+ 						   max_batches_per_execution.value);
+ 
++	if (!refresh_newest_first.isnull)
++		ts_jsonb_add_bool(parse_state,
++						  POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST,
++						  refresh_newest_first.value);
++
+ 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+ 	Jsonb *config = JsonbValueToJsonb(result);
+ 
+@@ -683,6 +701,7 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
+ 	NullableDatum include_tiered_data;
+ 	NullableDatum buckets_per_batch;
+ 	NullableDatum max_batches_per_execution;
++	NullableDatum refresh_newest_first;
+ 
+ 	ts_feature_flag_check(FEATURE_POLICY);
+ 
+@@ -711,6 +730,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
+ 	buckets_per_batch.isnull = PG_ARGISNULL(8);
+ 	max_batches_per_execution.value = PG_GETARG_DATUM(9);
+ 	max_batches_per_execution.isnull = PG_ARGISNULL(9);
++	refresh_newest_first.value = PG_GETARG_DATUM(10);
++	refresh_newest_first.isnull = PG_ARGISNULL(10);
+ 
+ 	Datum retval;
+ 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
+@@ -736,7 +757,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
+ 											  valid_timezone,
+ 											  include_tiered_data,
+ 											  buckets_per_batch,
+-											  max_batches_per_execution);
++											  max_batches_per_execution,
++											  refresh_newest_first);
+ 	if (!TIMESTAMP_NOT_FINITE(initial_start))
+ 	{
+ 		int32 job_id = DatumGetInt32(retval);
+diff --git a/tsl/src/bgw_policy/continuous_aggregate_api.h b/tsl/src/bgw_policy/continuous_aggregate_api.h
+index 08a99709a67..2173a20e793 100644
+--- a/tsl/src/bgw_policy/continuous_aggregate_api.h
++++ b/tsl/src/bgw_policy/continuous_aggregate_api.h
+@@ -23,6 +23,7 @@ int64 policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *con
+ bool policy_refresh_cagg_get_include_tiered_data(const Jsonb *config, bool *isnull);
+ int32 policy_refresh_cagg_get_buckets_per_batch(const Jsonb *config);
+ int32 policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config);
++bool policy_refresh_cagg_get_refresh_newest_first(const Jsonb *config);
+ bool policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type,
+ 										  Datum cmp_interval);
+ bool policy_refresh_cagg_exists(int32 materialization_id);
+@@ -31,5 +32,6 @@ Datum policy_refresh_cagg_add_internal(
+ 	Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset, Oid end_offset_type,
+ 	NullableDatum end_offset, Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
+ 	TimestampTz initial_start, const char *timezone, NullableDatum include_tiered_data,
+-	NullableDatum buckets_per_batch, NullableDatum max_batches_per_execution);
++	NullableDatum buckets_per_batch, NullableDatum max_batches_per_execution,
++	NullableDatum refresh_newest_first);
+ Datum policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists);
+diff --git a/tsl/src/bgw_policy/job.c b/tsl/src/bgw_policy/job.c
+index 4117a814380..400b21c50e6 100644
+--- a/tsl/src/bgw_policy/job.c
++++ b/tsl/src/bgw_policy/job.c
+@@ -392,9 +392,11 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
+ 	CaggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY };
+ 
+ 	/* Try to split window range into a list of ranges */
+-	List *refresh_window_list = continuous_agg_split_refresh_window(policy_data.cagg,
+-																	&policy_data.refresh_window,
+-																	policy_data.buckets_per_batch);
++	List *refresh_window_list =
++		continuous_agg_split_refresh_window(policy_data.cagg,
++											&policy_data.refresh_window,
++											policy_data.buckets_per_batch,
++											policy_data.refresh_newest_first);
+ 	if (refresh_window_list == NIL)
+ 		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
+ 	else
+@@ -454,6 +456,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
+ 	int32 buckets_per_batch, max_batches_per_execution;
+ 	bool start_isnull, end_isnull;
+ 	bool include_tiered_data, include_tiered_data_isnull;
++	bool refresh_newest_first;
+ 
+ 	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
+ 	mat_ht = ts_hypertable_get_by_id(materialization_id);
+@@ -502,6 +505,8 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
+ 				 errhint(
+ 					 "The max batches per execution should be greater than or equal to zero.")));
+ 
++	refresh_newest_first = policy_refresh_cagg_get_refresh_newest_first(config);
++
+ 	if (policy_data)
+ 	{
+ 		policy_data->refresh_window.type = dim_type;
+@@ -514,6 +519,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
+ 		policy_data->include_tiered_data_isnull = include_tiered_data_isnull;
+ 		policy_data->buckets_per_batch = buckets_per_batch;
+ 		policy_data->max_batches_per_execution = max_batches_per_execution;
++		policy_data->refresh_newest_first = refresh_newest_first;
+ 	}
+ }
+ 
+diff --git a/tsl/src/bgw_policy/job.h b/tsl/src/bgw_policy/job.h
+index e072d15cea5..86c8a604877 100644
+--- a/tsl/src/bgw_policy/job.h
++++ b/tsl/src/bgw_policy/job.h
+@@ -40,6 +40,7 @@ typedef struct PolicyContinuousAggData
+ 	bool include_tiered_data_isnull;
+ 	int32 buckets_per_batch;
+ 	int32 max_batches_per_execution;
++	bool refresh_newest_first;
+ } PolicyContinuousAggData;
+ 
+ typedef struct PolicyCompressionData
+diff --git a/tsl/src/bgw_policy/policies_v2.c b/tsl/src/bgw_policy/policies_v2.c
+index 902aa57a435..4b1d18a924e 100644
+--- a/tsl/src/bgw_policy/policies_v2.c
++++ b/tsl/src/bgw_policy/policies_v2.c
+@@ -209,6 +209,7 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
+ 		NullableDatum include_tiered_data = { .isnull = true };
+ 		NullableDatum nbuckets_per_refresh = { .isnull = true };
+ 		NullableDatum max_batches_per_execution = { .isnull = true };
++		NullableDatum refresh_newest_first = { .isnull = true };
+ 
+ 		if (all_policies.is_alter_policy)
+ 			policy_refresh_cagg_remove_internal(all_policies.rel_oid, if_exists);
+@@ -224,7 +225,8 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
+ 														  NULL,
+ 														  include_tiered_data,
+ 														  nbuckets_per_refresh,
+-														  max_batches_per_execution);
++														  max_batches_per_execution,
++														  refresh_newest_first);
+ 	}
+ 	if (all_policies.compress && all_policies.compress->create_policy)
+ 	{
+diff --git a/tsl/src/bgw_policy/policies_v2.h b/tsl/src/bgw_policy/policies_v2.h
+index 79ab8348c55..73b57f9a926 100644
+--- a/tsl/src/bgw_policy/policies_v2.h
++++ b/tsl/src/bgw_policy/policies_v2.h
+@@ -22,6 +22,7 @@
+ #define POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA "include_tiered_data"
+ #define POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH "buckets_per_batch"
+ #define POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION "max_batches_per_execution"
++#define POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST "refresh_newest_first"
+ 
+ #define POLICY_COMPRESSION_PROC_NAME "policy_compression"
+ #define POLICY_COMPRESSION_CHECK_NAME "policy_compression_check"
+diff --git a/tsl/src/continuous_aggs/refresh.c b/tsl/src/continuous_aggs/refresh.c
+index 68d22df3423..444cf040ba0 100644
+--- a/tsl/src/continuous_aggs/refresh.c
++++ b/tsl/src/continuous_aggs/refresh.c
+@@ -954,7 +954,7 @@ debug_refresh_window(const ContinuousAgg *cagg, const InternalTimeRange *refresh
+ 
+ List *
+ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *original_refresh_window,
+-									int32 buckets_per_batch)
++									int32 buckets_per_batch, bool refresh_newest_first)
+ {
+ 	/* Do not produce batches when the number of buckets per batch is zero (disabled) */
+ 	if (buckets_per_batch == 0)
+@@ -1085,7 +1085,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
+ 	 * 6. If the batch overlaps with only one of them then it's not a valid batch to be processed
+ 	 * 7. If the batch does not overlap with any of them then it's not a valid batch to be processed
+ 	 */
+-	const char *query_str = " \
++	const char *query_str_template = " \
+ 		WITH dimension_slices AS ( \
+ 			SELECT \
+ 				range_start AS start, \
+@@ -1097,7 +1097,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
+ 				hypertable_id = $1 \
+ 				AND dimension_id = $2 \
+ 			ORDER BY \
+-				range_end DESC \
++				%s \
+ 		), \
+ 		invalidation_logs AS ( \
+ 			SELECT \
+@@ -1140,7 +1140,11 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
+ 					AND (greatest_modified_value IS NOT NULL AND greatest_modified_value != -210866803200000001) \
+ 			) \
+ 		ORDER BY \
+-			refresh_start DESC;";
++			refresh_start %s;";
++
++	const char *query_str = psprintf(query_str_template,
++									 refresh_newest_first ? "range_end DESC" : "range_start ASC",
++									 refresh_newest_first ? "DESC" : "ASC");
+ 
+ 	/* List of InternalTimeRange elements to be returned */
+ 	List *refresh_window_list = NIL;
+@@ -1194,13 +1198,13 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
+ 	}
+ 
+ 	/* Build the batches list */
+-	for (uint64 i = 0; i < SPI_processed; i++)
++	for (uint64 batch = 0; batch < SPI_processed; batch++)
+ 	{
+ 		bool range_start_isnull, range_end_isnull;
+ 		Datum range_start =
+-			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &range_start_isnull);
++			SPI_getbinval(SPI_tuptable->vals[batch], SPI_tuptable->tupdesc, 1, &range_start_isnull);
+ 		Datum range_end =
+-			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &range_end_isnull);
++			SPI_getbinval(SPI_tuptable->vals[batch], SPI_tuptable->tupdesc, 2, &range_end_isnull);
+ 
+ 		/* We need to allocate the list in the old memory context because here we're in the SPI
+ 		 * context */
+@@ -1213,22 +1217,26 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
+ 		range->type = original_refresh_window->type;
+ 
+ 		/*
+-		 * To make sure that the first range is aligned with the end of the refresh window
+-		 * we need to set the end to the maximum value of the time type if the original refresh
+-		 * window end is NULL.
++		 * To make sure that the first range (or last range in case of refreshing from oldest to
++		 * newest) is aligned with the end of the refresh window we need to set the end to the
++		 * maximum value of the time type if the original refresh window end is NULL.
+ 		 */
+-		if (i == 0 && original_refresh_window->end_isnull)
++		if (((batch == 0 && refresh_newest_first) ||
++			 (batch == (SPI_processed - 1) && !refresh_newest_first)) &&
++			original_refresh_window->end_isnull)
+ 		{
+ 			range->end = ts_time_get_noend_or_max(range->type);
+ 			range->end_isnull = true;
+ 		}
+ 
+ 		/*
+-		 * To make sure that the last range is aligned with the start of the refresh window
+-		 * we need to set the start to the maximum value of the time type if the original refresh
+-		 * window start is NULL.
++		 * To make sure that the last range (or first range in case of refreshing from oldest to
++		 * newest) is aligned with the start of the refresh window we need to set the start to the
++		 * maximum value of the time type if the original refresh window start is NULL.
+ 		 */
+-		if (i == (SPI_processed - 1) && original_refresh_window->start_isnull)
++		if (((batch == (SPI_processed - 1) && refresh_newest_first) ||
++			 (batch == 0 && !refresh_newest_first)) &&
++			original_refresh_window->start_isnull)
+ 		{
+ 			range->start = ts_time_get_nobegin_or_min(range->type);
+ 			range->start_isnull = true;
+diff --git a/tsl/src/continuous_aggs/refresh.h b/tsl/src/continuous_aggs/refresh.h
+index 97bdb1644ac..c30be24b8e0 100644
+--- a/tsl/src/continuous_aggs/refresh.h
++++ b/tsl/src/continuous_aggs/refresh.h
+@@ -23,4 +23,5 @@ extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
+ 											bool force);
+ extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
+ 												 InternalTimeRange *original_refresh_window,
+-												 int32 buckets_per_batch);
++												 int32 buckets_per_batch,
++												 bool refresh_newest_first);
+diff --git a/tsl/test/expected/cagg_refresh_policy_incremental.out b/tsl/test/expected/cagg_refresh_policy_incremental.out
+index b39c603b059..e8da260e374 100644
+--- a/tsl/test/expected/cagg_refresh_policy_incremental.out
++++ b/tsl/test/expected/cagg_refresh_policy_incremental.out
+@@ -518,7 +518,8 @@ SELECT
+         start_offset => INTERVAL '15 days',
+         end_offset => NULL,
+         schedule_interval => INTERVAL '1 h',
+-        buckets_per_batch => 5
++        buckets_per_batch => 5,
++        refresh_newest_first => true -- explicitly set to true to test the default behavior
+     ) AS job_id \gset
+ SELECT
+     add_continuous_aggregate_policy(
+@@ -526,7 +527,7 @@ SELECT
+         start_offset => INTERVAL '15 days',
+         end_offset => NULL,
+         schedule_interval => INTERVAL '1 h'
+-    ) AS job_id \gset
++    ) AS job_id_manual \gset
+ TRUNCATE bgw_log, conditions_by_day, conditions_by_day_manual_refresh, conditions;
+ INSERT INTO conditions
+ SELECT
+@@ -597,6 +598,96 @@ FROM
+  f
+ (1 row)
+ 
++-- Testing with explicit refresh_newest_first = false (from oldest to newest)
++SELECT delete_job(:job_id);
++ delete_job 
++------------
++ 
++(1 row)
++
++SELECT delete_job(:job_id_manual);
++ delete_job 
++------------
++ 
++(1 row)
++
++SELECT
++    add_continuous_aggregate_policy(
++        'conditions_by_day',
++        start_offset => INTERVAL '15 days',
++        end_offset => NULL,
++        schedule_interval => INTERVAL '1 h',
++        buckets_per_batch => 5,
++        refresh_newest_first => false
++    ) AS job_id \gset
++SELECT
++    config
++FROM
++    timescaledb_information.jobs
++WHERE
++    job_id = :'job_id';
++                                                              config                                                              
++----------------------------------------------------------------------------------------------------------------------------------
++ {"end_offset": null, "start_offset": "@ 15 days", "buckets_per_batch": 5, "mat_hypertable_id": 2, "refresh_newest_first": false}
++(1 row)
++
++TRUNCATE bgw_log, conditions_by_day;
++SELECT ts_bgw_params_reset_time(0, true);
++ ts_bgw_params_reset_time 
++--------------------------
++ 
++(1 row)
++
++SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
++ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
++------------------------------------------------------------
++ 
++(1 row)
++
++SELECT * FROM sorted_bgw_log;
++ msg_no | mock_time |              application_name              |                                                                                  msg                                                                                  
++--------+-----------+--------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
++      0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
++      1 |         0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
++      0 |         0 | Refresh Continuous Aggregate Policy [1003] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Mon Feb 24 00:00:00 2025 UTC, Sat Mar 01 00:00:00 2025 UTC ] (batch 1 of 4)
++      1 |         0 | Refresh Continuous Aggregate Policy [1003] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
++      2 |         0 | Refresh Continuous Aggregate Policy [1003] | inserted 25 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
++      3 |         0 | Refresh Continuous Aggregate Policy [1003] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Sat Mar 01 00:00:00 2025 UTC, Thu Mar 06 00:00:00 2025 UTC ] (batch 2 of 4)
++      4 |         0 | Refresh Continuous Aggregate Policy [1003] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
++      5 |         0 | Refresh Continuous Aggregate Policy [1003] | inserted 25 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
++      6 |         0 | Refresh Continuous Aggregate Policy [1003] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Thu Mar 06 00:00:00 2025 UTC, Tue Mar 11 00:00:00 2025 UTC ] (batch 3 of 4)
++      7 |         0 | Refresh Continuous Aggregate Policy [1003] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
++      8 |         0 | Refresh Continuous Aggregate Policy [1003] | inserted 25 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
++      9 |         0 | Refresh Continuous Aggregate Policy [1003] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Tue Mar 11 00:00:00 2025 UTC, Wed Mar 12 00:00:00 2025 UTC ] (batch 4 of 4)
++     10 |         0 | Refresh Continuous Aggregate Policy [1003] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
++     11 |         0 | Refresh Continuous Aggregate Policy [1003] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
++(14 rows)
++
++-- Both continuous aggregates should have the same data
++SELECT count(*) FROM conditions_by_day;
++ count 
++-------
++    80
++(1 row)
++
++SELECT count(*) FROM conditions_by_day_manual_refresh;
++ count 
++-------
++    80
++(1 row)
++
++-- Should have no differences
++SELECT
++    count(*) > 0 AS has_diff
++FROM
++    ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
++    EXCEPT
++    (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
++ has_diff 
++----------
++ f
++(1 row)
++
+ \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+ REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_CLUSTER_SUPERUSER;
+ REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
+diff --git a/tsl/test/shared/expected/extension.out b/tsl/test/shared/expected/extension.out
+index e1e42cda625..3985632caa7 100644
+--- a/tsl/test/shared/expected/extension.out
++++ b/tsl/test/shared/expected/extension.out
+@@ -212,7 +212,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
+  ts_now_mock()
+  add_columnstore_policy(regclass,"any",boolean,interval,timestamp with time zone,text,interval,boolean)
+  add_compression_policy(regclass,"any",boolean,interval,timestamp with time zone,text,interval,boolean)
+- add_continuous_aggregate_policy(regclass,"any","any",interval,boolean,timestamp with time zone,text,boolean,integer,integer)
++ add_continuous_aggregate_policy(regclass,"any","any",interval,boolean,timestamp with time zone,text,boolean,integer,integer,boolean)
+  add_dimension(regclass,_timescaledb_internal.dimension_info,boolean)
+  add_dimension(regclass,name,integer,anyelement,regproc,boolean)
+  add_job(regproc,interval,jsonb,timestamp with time zone,boolean,regproc,boolean,text)
+diff --git a/tsl/test/sql/cagg_refresh_policy_incremental.sql b/tsl/test/sql/cagg_refresh_policy_incremental.sql
+index 11aa646c8fb..2914bfbea95 100644
+--- a/tsl/test/sql/cagg_refresh_policy_incremental.sql
++++ b/tsl/test/sql/cagg_refresh_policy_incremental.sql
+@@ -296,7 +296,8 @@ SELECT
+         start_offset => INTERVAL '15 days',
+         end_offset => NULL,
+         schedule_interval => INTERVAL '1 h',
+-        buckets_per_batch => 5
++        buckets_per_batch => 5,
++        refresh_newest_first => true -- explicitly set to true to test the default behavior
+     ) AS job_id \gset
+ 
+ SELECT
+@@ -305,7 +306,7 @@ SELECT
+         start_offset => INTERVAL '15 days',
+         end_offset => NULL,
+         schedule_interval => INTERVAL '1 h'
+-    ) AS job_id \gset
++    ) AS job_id_manual \gset
+ 
+ TRUNCATE bgw_log, conditions_by_day, conditions_by_day_manual_refresh, conditions;
+ 
+@@ -327,6 +328,45 @@ SELECT * FROM sorted_bgw_log;
+ SELECT count(*) FROM conditions_by_day;
+ SELECT count(*) FROM conditions_by_day_manual_refresh;
+ 
++-- Should have no differences
++SELECT
++    count(*) > 0 AS has_diff
++FROM
++    ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
++    EXCEPT
++    (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
++
++-- Testing with explicit refresh_newest_first = false (from oldest to newest)
++SELECT delete_job(:job_id);
++SELECT delete_job(:job_id_manual);
++
++SELECT
++    add_continuous_aggregate_policy(
++        'conditions_by_day',
++        start_offset => INTERVAL '15 days',
++        end_offset => NULL,
++        schedule_interval => INTERVAL '1 h',
++        buckets_per_batch => 5,
++        refresh_newest_first => false
++    ) AS job_id \gset
++
++SELECT
++    config
++FROM
++    timescaledb_information.jobs
++WHERE
++    job_id = :'job_id';
++
++TRUNCATE bgw_log, conditions_by_day;
++
++SELECT ts_bgw_params_reset_time(0, true);
++SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
++SELECT * FROM sorted_bgw_log;
++
++-- Both continuous aggregates should have the same data
++SELECT count(*) FROM conditions_by_day;
++SELECT count(*) FROM conditions_by_day_manual_refresh;
++
+ -- Should have no differences
+ SELECT
+     count(*) > 0 AS has_diff

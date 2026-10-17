@@ -1,0 +1,64 @@
+diff --git a/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs b/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs
+index dabfdca3f6e5..6d78d9518045 100644
+--- a/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs
++++ b/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs
+@@ -63,9 +63,13 @@ public sealed partial class TopLevelViewModel : ObservableObject, IListItem
+                                                         {
+                                                             return item as IContextItem;
+                                                         }
++                                                        else if (item is CommandContextItemViewModel commandItem)
++                                                        {
++                                                            return commandItem.Model.Unsafe;
++                                                        }
+                                                         else
+                                                         {
+-                                                            return ((CommandContextItemViewModel)item).Model.Unsafe;
++                                                            return null;
+                                                         }
+                                                     }).ToArray();
+ 
+diff --git a/src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs b/src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs
+index d2af6ca6d61f..aec50163db10 100644
+--- a/src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs
++++ b/src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs
+@@ -33,9 +33,14 @@ internal sealed partial class ContextItemTemplateSelector : DataTemplateSelector
+                 li.AllowFocusOnInteraction = false;
+                 dataTemplate = Separator;
+             }
++            else if (item is CommandContextItemViewModel commandItem)
++            {
++                dataTemplate = commandItem.IsCritical ? Critical : Default;
++            }
+             else
+             {
+-                dataTemplate = ((CommandContextItemViewModel)item).IsCritical ? Critical : Default;
++                // Fallback for unknown types
++                dataTemplate = Default;
+             }
+         }
+ 
+diff --git a/src/modules/cmdpal/Microsoft.CmdPal.UI/rd.xml b/src/modules/cmdpal/Microsoft.CmdPal.UI/rd.xml
+index 037839d5490f..86331f360d7e 100644
+--- a/src/modules/cmdpal/Microsoft.CmdPal.UI/rd.xml
++++ b/src/modules/cmdpal/Microsoft.CmdPal.UI/rd.xml
+@@ -2,7 +2,20 @@
+ 	<Application>
+ 		<Assembly Name="Microsoft.WinUI">
+ 			<Type Name="Microsoft.UI.Xaml.Controls.FontIconSource" Dynamic="Required All" />
++			<Type Name="Microsoft.UI.Xaml.DataTemplate" Dynamic="Required All" />
++			<Type Name="Microsoft.UI.Xaml.Controls.DataTemplateSelector" Dynamic="Required All" />
++			<Type Name="Microsoft.UI.Xaml.Controls.ListViewItem" Dynamic="Required All" />
+ 		</Assembly>
++
++		<!-- Add ViewModel types for AOT compatibility -->
++		<Assembly Name="Microsoft.CmdPal.Core.ViewModels">
++			<Type Name="Microsoft.CmdPal.Core.ViewModels.CommandContextItemViewModel" Dynamic="Required All" />
++			<Type Name="Microsoft.CmdPal.Core.ViewModels.SeparatorContextItemViewModel" Dynamic="Required All" />
++			<Type Name="Microsoft.CmdPal.Core.ViewModels.IContextItemViewModel" Dynamic="Required All" />
++			<Type Name="Microsoft.CmdPal.Core.ViewModels.CommandItemViewModel" Dynamic="Required All" />
++		</Assembly>
++
++		<!-- Add UI types for AOT compatibility -->
+ 		<Assembly Name="Microsoft.CmdPal.UI">
+ 			<Type Name="Microsoft.CmdPal.UI.ContextItemTemplateSelector" Dynamic="Required All" />
+ 		</Assembly>

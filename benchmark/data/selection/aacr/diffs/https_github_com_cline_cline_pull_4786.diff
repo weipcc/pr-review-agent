@@ -1,0 +1,119 @@
+diff --git a/src/core/controller/index.ts b/src/core/controller/index.ts
+index 8b8603551cd..588916470c6 100644
+--- a/src/core/controller/index.ts
++++ b/src/core/controller/index.ts
+@@ -458,12 +458,7 @@ export class Controller {
+ 
+ 	// Auth
+ 	public async validateAuthState(state: string | null): Promise<boolean> {
+-		const storedNonce = this.authService.authNonce
+-		if (!state || state !== storedNonce) {
+-			return false
+-		}
+-		this.authService.resetAuthNonce() // Clear the nonce after validation
+-		return true
++		return state === this.authService.authNonce
+ 	}
+ 
+ 	async handleAuthCallback(customToken: string, provider: string | null = null) {
+diff --git a/src/extension.ts b/src/extension.ts
+index a799629c223..894da3db3f7 100644
+--- a/src/extension.ts
++++ b/src/extension.ts
+@@ -307,10 +307,18 @@ export async function activate(context: vscode.ExtensionContext) {
+ 					provider: provider,
+ 				})
+ 
+-				// Validate state parameter
+-				if (!(authService.authNonce === state)) {
+-					vscode.window.showErrorMessage("Invalid auth state")
+-					return
++				// Ask user to confirm on state mismatch. This enables signins initiated from
++				// outside the extension (e.g. Cline web) to be handled correctly.
++				if (authService.authNonce !== state) {
++					const userConfirmation = await vscode.window.showWarningMessage(
++						`Store token returned from ${uri.path}`,
++						"Store",
++						"Cancel",
++					)
++					if (userConfirmation === "Cancel") {
++						console.log("User declined to continue with auth callback due to state mismatch")
++						return
++					}
+ 				}
+ 
+ 				if (token) {
+diff --git a/src/services/auth/AuthService.ts b/src/services/auth/AuthService.ts
+index ba8fc6725f7..57d31834972 100644
+--- a/src/services/auth/AuthService.ts
++++ b/src/services/auth/AuthService.ts
+@@ -30,7 +30,7 @@ export class AuthService {
+ 	private _authenticated: boolean = false
+ 	private _user: any = null
+ 	private _provider: any = null
+-	private _authNonce: string | null = null
++	private readonly _authNonce = crypto.randomBytes(32).toString("hex")
+ 	private _activeAuthStatusUpdateSubscriptions = new Set<[Controller, StreamingResponseHandler]>()
+ 	private _context: vscode.ExtensionContext
+ 
+@@ -136,7 +136,7 @@ export class AuthService {
+ 		this._setProvider(providerName)
+ 	}
+ 
+-	get authNonce(): string | null {
++	get authNonce(): string {
+ 		return this._authNonce
+ 	}
+ 
+@@ -170,33 +170,27 @@ export class AuthService {
+ 		})
+ 	}
+ 
+-	/**
+-	 * Resets the auth nonce to null.
+-	 * This is typically called after a successful authentication.
+-	 */
+-	resetAuthNonce(): void {
+-		this._authNonce = null
+-	}
+-
+ 	async createAuthRequest(): Promise<String> {
+-		if (!this._authenticated) {
+-			// Generate nonce for state validation
+-			this._authNonce = crypto.randomBytes(32).toString("hex")
+-
+-			const uriScheme = vscode.env.uriScheme
+-			const authUrl = vscode.Uri.parse(
+-				`${this._config.URI}?state=${encodeURIComponent(this._authNonce)}&callback_url=${encodeURIComponent(`${uriScheme || "vscode"}://saoudrizwan.claude-dev/auth`)}`,
+-			)
+-			await vscode.env.openExternal(authUrl)
+-			return String.create({
+-				value: authUrl.toString(),
+-			})
+-		} else {
++		if (this._authenticated) {
+ 			this.sendAuthStatusUpdate()
+-			return String.create({
+-				value: "Already authenticated",
+-			})
++			return String.create({ value: "Already authenticated" })
++		}
++
++		if (!this._config.URI) {
++			throw new Error("Authentication URI is not configured")
+ 		}
++
++		const callbackUrl = `${vscode.env.uriScheme || "vscode"}://saoudrizwan.claude-dev/auth`
++
++		// Use URL object for more graceful query construction
++		const authUrl = new URL(this._config.URI)
++		authUrl.searchParams.set("state", this._authNonce)
++		authUrl.searchParams.set("callback_url", callbackUrl)
++
++		const authUrlString = authUrl.toString()
++
++		await vscode.env.openExternal(vscode.Uri.parse(authUrlString))
++		return String.create({ value: authUrlString })
+ 	}
+ 
+ 	async handleDeauth(): Promise<void> {

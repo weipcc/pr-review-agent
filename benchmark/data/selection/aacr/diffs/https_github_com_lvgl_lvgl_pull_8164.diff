@@ -1,0 +1,163 @@
+diff --git a/docs/src/details/widgets/animimg.rst b/docs/src/details/widgets/animimg.rst
+index be6f3030d169..40229eba4711 100644
+--- a/docs/src/details/widgets/animimg.rst
++++ b/docs/src/details/widgets/animimg.rst
+@@ -31,7 +31,10 @@ Image sources
+ -------------
+ 
+ To set the image animation images sources, use
+-:cpp:expr:`lv_animimg_set_src(animimg, dsc[], num, reverse)`.
++:cpp:expr:`lv_animimg_set_src(animimg, dsc[], num)`.
++
++To set the images source for flip playback of animation image, use
++:cpp:expr:`lv_animimg_set_src_reverse(animimg, dsc[], num)`.
+ 
+ Using the inner animation
+ -------------------------
+diff --git a/examples/widgets/animimg/lv_example_animimg_1.c b/examples/widgets/animimg/lv_example_animimg_1.c
+index 2795c3853b1d..8b8d68b471dc 100644
+--- a/examples/widgets/animimg/lv_example_animimg_1.c
++++ b/examples/widgets/animimg/lv_example_animimg_1.c
+@@ -14,7 +14,7 @@ void lv_example_animimg_1(void)
+ {
+     lv_obj_t * animimg0 = lv_animimg_create(lv_screen_active());
+     lv_obj_center(animimg0);
+-    lv_animimg_set_src(animimg0, (const void **) anim_imgs, 3, false);
++    lv_animimg_set_src(animimg0, (const void **) anim_imgs, 3);
+     lv_animimg_set_duration(animimg0, 1000);
+     lv_animimg_set_repeat_count(animimg0, LV_ANIM_REPEAT_INFINITE);
+     lv_animimg_start(animimg0);
+diff --git a/src/widgets/animimage/lv_animimage.c b/src/widgets/animimage/lv_animimage.c
+index 66f04cc42bf3..56e9a2f3ac4e 100644
+--- a/src/widgets/animimage/lv_animimage.c
++++ b/src/widgets/animimage/lv_animimage.c
+@@ -43,6 +43,7 @@
+  **********************/
+ static void index_change(lv_obj_t * obj, int32_t idx);
+ static void lv_animimg_constructor(const lv_obj_class_t * class_p, lv_obj_t * obj);
++static void lv_animimg_set_src_inner(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse);
+ 
+ /**********************
+  *  STATIC VARIABLES
+@@ -107,18 +108,14 @@ lv_obj_t * lv_animimg_create(lv_obj_t * parent)
+     return obj;
+ }
+ 
+-void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse)
++void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num)
+ {
+-    LV_ASSERT_OBJ(obj, MY_CLASS);
+-    lv_animimg_t * animimg = (lv_animimg_t *)obj;
+-    animimg->dsc = dsc;
+-    animimg->pic_count = num;
+-    if(reverse) {
+-        lv_anim_set_values(&animimg->anim, (int32_t)num, 0);
+-    }
+-    else {
+-        lv_anim_set_values(&animimg->anim, 0, (int32_t)num);
+-    }
++    lv_animimg_set_src_inner(obj, dsc, num, false);
++}
++
++void lv_animimg_set_src_reverse(lv_obj_t * obj, const void * dsc[], size_t num)
++{
++    lv_animimg_set_src_inner(obj, dsc, num, true);
+ }
+ 
+ void lv_animimg_start(lv_obj_t * obj)
+@@ -258,4 +255,18 @@ static void index_change(lv_obj_t * obj, int32_t idx)
+     lv_image_set_src(obj, animimg->dsc[idx]);
+ }
+ 
++static void lv_animimg_set_src_inner(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse)
++{
++    LV_ASSERT_OBJ(obj, MY_CLASS);
++    lv_animimg_t * animimg = (lv_animimg_t *)obj;
++    animimg->dsc = dsc;
++    animimg->pic_count = num;
++    if(reverse) {
++        lv_anim_set_values(&animimg->anim, (int32_t)num, 0);
++    }
++    else {
++        lv_anim_set_values(&animimg->anim, 0, (int32_t)num);
++    }
++}
++
+ #endif
+diff --git a/src/widgets/animimage/lv_animimage.h b/src/widgets/animimage/lv_animimage.h
+index 7894e6d3468f..230eca499757 100644
+--- a/src/widgets/animimage/lv_animimage.h
++++ b/src/widgets/animimage/lv_animimage.h
+@@ -72,9 +72,16 @@ lv_obj_t * lv_animimg_create(lv_obj_t * parent);
+  * @param obj       pointer to an animation image object
+  * @param dsc       pointer to a series images
+  * @param num       images' number
+- * @param reverse   Set the flip playback of the image animation
+  */
+-void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse);
++void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num);
++
++/**
++ *  Set the images source for flip playback of animation image.
++ * @param obj       pointer to an animation image object
++ * @param dsc       pointer to a series images
++ * @param num       images' number
++ */
++void lv_animimg_set_src_reverse(lv_obj_t * obj, const void * dsc[], size_t num);
+ 
+ /**
+  * Startup the image animation.
+diff --git a/tests/src/test_cases/widgets/test_animimg.c b/tests/src/test_cases/widgets/test_animimg.c
+index e7897c61b84c..53032d71207e 100644
+--- a/tests/src/test_cases/widgets/test_animimg.c
++++ b/tests/src/test_cases/widgets/test_animimg.c
+@@ -21,6 +21,7 @@ void setUp(void);
+ void tearDown(void);
+ void test_animimg_successful_create(void);
+ void test_animimg_set_src(void);
++void test_animimg_set_src_reverse(void);
+ void test_animimg_get_src_count(void);
+ void test_animimg_set_duration(void);
+ void test_animimg_set_repeat_count_infinite(void);
+@@ -44,14 +45,21 @@ void test_animimg_successful_create(void)
+ 
+ void test_animimg_set_src(void)
+ {
+-    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3, false);
++    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3);
++
++    TEST_ASSERT_NOT_NULL(animimg);
++}
++
++void test_animimg_set_src_reverse(void)
++{
++    lv_animimg_set_src_reverse(animimg, (const void **) anim_imgs, 3);
+ 
+     TEST_ASSERT_NOT_NULL(animimg);
+ }
+ 
+ void test_animimg_get_src(void)
+ {
+-    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3, false);
++    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3);
+ 
+     const void ** actual_dsc = lv_animimg_get_src(animimg);
+ 
+@@ -63,7 +71,7 @@ void test_animimg_get_src_count(void)
+ {
+     uint8_t expected_count = 3;
+ 
+-    lv_animimg_set_src(animimg, (const void **) anim_imgs, expected_count, false);
++    lv_animimg_set_src(animimg, (const void **) anim_imgs, expected_count);
+ 
+     uint8_t actual_count = lv_animimg_get_src_count(animimg);
+ 
+@@ -94,7 +102,7 @@ void test_animimg_start(void)
+ {
+     // for lv_animimg_start() to actually work,
+     // we need to properly setup the widget beforehand
+-    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3, false);
++    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3);
+     lv_animimg_set_duration(animimg, 1000);
+     lv_animimg_set_repeat_count(animimg, LV_ANIM_REPEAT_INFINITE);
+ 

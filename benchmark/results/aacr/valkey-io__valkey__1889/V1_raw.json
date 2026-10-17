@@ -1,0 +1,21 @@
+{
+ "results": [
+  {
+   "summary": "新增遮蔽日誌中使用者資料的邏輯時，在 snprintf 中錯誤使用三元運算子搭配逗號運算子，將導致嚴重執行期崩潰或編譯錯誤。",
+   "issues": [
+    {
+     "line": 2771,
+     "severity": "bug",
+     "comment": "在三元運算子中使用括號與逗號（如 `(\"fmt\", arg)`）屬於 C 語言的逗號運算子（comma operator），它只會回傳括號內最後一個表達式的值作為 snprintf 的第三個參數（格式化字串），而不會展開成多個函式參數。當條件成立時，第三個參數會被傳入 size_t 數值而非 const char * 格式化字串；條件不成立時也會傳入錯誤的指標，導致記憶體存取錯誤或崩潰（Segmentation fault）。",
+     "suggestion": "改用標準的 if-else 條件判斷來分別呼叫 snprintf：\nif (server.hide_user_data_from_log) {\n    snprintf(buf, sizeof(buf), \"Query buffer during protocol error: [hide_user_data_from_log]Redacted %zu bytes\",\n             sdslen(c->querybuf) - c->qb_pos);\n} else {\n    snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'\",\n             PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,\n             PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2);\n}"
+    }
+   ],
+   "filename": "src/networking.c"
+  }
+ ],
+ "n_files": 1,
+ "elapsed_s": 19.6,
+ "calls": 1,
+ "input_tokens": 1826,
+ "output_tokens": 437
+}

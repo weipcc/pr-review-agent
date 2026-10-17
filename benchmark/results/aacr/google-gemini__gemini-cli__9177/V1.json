@@ -1,0 +1,46 @@
+{
+ "results": [
+  {
+   "filename": "integration-tests/extensions-install.test.ts",
+   "summary": "新增了擴充套件安裝與更新的整合測試，但測試清理邏輯缺乏例外處理機制，若斷言失敗可能導致測試資源殘留。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 51,
+     "end_line": 51,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "資源清理動作（rig.cleanup() 與 rmSync）直接放置在測試函式末端。若前面的任何一個 expect 斷言或非預期的非同步指令拋出錯誤，後續的清理流程將不會被執行，進而導致測試目錄殘留或影響後續測試環境。"
+    }
+   ]
+  },
+  {
+   "filename": "integration-tests/test-helper.ts",
+   "summary": "新增了 runCommand 輔助方法以支援透過 stdin 傳入資料執行子行程，但缺少 error 事件監聽與邊界條件處理。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 341,
+     "end_line": 341,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "子行程未監聽 'error' 事件。若 spawn 失敗（例如找不到 node 可執行檔或系統權限不足），子行程會觸發未捕獲的 error 事件導致測試行程崩潰，且 Promise 永遠不會 resolve 或 reject。"
+    },
+    {
+     "start_line": 323,
+     "end_line": 323,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "以 `if (options.stdin)` 判斷在傳入空字串 `\"\"` 時會被視為 falsy，導致未呼叫 `child.stdin.end()`。若子行程正在等待 stdin 輸入與 EOF 結束，可能造成測試行程卡住（hang）。"
+    }
+   ]
+  }
+ ],
+ "n_files": 2,
+ "input_tokens": 2672,
+ "output_tokens": 500,
+ "calls": 2,
+ "tool_calls": null,
+ "elapsed_s": 24.2,
+ "model": "gemini-3.8-flash"
+}

@@ -1,0 +1,239 @@
+diff --git a/docs/guides/high-availability/pinned-guides b/docs/guides/high-availability/pinned-guides
+index 01a52a59d989..4883a9fb043c 100644
+--- a/docs/guides/high-availability/pinned-guides
++++ b/docs/guides/high-availability/pinned-guides
+@@ -1,13 +1,16 @@
+ introduction
+ concepts-multi-site
+ bblocks-multi-site
++concepts-database-connections
++concepts-threads
++concepts-memory-and-cpu-sizing
++concepts-infinispan-cli-batch
+ deploy-aurora-multi-az
+ deploy-infinispan-kubernetes-crossdc
+ deploy-keycloak-kubernetes
+-deploy-aws-route53-loadbalancer
+-deploy-aws-route53-failover-lambda
+-health-checks-multi-site
+-operate-failover
+-operate-switch-over
+-operate-network-partition-recovery
+-operate-switch-back
+\ No newline at end of file
++deploy-aws-accelerator-loadbalancer
++deploy-aws-accelerator-fencing-lambda
++operate-site-offline
++operate-site-online
++operate-synchronize
++health-checks-multi-site
+\ No newline at end of file
+diff --git a/docs/guides/operator/basic-deployment.adoc b/docs/guides/operator/basic-deployment.adoc
+index 77c40494f7ff..2edb7d584df1 100644
+--- a/docs/guides/operator/basic-deployment.adoc
++++ b/docs/guides/operator/basic-deployment.adoc
+@@ -6,7 +6,6 @@
+ 
+ <@tmpl.guide
+ title="Basic {project_name} deployment"
+-priority=20
+ summary="How to install {project_name} using the Operator">
+ 
+ == Performing a basic {project_name} deployment
+@@ -100,9 +99,9 @@ When running on OpenShift, with ingress enabled, and with the spec.ingress.class
+ The operator will assign a default hostname to the stored version of the CR similar to what would be created by an OpenShift Route without an explicit host - that is ingress-namespace.appsDomain
+ If the appsDomain changes, or should you need a different hostname for any reason, then update the Keycloak CR.
+ 
+-NOTE: If you set the `hostname-admin`, or the deprecated `hostname-admin-url`, even if you enable ingress, no ingress will be created specifically for admin access. 
+-Admin access via a separate hostname is generally expected to have access restrictions, which are not currently expressible via the Keycloak CR. 
+-Also the default ingress does not prevent accessing admin endpoints, so you may not want to enable ingress handling via the Keycloak CR at all when you have a separate hostname for admin endpoints.       
++NOTE: If you set the `hostname-admin`, or the deprecated `hostname-admin-url`, even if you enable ingress, no ingress will be created specifically for admin access.
++Admin access via a separate hostname is generally expected to have access restrictions, which are not currently expressible via the Keycloak CR.
++Also the default ingress does not prevent accessing admin endpoints, so you may not want to enable ingress handling via the Keycloak CR at all when you have a separate hostname for admin endpoints.
+ 
+ ==== TLS Certificate and key
+ 
+diff --git a/docs/guides/operator/installation.adoc b/docs/guides/operator/installation.adoc
+index 38671af6920f..81b5d61fc9c2 100644
+--- a/docs/guides/operator/installation.adoc
++++ b/docs/guides/operator/installation.adoc
+@@ -6,7 +6,6 @@
+ 
+ <@tmpl.guide
+ title="{project_name} Operator Installation"
+-priority=10
+ summary="How to install the {project_name} Operator on Kubernetes and OpenShift">
+ 
+ == Installing the {project_name} Operator
+@@ -64,7 +63,7 @@ kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resourc
+ kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/{version}/kubernetes/kubernetes.yml
+ ----
+ 
+-The Operator will watch the namespace where it is installed. You may optionally select a namespace with the `-n` option. 
++The Operator will watch the namespace where it is installed. You may optionally select a namespace with the `-n` option.
+ </@profile.ifCommunity>
+ 
+ === Installing Multiple Operators
+@@ -79,6 +78,6 @@ If you do this please be aware:
+ - older CRDs may not be forwards compatible with new fields used by newer operators. When using OLM it will check if your custom resources are compatible with the CRDs being installed, so the usage of new fields can prevent the simultaneous installation of older operator versions.
+ - fields introduced by newer CRDs will not be supported by older Operators. Older Operator will fail to handle CRs that use such new fields with an error deserializing an unrecognized field.
+ 
+-It is therefore recommended in a multiple Operator install scenario that you keep versions aligned as closely as possible to minimize the potential problems with different versions. 
++It is therefore recommended in a multiple Operator install scenario that you keep versions aligned as closely as possible to minimize the potential problems with different versions.
+ 
+ </@tmpl.guide>
+diff --git a/docs/guides/operator/realm-import.adoc b/docs/guides/operator/realm-import.adoc
+index 553d14539377..898fb221120e 100644
+--- a/docs/guides/operator/realm-import.adoc
++++ b/docs/guides/operator/realm-import.adoc
+@@ -5,7 +5,6 @@
+ 
+ <@tmpl.guide
+ title="{project_name} Realm Import"
+-priority=30
+ summary="How to perform an automated {project_name} Realm Import using the operator">
+ 
+ == Importing a {project_name} Realm
+@@ -85,10 +84,10 @@ When the import has successfully completed, the output will look like the follow
+ ----
+ CONDITION: Done
+   STATUS: true
+-  MESSAGE: 
++  MESSAGE:
+ CONDITION: Started
+   STATUS: false
+-  MESSAGE: 
++  MESSAGE:
+ CONDITION: HasErrors
+   STATUS: false
+   MESSAGE:
+@@ -96,7 +95,7 @@ CONDITION: HasErrors
+ 
+ === Placeholders
+ 
+-Imports support placeholders referencing environment variables, see <@links.server id="importExport"/> for more. 
++Imports support placeholders referencing environment variables, see <@links.server id="importExport"/> for more.
+ The `KeycloakRealmImport` CR allows you to leverage this functionality via the `spec.placeholders` stanza, for example:
+ 
+ [source,yaml]
+@@ -115,7 +114,7 @@ spec:
+     ...
+ ----
+ 
+-In the above example placeholder replacement will be enabled and an environment variable with key `ENV_KEY` will be created from the Secret `SECRET_NAME`'s value for key `SECRET_KEY`. 
++In the above example placeholder replacement will be enabled and an environment variable with key `ENV_KEY` will be created from the Secret `SECRET_NAME`'s value for key `SECRET_KEY`.
+ Currently only Secrets are supported and they must be in the same namespace as the Keycloak CR.
+-  
++
+ </@tmpl.guide>
+diff --git a/docs/guides/server/vault.adoc b/docs/guides/server/vault.adoc
+index 91ea96b47409..3043890e8134 100644
+--- a/docs/guides/server/vault.adoc
++++ b/docs/guides/server/vault.adoc
+@@ -4,7 +4,6 @@
+ <@tmpl.guide
+ title="Using a vault"
+ summary="Learn how to use and configure a vault in {project_name}"
+-priority=30
+ includedOptions="vault vault-*">
+ 
+ {project_name} provides two out-of-the-box implementations of the Vault SPI: a plain-text file-based vault and Java KeyStore-based vault.
+diff --git a/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/Context.java b/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/Context.java
+index f0211803314f..8c3295e33bf9 100644
+--- a/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/Context.java
++++ b/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/Context.java
+@@ -31,16 +31,30 @@ public Context(File srcDir) throws IOException {
+         for (File f : srcDir.listFiles((dir, f) -> f.endsWith(".adoc") && !f.equals("index.adoc"))) {
+             Guide guide = parser.parse(f);
+ 
+-            if (guidePriorities != null && guide != null) {
+-                Integer priority = guidePriorities.get(guide.getId());
+-                guide.setPriority(priority != null ? priority : Integer.MAX_VALUE);
+-            }
+-
+             if (guide != null) {
++                if (guidePriorities != null) {
++                    Integer priority = guidePriorities.get(guide.getId());
++                    if (priority != null) {
++                        if (guide.getPriority() != Integer.MAX_VALUE) {
++                            throw new RuntimeException("Guide is pinned, but has a priority specified: " + f.getName());
++                        }
++                        guidePriorities.remove(guide.getId());
++                        guide.setPriority(priority);
++                    }
++                }
++
++                if (!guide.isTileVisible() && guide.getPriority() == Integer.MAX_VALUE) {
++                    throw new RuntimeException("Invisible tiles should be pinned or have an explicit priority: " + f.getName());
++                }
++
+                 guides.add(guide);
+             }
+         }
+ 
++        if (guidePriorities != null && !guidePriorities.isEmpty()) {
++            throw new RuntimeException("File 'pinned-guides' contains files that no longer exist or are misspelled: " + guidePriorities.keySet());
++        }
++
+         Collections.sort(guides, (o1, o2) -> {
+             if (o1.getPriority() == o2.getPriority()) {
+                 return o1.getTitle().compareTo(o2.getTitle());
+diff --git a/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/Guide.java b/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/Guide.java
+index 15912b4e064c..5645453beb25 100644
+--- a/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/Guide.java
++++ b/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/Guide.java
+@@ -6,7 +6,8 @@ public class Guide {
+     private String id;
+     private String title;
+     private String summary;
+-    private int priority;
++    private int priority = Integer.MAX_VALUE;
++    private boolean tileVisible = true;
+ 
+     public String getTemplate() {
+         return template;
+@@ -47,4 +48,12 @@ public int getPriority() {
+     public void setPriority(int priority) {
+         this.priority = priority;
+     }
++
++    public boolean isTileVisible() {
++        return tileVisible;
++    }
++
++    public void setTileVisible(boolean tileVisible) {
++        this.tileVisible = tileVisible;
++    }
+ }
+diff --git a/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/GuideParser.java b/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/GuideParser.java
+index 062e070ae293..baa914233800 100644
+--- a/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/GuideParser.java
++++ b/docs/maven-plugin/src/main/java/org/keycloak/guides/maven/GuideParser.java
+@@ -9,8 +9,8 @@
+ 
+ public class GuideParser {
+ 
+-    private Pattern TEMPLATE_IMPORT_PATTERN = Pattern.compile("<#import \"/templates/guide.adoc\" as (?<importName>[^ ]*)>");
+-    private Pattern GUIDE_ELEMENT_PATTERN = Pattern.compile("(?<key>priority|title|summary)=(\\\"(?<valueString>[^\\\"]*)\\\"|(?<valueInt>[\\d]*))");
++    private final Pattern TEMPLATE_IMPORT_PATTERN = Pattern.compile("<#import \"/templates/guide.adoc\" as (?<importName>[^ ]*)>");
++    private final Pattern GUIDE_ELEMENT_PATTERN = Pattern.compile("(?<key>priority|title|summary|tileVisible)=(\\\"(?<valueString>[^\\\"]*)\\\"|(?<valueInt>[\\d]*))");
+ 
+     /**
+      * Parses a FreeMarker template to retrieve Guide attributes
+@@ -26,7 +26,6 @@ public Guide parse(File file) throws IOException {
+             if (importElement != null) {
+                 Guide guide = new Guide();
+                 guide.setTemplate(file.getName());
+-                guide.setPriority(999);
+ 
+                 guide.setId(file.getName().replaceAll(".adoc", ""));
+ 
+@@ -79,6 +78,8 @@ private void setAttributes(String importElement, Guide guide) {
+                     break;
+                 case "priority":
+                     guide.setPriority(Integer.parseInt(attributeMatcher.group("valueInt")));
++                case "tileVisible":
++                    guide.setTileVisible(Boolean.parseBoolean(attributeMatcher.group("valueString")));
+             }
+         }
+     }

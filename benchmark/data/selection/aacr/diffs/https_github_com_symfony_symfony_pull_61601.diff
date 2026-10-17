@@ -1,0 +1,39 @@
+diff --git a/src/Symfony/Component/DependencyInjection/Tests/Fixtures/xml/services31.xml b/src/Symfony/Component/DependencyInjection/Tests/Fixtures/xml/services31.xml
+new file mode 100644
+index 0000000000000..9b573ba4474b4
+--- /dev/null
++++ b/src/Symfony/Component/DependencyInjection/Tests/Fixtures/xml/services31.xml
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="utf-8"?>
++<container xmlns="http://symfony.com/schema/dic/services" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://symfony.com/schema/dic/services https://symfony.com/schema/dic/services/services-1.0.xsd">
++    <services>
++        <service id="invalid_service" class="App\Foo">
++            <bogusTag />
++        </service>
++    </services>
++</container>
+diff --git a/src/Symfony/Component/DependencyInjection/Tests/Loader/XmlFileLoaderTest.php b/src/Symfony/Component/DependencyInjection/Tests/Loader/XmlFileLoaderTest.php
+index 675ec57c73b56..69dd28937c648 100644
+--- a/src/Symfony/Component/DependencyInjection/Tests/Loader/XmlFileLoaderTest.php
++++ b/src/Symfony/Component/DependencyInjection/Tests/Loader/XmlFileLoaderTest.php
+@@ -1286,4 +1286,20 @@ public function testLoadServicesWithEnvironment()
+ 
+         self::assertInstanceOf(RemoteCallerSocket::class, $container->get(RemoteCaller::class));
+     }
++
++    public function testXmlParseExceptionIncludesFilenameAndPosition()
++    {
++        $container = new ContainerBuilder();
++        $loader = new XmlFileLoader(
++            $container,
++            new FileLocator(__DIR__.'/../Fixtures/xml')
++        );
++
++        $invalidXMLFileName = 'services31.xml';
++
++        $this->expectException(InvalidArgumentException::class);
++        $this->expectExceptionMessageMatches('/Unable to parse file .*services31\.xml.*bogusTag.*This element is not expected.*line 5, column 0/');
++
++        $loader->load($invalidXMLFileName);
++    }
+ }

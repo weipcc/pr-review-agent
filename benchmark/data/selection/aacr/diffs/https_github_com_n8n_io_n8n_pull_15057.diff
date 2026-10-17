@@ -1,0 +1,260 @@
+diff --git a/packages/cli/src/controllers/folder.controller.ts b/packages/cli/src/controllers/folder.controller.ts
+index b66a89b7402d..66ca2c86e7af 100644
+--- a/packages/cli/src/controllers/folder.controller.ts
++++ b/packages/cli/src/controllers/folder.controller.ts
+@@ -104,7 +104,7 @@ export class ProjectController {
+ 		const { projectId, folderId } = req.params;
+ 
+ 		try {
+-			await this.folderService.deleteFolder(folderId, projectId, payload);
++			await this.folderService.deleteFolder(req.user, folderId, projectId, payload);
+ 		} catch (e) {
+ 			if (e instanceof FolderNotFoundError) {
+ 				throw new NotFoundError(e.message);
+diff --git a/packages/cli/src/databases/repositories/workflow.repository.ts b/packages/cli/src/databases/repositories/workflow.repository.ts
+index 3f6c8e8621f7..e3a880f2c16b 100644
+--- a/packages/cli/src/databases/repositories/workflow.repository.ts
++++ b/packages/cli/src/databases/repositories/workflow.repository.ts
+@@ -297,6 +297,22 @@ export class WorkflowRepository extends Repository<WorkflowEntity> {
+ 		return [enrichedWorkflowsAndFolders, count] as const;
+ 	}
+ 
++	async getAllWorkflowIdsInHierarchy(folderId: string, projectId: string): Promise<string[]> {
++		const subFolderIds = await this.folderRepository.getAllFolderIdsInHierarchy(
++			folderId,
++			projectId,
++		);
++
++		const query = this.createQueryBuilder('workflow');
++
++		this.applySelect(query, { id: true });
++		this.applyParentFolderFilter(query, { parentFolderIds: [folderId, ...subFolderIds] });
++
++		const workflowIds = (await query.getMany()).map((workflow) => workflow.id);
++
++		return workflowIds;
++	}
++
+ 	private getFolderIds(workflowsAndFolders: WorkflowFolderUnionRow[]) {
+ 		return workflowsAndFolders.filter((item) => item.resource === 'folder').map((item) => item.id);
+ 	}
+@@ -669,4 +685,11 @@ export class WorkflowRepository extends Repository<WorkflowEntity> {
+ 			},
+ 		);
+ 	}
++
++	async moveToFolder(workflowIds: string[], toFolderId: string) {
++		await this.update(
++			{ id: In(workflowIds) },
++			{ parentFolder: toFolderId === PROJECT_ROOT ? null : { id: toFolderId } },
++		);
++	}
+ }
+diff --git a/packages/cli/src/services/folder.service.ts b/packages/cli/src/services/folder.service.ts
+index ceed47609ffa..17b6257c3b42 100644
+--- a/packages/cli/src/services/folder.service.ts
++++ b/packages/cli/src/services/folder.service.ts
+@@ -1,5 +1,5 @@
+ import type { CreateFolderDto, DeleteFolderDto, UpdateFolderDto } from '@n8n/api-types';
+-import { Folder, FolderTagMappingRepository, FolderRepository } from '@n8n/db';
++import { Folder, FolderTagMappingRepository, FolderRepository, type User } from '@n8n/db';
+ import { Service } from '@n8n/di';
+ // eslint-disable-next-line n8n-local-rules/misplaced-n8n-typeorm-import
+ import type { EntityManager } from '@n8n/typeorm';
+@@ -8,6 +8,7 @@ import { UserError, PROJECT_ROOT } from 'n8n-workflow';
+ import { WorkflowRepository } from '@/databases/repositories/workflow.repository';
+ import { FolderNotFoundError } from '@/errors/folder-not-found.error';
+ import type { ListQuery } from '@/requests';
++import { WorkflowService } from '@/workflows/workflow.service';
+ 
+ export interface SimpleFolderNode {
+ 	id: string;
+@@ -27,6 +28,7 @@ export class FolderService {
+ 		private readonly folderRepository: FolderRepository,
+ 		private readonly folderTagMappingRepository: FolderTagMappingRepository,
+ 		private readonly workflowRepository: WorkflowRepository,
++		private readonly workflowService: WorkflowService,
+ 	) {}
+ 
+ 	async createFolder({ parentFolderId, name }: CreateFolderDto, projectId: string) {
+@@ -124,10 +126,35 @@ export class FolderService {
+ 		return this.transformFolderPathToTree(result);
+ 	}
+ 
+-	async deleteFolder(folderId: string, projectId: string, { transferToFolderId }: DeleteFolderDto) {
++	/**
++	 * Moves all workflows in a folder to the root of the project and archives them,
++	 * flattening the folder structure.
++	 *
++	 * If any workflows were active this will also deactivate those workflows.
++	 */
++	async flattenAndArchive(user: User, folderId: string, projectId: string): Promise<void> {
++		const workflowIds = await this.workflowRepository.getAllWorkflowIdsInHierarchy(
++			folderId,
++			projectId,
++		);
++
++		for (const workflowId of workflowIds) {
++			await this.workflowService.archive(user, workflowId, true);
++		}
++
++		await this.workflowRepository.moveToFolder(workflowIds, PROJECT_ROOT);
++	}
++
++	async deleteFolder(
++		user: User,
++		folderId: string,
++		projectId: string,
++		{ transferToFolderId }: DeleteFolderDto,
++	) {
+ 		await this.findFolderInProjectOrFail(folderId, projectId);
+ 
+ 		if (!transferToFolderId) {
++			await this.flattenAndArchive(user, folderId, projectId);
+ 			await this.folderRepository.delete({ id: folderId });
+ 			return;
+ 		}
+diff --git a/packages/cli/src/workflows/workflow.service.ts b/packages/cli/src/workflows/workflow.service.ts
+index 62267617d35c..ba7cc267b2d7 100644
+--- a/packages/cli/src/workflows/workflow.service.ts
++++ b/packages/cli/src/workflows/workflow.service.ts
+@@ -3,6 +3,7 @@ import type { User, WorkflowEntity, ListQueryDb } from '@n8n/db';
+ import {
+ 	SharedWorkflow,
+ 	ExecutionRepository,
++	FolderRepository,
+ 	WorkflowTagMappingRepository,
+ 	SharedWorkflowRepository,
+ } from '@n8n/db';
+@@ -23,6 +24,7 @@ import { ActiveWorkflowManager } from '@/active-workflow-manager';
+ import config from '@/config';
+ import type { WorkflowFolderUnionFull } from '@/databases/repositories/workflow.repository';
+ import { WorkflowRepository } from '@/databases/repositories/workflow.repository';
++import { FolderNotFoundError } from '@/errors/folder-not-found.error';
+ import { BadRequestError } from '@/errors/response-errors/bad-request.error';
+ import { NotFoundError } from '@/errors/response-errors/not-found.error';
+ import { EventService } from '@/events/event.service';
+@@ -30,7 +32,6 @@ import { ExternalHooks } from '@/external-hooks';
+ import { validateEntity } from '@/generic-helpers';
+ import type { ListQuery } from '@/requests';
+ import { hasSharing } from '@/requests';
+-import { FolderService } from '@/services/folder.service';
+ import { OwnershipService } from '@/services/ownership.service';
+ import { ProjectService } from '@/services/project.service.ee';
+ import { RoleService } from '@/services/role.service';
+@@ -60,7 +61,7 @@ export class WorkflowService {
+ 		private readonly executionRepository: ExecutionRepository,
+ 		private readonly eventService: EventService,
+ 		private readonly globalConfig: GlobalConfig,
+-		private readonly folderService: FolderService,
++		private readonly folderRepository: FolderRepository,
+ 		private readonly workflowFinderService: WorkflowFinderService,
+ 	) {}
+ 
+@@ -301,7 +302,14 @@ export class WorkflowService {
+ 		if (parentFolderId) {
+ 			const project = await this.sharedWorkflowRepository.getWorkflowOwningProject(workflow.id);
+ 			if (parentFolderId !== PROJECT_ROOT) {
+-				await this.folderService.findFolderInProjectOrFail(parentFolderId, project?.id ?? '');
++				try {
++					await this.folderRepository.findOneOrFailFolderInProject(
++						parentFolderId,
++						project?.id ?? '',
++					);
++				} catch (e) {
++					throw new FolderNotFoundError(parentFolderId);
++				}
+ 			}
+ 			updatePayload.parentFolder = parentFolderId === PROJECT_ROOT ? null : { id: parentFolderId };
+ 		}
+@@ -417,7 +425,11 @@ export class WorkflowService {
+ 		return workflow;
+ 	}
+ 
+-	async archive(user: User, workflowId: string): Promise<WorkflowEntity | undefined> {
++	async archive(
++		user: User,
++		workflowId: string,
++		skipArchived: boolean = false,
++	): Promise<WorkflowEntity | undefined> {
+ 		const workflow = await this.workflowFinderService.findWorkflowForUser(workflowId, user, [
+ 			'workflow:delete',
+ 		]);
+@@ -427,6 +439,10 @@ export class WorkflowService {
+ 		}
+ 
+ 		if (workflow.isArchived) {
++			if (skipArchived) {
++				return workflow;
++			}
++
+ 			throw new BadRequestError('Workflow is already archived.');
+ 		}
+ 
+diff --git a/packages/cli/test/integration/folder/folder.controller.test.ts b/packages/cli/test/integration/folder/folder.controller.test.ts
+index ad5d877e259c..e0bcba6a57a0 100644
+--- a/packages/cli/test/integration/folder/folder.controller.test.ts
++++ b/packages/cli/test/integration/folder/folder.controller.test.ts
+@@ -757,7 +757,7 @@ describe('DELETE /projects/:projectId/folders/:folderId', () => {
+ 		expect(folderInDb).toBeNull();
+ 	});
+ 
+-	test('should delete folder, all child folders, and contained workflows when no transfer folder is specified', async () => {
++	test('should delete folder, all child folders, and archive and move contained workflows to project root when no transfer folder is specified', async () => {
+ 		const project = await createTeamProject('test', owner);
+ 		const rootFolder = await createFolder(project, { name: 'Root' });
+ 		const childFolder = await createFolder(project, {
+@@ -766,9 +766,8 @@ describe('DELETE /projects/:projectId/folders/:folderId', () => {
+ 		});
+ 
+ 		// Create workflows in the folders
+-		const workflow1 = await createWorkflow({ parentFolder: rootFolder }, owner);
+-
+-		const workflow2 = await createWorkflow({ parentFolder: childFolder }, owner);
++		const workflow1 = await createWorkflow({ parentFolder: rootFolder, active: false }, owner);
++		const workflow2 = await createWorkflow({ parentFolder: childFolder, active: true }, owner);
+ 
+ 		await authOwnerAgent.delete(`/projects/${project.id}/folders/${rootFolder.id}`);
+ 
+@@ -780,10 +779,24 @@ describe('DELETE /projects/:projectId/folders/:folderId', () => {
+ 		expect(childFolderInDb).toBeNull();
+ 
+ 		// Check workflows
+-		const workflow1InDb = await workflowRepository.findOneBy({ id: workflow1.id });
+-		const workflow2InDb = await workflowRepository.findOneBy({ id: workflow2.id });
+-		expect(workflow1InDb).toBeNull();
+-		expect(workflow2InDb).toBeNull();
++
++		const workflow1InDb = await workflowRepository.findOne({
++			where: { id: workflow1.id },
++			relations: ['parentFolder'],
++		});
++		expect(workflow1InDb).not.toBeNull();
++		expect(workflow1InDb?.isArchived).toBe(true);
++		expect(workflow1InDb?.parentFolder).toBe(null);
++		expect(workflow1InDb?.active).toBe(false);
++
++		const workflow2InDb = await workflowRepository.findOne({
++			where: { id: workflow2.id },
++			relations: ['parentFolder'],
++		});
++		expect(workflow2InDb).not.toBeNull();
++		expect(workflow2InDb?.isArchived).toBe(true);
++		expect(workflow2InDb?.parentFolder).toBe(null);
++		expect(workflow2InDb?.active).toBe(false);
+ 	});
+ 
+ 	test('should transfer folder contents when transferToFolderId is specified', async () => {
+diff --git a/packages/frontend/editor-ui/src/plugins/i18n/locales/en.json b/packages/frontend/editor-ui/src/plugins/i18n/locales/en.json
+index 02e77d9a5081..dfa4cffef8b5 100644
+--- a/packages/frontend/editor-ui/src/plugins/i18n/locales/en.json
++++ b/packages/frontend/editor-ui/src/plugins/i18n/locales/en.json
+@@ -949,7 +949,7 @@
+ 	"folder.count": "the {count} folder | the {count} folders",
+ 	"workflow.count": "the {count} workflow | the {count} workflows",
+ 	"folder.and.workflow.separator": "and",
+-	"folders.delete.action": "Delete all workflows and subfolders",
++	"folders.delete.action": "Archive all workflows and delete subfolders",
+ 	"folders.delete.error.message": "Problem while deleting folder",
+ 	"folders.delete.confirmation.message": "Type \"delete {folderName}\" to confirm",
+ 	"folders.transfer.confirm.message": "Data transferred to \"{folderName}\"",

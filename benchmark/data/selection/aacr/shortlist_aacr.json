@@ -1,0 +1,141 @@
+[
+ {
+  "url": "https://github.com/valkey-io/valkey/pull/1889",
+  "lang": "C",
+  "files": 2,
+  "lines": 52,
+  "cats": {
+   "Security Vulnerability": 1,
+   "Code Defect": 1
+  },
+  "ctx": {
+   "Diff Level": 2
+  },
+  "n_human": 2
+ },
+ {
+  "url": "https://github.com/bitcoin/bitcoin/pull/31886",
+  "lang": "C++",
+  "files": 2,
+  "lines": 34,
+  "cats": {
+   "Code Defect": 1
+  },
+  "ctx": {
+   "Repo Level": 1
+  },
+  "n_human": 1,
+  "note": "replaces ClickHouse#85266, whose review-time commit fd6ba0c is gone from GitHub (force-pushed)"
+ },
+ {
+  "url": "https://github.com/dotnet/aspnetcore/pull/62734",
+  "lang": "C#",
+  "files": 2,
+  "lines": 6,
+  "cats": {
+   "Code Defect": 1,
+   "Maintainability and Readability": 1
+  },
+  "ctx": {
+   "File Level": 1,
+   "Diff Level": 1
+  },
+  "n_human": 2
+ },
+ {
+  "url": "https://github.com/google-gemini/gemini-cli/pull/9177",
+  "lang": "TypeScript",
+  "files": 2,
+  "lines": 103,
+  "cats": {
+   "Code Defect": 1,
+   "Maintainability and Readability": 1
+  },
+  "ctx": {
+   "Repo Level": 2
+  },
+  "n_human": 2
+ },
+ {
+  "url": "https://github.com/dbeaver/dbeaver/pull/38915",
+  "lang": "Java",
+  "files": 2,
+  "lines": 130,
+  "cats": {
+   "Maintainability and Readability": 2,
+   "Code Defect": 1
+  },
+  "ctx": {
+   "File Level": 2,
+   "Repo Level": 1
+  },
+  "n_human": 3
+ },
+ {
+  "url": "https://github.com/laravel/framework/pull/56591",
+  "lang": "PHP",
+  "files": 1,
+  "lines": 4,
+  "cats": {
+   "Maintainability and Readability": 1
+  },
+  "ctx": {
+   "Diff Level": 1
+  },
+  "n_human": 1
+ },
+ {
+  "url": "https://github.com/vllm-project/vllm/pull/24425",
+  "lang": "Python",
+  "files": 1,
+  "lines": 12,
+  "cats": {
+   "Code Defect": 1
+  },
+  "ctx": {
+   "Diff Level": 1
+  },
+  "n_human": 1
+ },
+ {
+  "url": "https://github.com/ollama/ollama/pull/9379",
+  "lang": "Go",
+  "files": 2,
+  "lines": 132,
+  "cats": {
+   "Maintainability and Readability": 1,
+   "Code Defect": 1
+  },
+  "ctx": {
+   "Diff Level": 2
+  },
+  "n_human": 2
+ },
+ {
+  "url": "https://github.com/facebook/react/pull/33059",
+  "lang": "JavaScript",
+  "files": 1,
+  "lines": 31,
+  "cats": {
+   "Code Defect": 1
+  },
+  "ctx": {
+   "Diff Level": 1
+  },
+  "n_human": 1
+ },
+ {
+  "url": "https://github.com/dbeaver/dbeaver/pull/37564",
+  "lang": "Java",
+  "files": 2,
+  "lines": 22,
+  "cats": {
+   "Performance": 1,
+   "Maintainability and Readability": 1
+  },
+  "ctx": {
+   "File Level": 2
+  },
+  "n_human": 2
+ }
+]

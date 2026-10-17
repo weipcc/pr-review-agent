@@ -1,0 +1,295 @@
+diff --git a/src/DataProtection/DataProtection/src/KeyManagement/KeyRingBasedDataProtector.cs b/src/DataProtection/DataProtection/src/KeyManagement/KeyRingBasedDataProtector.cs
+index ed0e20cdd6cd..9f19e137a48f 100644
+--- a/src/DataProtection/DataProtection/src/KeyManagement/KeyRingBasedDataProtector.cs
++++ b/src/DataProtection/DataProtection/src/KeyManagement/KeyRingBasedDataProtector.cs
+@@ -2,6 +2,8 @@
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ using System;
++using System.Buffers.Binary;
++using System.Buffers;
+ using System.Collections.Generic;
+ using System.Diagnostics;
+ using System.Diagnostics.CodeAnalysis;
+@@ -14,6 +16,8 @@
+ using Microsoft.AspNetCore.DataProtection.KeyManagement.Internal;
+ using Microsoft.AspNetCore.Shared;
+ using Microsoft.Extensions.Logging;
++using System.Buffers.Text;
++using Microsoft.AspNetCore.DataProtection.Internal;
+ 
+ namespace Microsoft.AspNetCore.DataProtection.KeyManagement;
+ 
+@@ -313,39 +317,13 @@ private static void WriteBigEndianInteger(byte* ptr, uint value)
+         ptr[3] = (byte)(value);
+     }
+ 
+-    private struct AdditionalAuthenticatedDataTemplate
++    internal struct AdditionalAuthenticatedDataTemplate
+     {
+         private byte[] _aadTemplate;
+ 
+-        public AdditionalAuthenticatedDataTemplate(IEnumerable<string> purposes)
++        public AdditionalAuthenticatedDataTemplate(string[] purposes)
+         {
+-            const int MEMORYSTREAM_DEFAULT_CAPACITY = 0x100; // matches MemoryStream.EnsureCapacity
+-            var ms = new MemoryStream(MEMORYSTREAM_DEFAULT_CAPACITY);
+-
+-            // additionalAuthenticatedData := { magicHeader (32-bit) || keyId || purposeCount (32-bit) || (purpose)* }
+-            // purpose := { utf8ByteCount (7-bit encoded) || utf8Text }
+-
+-            using (var writer = new PurposeBinaryWriter(ms))
+-            {
+-                writer.WriteBigEndian(MAGIC_HEADER_V0);
+-                Debug.Assert(ms.Position == sizeof(uint));
+-                var posPurposeCount = writer.Seek(sizeof(Guid), SeekOrigin.Current); // skip over where the key id will be stored; we'll fill it in later
+-                writer.Seek(sizeof(uint), SeekOrigin.Current); // skip over where the purposeCount will be stored; we'll fill it in later
+-
+-                uint purposeCount = 0;
+-                foreach (string purpose in purposes)
+-                {
+-                    Debug.Assert(purpose != null);
+-                    writer.Write(purpose); // prepends length as a 7-bit encoded integer
+-                    purposeCount++;
+-                }
+-
+-                // Once we have written all the purposes, go back and fill in 'purposeCount'
+-                writer.Seek(checked((int)posPurposeCount), SeekOrigin.Begin);
+-                writer.WriteBigEndian(purposeCount);
+-            }
+-
+-            _aadTemplate = ms.ToArray();
++            _aadTemplate = BuildAadTemplateBytes(purposes);
+         }
+ 
+         public byte[] GetAadForKey(Guid keyId, bool isProtecting)
+@@ -381,19 +359,57 @@ public byte[] GetAadForKey(Guid keyId, bool isProtecting)
+             }
+         }
+ 
+-        private sealed class PurposeBinaryWriter : BinaryWriter
++        internal static byte[] BuildAadTemplateBytes(string[] purposes)
+         {
+-            public PurposeBinaryWriter(MemoryStream stream) : base(stream, EncodingUtil.SecureUtf8Encoding, leaveOpen: true) { }
++            // additionalAuthenticatedData := { magicHeader (32-bit) || keyId || purposeCount (32-bit) || (purpose)* }
++            // purpose := { utf8ByteCount (7-bit encoded) || utf8Text }
++
++            var keySize = sizeof(Guid);
++            int totalPurposeLen = 4 + keySize + 4;
+ 
+-            // Writes a big-endian 32-bit integer to the underlying stream.
+-            public void WriteBigEndian(uint value)
++            int[]? lease = null;
++            var targetLength = purposes.Length;
++            Span<int> purposeLengthsPool = targetLength <= 32 ? stackalloc int[targetLength] : (lease = ArrayPool<int>.Shared.Rent(targetLength)).AsSpan(0, targetLength);
++            for (int i = 0; i < targetLength; i++)
+             {
+-                var outStream = BaseStream; // property accessor also performs a flush
+-                outStream.WriteByte((byte)(value >> 24));
+-                outStream.WriteByte((byte)(value >> 16));
+-                outStream.WriteByte((byte)(value >> 8));
+-                outStream.WriteByte((byte)(value));
++                string purpose = purposes[i];
++
++                int purposeLength = EncodingUtil.SecureUtf8Encoding.GetByteCount(purpose);
++                purposeLengthsPool[i] = purposeLength;
++
++                var encoded7BitUIntLength = purposeLength.Measure7BitEncodedUIntLength();
++                totalPurposeLen += purposeLength /* length of actual string */ + encoded7BitUIntLength /* length of 'string length' 7-bit encoded int */;
+             }
++
++            byte[] targetArr = new byte[totalPurposeLen];
++            var targetSpan = targetArr.AsSpan();
++
++            // index 0: magic header
++            BinaryPrimitives.WriteUInt32BigEndian(targetSpan.Slice(0), MAGIC_HEADER_V0);
++            // index 4: key (skipped for now, will be populated in `GetAadForKey()`)
++            // index 4 + keySize: purposeCount
++            BinaryPrimitives.WriteInt32BigEndian(targetSpan.Slice(4 + keySize), targetLength);
++
++            int index = 4 /* MAGIC_HEADER_V0 */ + keySize + 4 /* purposeLength */; // starting from first purpose
++            for (int i = 0; i < targetLength; i++)
++            {
++                string purpose = purposes[i];
++
++                // writing `utf8ByteCount (7-bit encoded integer)`
++                // we have already calculated the lengths of the purpose strings, so just get it from the pool
++                index += targetSpan.Slice(index).Write7BitEncodedInt(purposeLengthsPool[i]);
++
++                // write the utf8text for the purpose
++                index += EncodingUtil.SecureUtf8Encoding.GetBytes(purpose, charIndex: 0, charCount: purpose.Length, bytes: targetArr, byteIndex: index);
++            }
++
++            if (lease is not null)
++            {
++                ArrayPool<int>.Shared.Return(lease);
++            }
++            Debug.Assert(index == targetArr.Length);
++
++            return targetArr;
+         }
+     }
+ 
+diff --git a/src/DataProtection/DataProtection/src/Microsoft.AspNetCore.DataProtection.csproj b/src/DataProtection/DataProtection/src/Microsoft.AspNetCore.DataProtection.csproj
+index ddf556d6668c..92fa8a526a84 100644
+--- a/src/DataProtection/DataProtection/src/Microsoft.AspNetCore.DataProtection.csproj
++++ b/src/DataProtection/DataProtection/src/Microsoft.AspNetCore.DataProtection.csproj
+@@ -21,6 +21,7 @@
+     <Compile Include="$(SharedSourceRoot)TrimmingAttributes.cs" LinkBase="Shared" />
+     <Compile Include="$(SharedSourceRoot)ThrowHelpers\ArgumentNullThrowHelper.cs" LinkBase="Shared" />
+     <Compile Include="$(SharedSourceRoot)CallerArgument\CallerArgumentExpressionAttribute.cs" LinkBase="Shared" />
++    <Compile Include="$(SharedSourceRoot)Encoding\Int7BitEncodingUtils.cs" LinkBase="Shared" />
+   </ItemGroup>
+ 
+   <ItemGroup>
+diff --git a/src/DataProtection/DataProtection/test/Microsoft.AspNetCore.DataProtection.Tests/Internal/Int7BitEncodingUtilsTests.cs b/src/DataProtection/DataProtection/test/Microsoft.AspNetCore.DataProtection.Tests/Internal/Int7BitEncodingUtilsTests.cs
+new file mode 100644
+index 000000000000..f4ba8ca0db9e
+--- /dev/null
++++ b/src/DataProtection/DataProtection/test/Microsoft.AspNetCore.DataProtection.Tests/Internal/Int7BitEncodingUtilsTests.cs
+@@ -0,0 +1,31 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++
++using System;
++using System.Collections.Generic;
++using System.Text;
++using Microsoft.AspNetCore.DataProtection.Internal;
++using Microsoft.AspNetCore.Shared;
++
++namespace Microsoft.AspNetCore.DataProtection.Tests.Internal;
++
++public class Int7BitEncodingUtilsTests
++{
++    [Theory]
++    [InlineData(0, 1)]
++    [InlineData(1, 1)]
++    [InlineData(0b0_1111111, 1)]
++    [InlineData(0b1_0000000, 2)]
++    [InlineData(0b1111111_1111111, 2)]
++    [InlineData(0b1_0000000_0000000, 3)]
++    [InlineData(0b1111111_1111111_1111111, 3)]
++    [InlineData(0b1_0000000_0000000_0000000, 4)]
++    [InlineData(0b1111111_1111111_1111111_1111111, 4)]
++    [InlineData(0b1_0000000_0000000_0000000_0000000, 5)]
++    [InlineData(uint.MaxValue, 5)]
++    public void Measure7BitEncodedUIntLength_ReturnsExceptedLength(uint value, int expectedSize)
++    {
++        var actualSize = value.Measure7BitEncodedUIntLength();
++        Assert.Equal(expectedSize, actualSize);
++    }
++}
+diff --git a/src/DataProtection/DataProtection/test/Microsoft.AspNetCore.DataProtection.Tests/KeyManagement/AdditionalAuthenticatedDataTemplateTests.cs b/src/DataProtection/DataProtection/test/Microsoft.AspNetCore.DataProtection.Tests/KeyManagement/AdditionalAuthenticatedDataTemplateTests.cs
+new file mode 100644
+index 000000000000..adbfdf9efc8b
+--- /dev/null
++++ b/src/DataProtection/DataProtection/test/Microsoft.AspNetCore.DataProtection.Tests/KeyManagement/AdditionalAuthenticatedDataTemplateTests.cs
+@@ -0,0 +1,50 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++
++using System;
++using System.Collections.Generic;
++using System.Reflection;
++using System.Runtime.CompilerServices;
++using System.Security.Claims;
++using System.Text;
++using System.Text.Unicode;
++using Microsoft.AspNetCore.DataProtection.KeyManagement;
++using Microsoft.AspNetCore.DataProtection.KeyManagement.Internal;
++using Microsoft.Extensions.Logging;
++using Microsoft.Extensions.Logging.Abstractions;
++using Moq;
++
++namespace Microsoft.AspNetCore.DataProtection.Tests.KeyManagement;
++public class AdditionalAuthenticatedDataTemplateTests
++{
++    [Fact]
++    public void AdditionalAuthenticatedDataTemplateBuildAadTemplateBytes_ReturnsSameResultAsPreviousImplementation()
++    {
++        var actualBytes = KeyRingBasedDataProtector.AdditionalAuthenticatedDataTemplate.BuildAadTemplateBytes([
++            "my sample string",
++            "©®±µ¶", // exotic unicode characters (https://en.wikipedia.org/wiki/List_of_Unicode_characters)
++            "my other sample string",
++            // more than 128 utf-8 bytes string
++            "CfDJ8H5oH_fp1QNBmvs-OWXxsVoV30hrXeI4-PI4p1VZytjsgd0DTstMdtTZbFtm2dKHvsBlDCv7TiEWKztZf8fb48pUgBgUE2SeYV3eOUXvSfNWU0D8SmHLy5KEnwKKkZKqudDhCnjQSIU7mhDliJJN1e4",
++            "."
++        ]);
++
++        // expected bytes are formed by running former code with the same input
++        // former code can be found in https://github.com/dotnet/aspnetcore/pull/59322
++        var expectedBytesInBase64 = "CfDJ8AAAAAAAAAAAAAAAAAAAAAAAAAAFEG15IHNhbXBsZSBzdHJpbmcKwqnCrsKxwrXCthZteSBvdGhlciBzYW1wbGUgc3RyaW5nmwFDZkRKOEg1b0hfZnAxUU5CbXZzLU9XWHhzVm9WMzBoclhlSTQtUEk0cDFWWnl0anNnZDBEVHN0TWR0VFpiRnRtMmRLSHZzQmxEQ3Y3VGlFV0t6dFpmOGZiNDhwVWdCZ1VFMlNlWVYzZU9VWHZTZk5XVTBEOFNtSEx5NUtFbndLS2taS3F1ZERoQ25qUVNJVTdtaERsaUpKTjFlNAEu";
++
++        var actualBytesInBase64 = Convert.ToBase64String(actualBytes);
++        Assert.Equal(expectedBytesInBase64, actualBytesInBase64);
++    }
++
++    [Fact]
++    public void AdditionalAuthenticatedDataTemplateBuildAadTemplateBytes_ThrowsOnIllegalUtf8Text()
++    {
++        Assert.Throws<EncoderFallbackException>(() =>
++        {
++            var actualBytes = KeyRingBasedDataProtector.AdditionalAuthenticatedDataTemplate.BuildAadTemplateBytes([
++                "😀"[0] + "X",
++            ]);
++        });
++    }
++}
+diff --git a/src/Shared/Encoding/Int7BitEncodingUtils.cs b/src/Shared/Encoding/Int7BitEncodingUtils.cs
+new file mode 100644
+index 000000000000..ca97096d1c17
+--- /dev/null
++++ b/src/Shared/Encoding/Int7BitEncodingUtils.cs
+@@ -0,0 +1,52 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++
++using System;
++using System.Collections.Generic;
++using System.Linq;
++using System.Text;
++using System.Threading.Tasks;
++
++namespace Microsoft.AspNetCore.Shared;
++
++internal static class Int7BitEncodingUtils
++{
++    public static int Measure7BitEncodedUIntLength(this int value)
++        => Measure7BitEncodedUIntLength((uint)value);
++
++    public static int Measure7BitEncodedUIntLength(this uint value)
++    {
++#if NET10_0_OR_GREATER
++        return ((31 - System.Numerics.BitOperations.LeadingZeroCount(value | 1)) / 7) + 1;
++#else
++        int count = 1;
++        while ((value >>= 7) != 0)
++        {
++            count++;
++        }
++        return count;
++#endif
++    }
++
++    public static int Write7BitEncodedInt(this Span<byte> target, int value)
++        => Write7BitEncodedInt(target, (uint)value);
++
++    public static int Write7BitEncodedInt(this Span<byte> target, uint uValue)
++    {
++        // Write out an int 7 bits at a time. The high bit of the byte,
++        // when on, tells reader to continue reading more bytes.
++        //
++        // Using the constants 0x7F and ~0x7F below offers smaller
++        // codegen than using the constant 0x80.
++
++        int index = 0;
++        while (uValue > 0x7Fu)
++        {
++            target[index++] = (byte)(uValue | ~0x7Fu);
++            uValue >>= 7;
++        }
++
++        target[index++] = (byte)uValue;
++        return index;
++    }
++}

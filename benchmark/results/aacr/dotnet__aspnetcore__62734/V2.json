@@ -1,0 +1,18 @@
+{
+ "results": [
+  {
+   "change_intent": "Add an upper bound check on salt length to prevent allocating excessively large byte arrays when verifying V3 password hashes.",
+   "summary": "The change introduces a reasonable maximum salt limit (8 KiB) to prevent large memory allocations from corrupted or maliciously crafted password hashes.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Identity/Extensions.Core/src/PasswordHasher.cs"
+  }
+ ],
+ "n_files": 1,
+ "input_tokens": 9290,
+ "output_tokens": 118,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 15.1,
+ "model": "gemini-3.8-flash"
+}

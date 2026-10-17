@@ -1,0 +1,181 @@
+diff --git a/.gitignore b/.gitignore
+index 4ed21627f1b..1b8418c0be0 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -198,3 +198,4 @@ custom-gcl.hash
+ !NOTICE.txt
+ 
+ !internal/fourslash/_scripts/failingTests.txt
++!internal/fourslash/_scripts/manualTests.txt
+diff --git a/internal/fourslash/_scripts/convertFourslash.mts b/internal/fourslash/_scripts/convertFourslash.mts
+index 37a01e2d3de..2b6db17629e 100644
+--- a/internal/fourslash/_scripts/convertFourslash.mts
++++ b/internal/fourslash/_scripts/convertFourslash.mts
+@@ -10,7 +10,7 @@ const stradaFourslashPath = path.resolve(import.meta.dirname, "../", "../", "../
+ let inputFileSet: Set<string> | undefined;
+ 
+ const failingTestsPath = path.join(import.meta.dirname, "failingTests.txt");
+-const helperFilePath = path.join(import.meta.dirname, "../", "tests", "util_test.go");
++const manualTestsPath = path.join(import.meta.dirname, "manualTests.txt");
+ 
+ const outputDir = path.join(import.meta.dirname, "../", "tests", "gen");
+ 
+@@ -21,6 +21,14 @@ function getFailingTests(): Set<string> {
+     return new Set(failingTestsList);
+ }
+ 
++function getManualTests(): Set<string> {
++    if (!fs.existsSync(manualTestsPath)) {
++        return new Set();
++    }
++    const manualTestsList = fs.readFileSync(manualTestsPath, "utf-8").split("\n").map(line => line.trim()).filter(line => line.length > 0);
++    return new Set(manualTestsList);
++}
++
+ export function main() {
+     const args = process.argv.slice(2);
+     const inputFilesPath = args[0];
+@@ -35,13 +43,13 @@ export function main() {
+     fs.rmSync(outputDir, { recursive: true, force: true });
+     fs.mkdirSync(outputDir, { recursive: true });
+ 
+-    parseTypeScriptFiles(getFailingTests(), stradaFourslashPath);
++    parseTypeScriptFiles(getFailingTests(), getManualTests(), stradaFourslashPath);
+     console.log(unparsedFiles.join("\n"));
+     const gofmt = which.sync("go");
+     cp.execFileSync(gofmt, ["tool", "mvdan.cc/gofumpt", "-lang=go1.24", "-w", outputDir]);
+ }
+ 
+-function parseTypeScriptFiles(failingTests: Set<string>, folder: string): void {
++function parseTypeScriptFiles(failingTests: Set<string>, manualTests: Set<string>, folder: string): void {
+     const files = fs.readdirSync(folder);
+ 
+     files.forEach(file => {
+@@ -52,9 +60,9 @@ function parseTypeScriptFiles(failingTests: Set<string>, folder: string): void {
+         }
+ 
+         if (stat.isDirectory()) {
+-            parseTypeScriptFiles(failingTests, filePath);
++            parseTypeScriptFiles(failingTests, manualTests, filePath);
+         }
+-        else if (file.endsWith(".ts")) {
++        else if (file.endsWith(".ts") && !manualTests.has(file.slice(0, -3))) {
+             const content = fs.readFileSync(filePath, "utf-8");
+             const test = parseFileContent(file, content);
+             if (test) {
+diff --git a/internal/fourslash/_scripts/failingTests.txt b/internal/fourslash/_scripts/failingTests.txt
+index c7553c5785c..39b1745ecc2 100644
+--- a/internal/fourslash/_scripts/failingTests.txt
++++ b/internal/fourslash/_scripts/failingTests.txt
+@@ -79,7 +79,6 @@ TestCompletionListFunctionMembers
+ TestCompletionListInArrowFunctionInUnclosedCallSite01
+ TestCompletionListInClassExpressionWithTypeParameter
+ TestCompletionListInClassStaticBlocks
+-TestCompletionListInClosedFunction05
+ TestCompletionListInComments
+ TestCompletionListInExtendsClause
+ TestCompletionListInImportClause01
+diff --git a/internal/fourslash/_scripts/makeManual.mts b/internal/fourslash/_scripts/makeManual.mts
+new file mode 100644
+index 00000000000..8f1893cc4e7
+--- /dev/null
++++ b/internal/fourslash/_scripts/makeManual.mts
+@@ -0,0 +1,52 @@
++import * as fs from "fs";
++import * as path from "path";
++
++const scriptsDir = import.meta.dirname;
++const manualTestsPath = path.join(scriptsDir, "manualTests.txt");
++const genDir = path.join(scriptsDir, "../", "tests", "gen");
++const manualDir = path.join(scriptsDir, "../", "tests", "manual");
++
++function main() {
++    const args = process.argv.slice(2);
++
++    if (args.length === 0) {
++        console.error("Please provide the name of the generated test file.");
++        process.exit(1);
++    }
++
++    const testName = args[0];
++    const testFileName = testName;
++    const genTestFile = path.join(genDir, testFileName + "_test.go");
++    if (!fs.existsSync(genTestFile)) {
++        console.error(`Test file not found: '${genTestFile}'. Make sure the test exists in the gen directory first.`);
++        process.exit(1);
++    }
++
++    if (!fs.existsSync(manualDir)) {
++        fs.mkdirSync(manualDir, { recursive: true });
++    }
++
++    const manualTestFile = path.join(manualDir, path.basename(genTestFile));
++    renameAndRemoveSkip(genTestFile, manualTestFile);
++
++    let manualTests: string[] = [];
++    if (fs.existsSync(manualTestsPath)) {
++        const content = fs.readFileSync(manualTestsPath, "utf-8");
++        manualTests = content.split("\n").map(line => line.trim()).filter(line => line.length > 0);
++    }
++
++    if (!manualTests.includes(testName)) {
++        manualTests.push(testName);
++        manualTests.sort();
++        fs.writeFileSync(manualTestsPath, [...manualTests, ""].join("\n"), "utf-8");
++    }
++}
++
++function renameAndRemoveSkip(genFilePath: string, manualFilePath: string) {
++    const content = fs.readFileSync(genFilePath, "utf-8");
++    const updatedContent = content.replace(/^\s*t\.Skip\(\)\s*$/m, "");
++    fs.writeFileSync(manualFilePath, updatedContent, "utf-8");
++    fs.rmSync(genFilePath);
++}
++
++main();
+diff --git a/internal/fourslash/_scripts/manualTests.txt b/internal/fourslash/_scripts/manualTests.txt
+new file mode 100644
+index 00000000000..1571b91174b
+--- /dev/null
++++ b/internal/fourslash/_scripts/manualTests.txt
+@@ -0,0 +1 @@
++completionListInClosedFunction05
+diff --git a/internal/fourslash/tests/gen/completionListInClosedFunction05_test.go b/internal/fourslash/tests/manual/completionListInClosedFunction05_test.go
+similarity index 95%
+rename from internal/fourslash/tests/gen/completionListInClosedFunction05_test.go
+rename to internal/fourslash/tests/manual/completionListInClosedFunction05_test.go
+index 33122d9ca0d..8113f4f63de 100644
+--- a/internal/fourslash/tests/gen/completionListInClosedFunction05_test.go
++++ b/internal/fourslash/tests/manual/completionListInClosedFunction05_test.go
+@@ -10,7 +10,7 @@ import (
+ 
+ func TestCompletionListInClosedFunction05(t *testing.T) {
+ 	t.Parallel()
+-	t.Skip()
++
+ 	defer testutil.RecoverAndFail(t, "Panic on fourslash test")
+ 	const content = `function foo(x: string, y: number, z: boolean) {
+     function bar(a: number, b: string = "hello", c: typeof x = "hello") {
+@@ -21,7 +21,7 @@ func TestCompletionListInClosedFunction05(t *testing.T) {
+ 	f.VerifyCompletions(t, "1", &fourslash.CompletionsExpectedList{
+ 		IsIncomplete: false,
+ 		ItemDefaults: &fourslash.CompletionsExpectedItemDefaults{
+-			CommitCharacters: &[]string{},
++			CommitCharacters: &DefaultCommitCharacters,
+ 			EditRange:        Ignored,
+ 		},
+ 		Items: &fourslash.CompletionsExpectedItems{
+diff --git a/package.json b/package.json
+index 3c349851977..62cb0463708 100644
+--- a/package.json
++++ b/package.json
+@@ -29,7 +29,8 @@
+         "extension:watch": "npm run -w _extension watch",
+         "node": "node --no-warnings --conditions @typescript/source",
+         "convertfourslash": "node --experimental-strip-types --no-warnings internal/fourslash/_scripts/convertFourslash.mts",
+-        "updatefailing": "node --experimental-strip-types --no-warnings internal/fourslash/_scripts/updateFailing.mts"
++        "updatefailing": "node --experimental-strip-types --no-warnings internal/fourslash/_scripts/updateFailing.mts",
++        "makemanual": "node --experimental-strip-types --no-warnings internal/fourslash/_scripts/makeManual.mts"
+     },
+     "workspaces": [
+         "./_extension",

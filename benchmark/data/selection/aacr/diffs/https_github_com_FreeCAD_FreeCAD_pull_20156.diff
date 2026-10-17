@@ -1,0 +1,291 @@
+diff --git a/src/Base/StackWalker.cpp b/src/Base/StackWalker.cpp
+index 0fb3b982aecc..e8a44c80a33d 100644
+--- a/src/Base/StackWalker.cpp
++++ b/src/Base/StackWalker.cpp
+@@ -92,6 +92,7 @@
+ #include <tchar.h>
+ #include <windows.h>
+ #include <new>
++#include <cassert>
+ 
+ #pragma comment(lib, "version.lib") // for "VerQueryValue"
+ 
+@@ -810,6 +811,9 @@ class StackWalkerInternal
+                     case 8:  // SymVirtual:
+                         szSymType = "Virtual";
+                         break;
++                    case NumSymTypes:                    // Not a real option, should never hit
++                        assert(false && "Unreachable");  // in C++23 use std::unreachable
++                        break;
+                 }
+             }
+             LPCSTR pdbName = Module.LoadedImageName;
+@@ -1468,7 +1472,7 @@ void StackWalker::OnLoadModule(LPCSTR img,
+     if (fileVersion == 0) {
+         _snprintf_s(buffer,
+                     maxLen,
+-                    "%s:%s (%p), size: %d (result: %d), SymType: '%s', PDB: '%s'\n",
++                    "%s:%s (%p), size: %ld (result: %ld), SymType: '%s', PDB: '%s'\n",
+                     img,
+                     mod,
+                     (LPVOID)baseAddr,
+@@ -1484,8 +1488,8 @@ void StackWalker::OnLoadModule(LPCSTR img,
+         DWORD v1 = (DWORD)((fileVersion >> 48) & 0xFFFF);
+         _snprintf_s(buffer,
+                     maxLen,
+-                    "%s:%s (%p), size: %d (result: %d), SymType: '%s', PDB: '%s', fileVersion: "
+-                    "%d.%d.%d.%d\n",
++                    "%s:%s (%p), size: %ld (result: %ld), SymType: '%s', PDB: '%s', fileVersion: "
++                    "%ld.%ld.%ld.%ld\n",
+                     img,
+                     mod,
+                     (LPVOID)baseAddr,
+@@ -1535,7 +1539,7 @@ void StackWalker::OnCallstackEntry(CallstackEntryType eType, CallstackEntry& ent
+         else {
+             _snprintf_s(buffer,
+                         maxLen,
+-                        "%s (%d): %s\n",
++                        "%s (%ld): %s\n",
+                         entry.lineFileName,
+                         entry.lineNumber,
+                         entry.name);
+@@ -1554,7 +1558,7 @@ void StackWalker::OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr)
+ #endif
+     _snprintf_s(buffer,
+                 maxLen,
+-                "ERROR: %s, GetLastError: %d (Address: %p)\n",
++                "ERROR: %s, GetLastError: %ld (Address: %p)\n",
+                 szFuncName,
+                 gle,
+                 (LPVOID)addr);
+@@ -1571,7 +1575,7 @@ void StackWalker::OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUser
+ #endif
+     _snprintf_s(buffer,
+                 maxLen,
+-                "SymInit: Symbol-SearchPath: '%s', symOptions: %d, UserName: '%s'\n",
++                "SymInit: Symbol-SearchPath: '%s', symOptions: %ld, UserName: '%s'\n",
+                 szSearchPath,
+                 symOptions,
+                 szUserName);
+@@ -1604,7 +1608,7 @@ void StackWalker::OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUser
+     if (GetVersionExA((OSVERSIONINFOA*)&ver) != FALSE) {
+         _snprintf_s(buffer,
+                     maxLen,
+-                    "OS-Version: %d.%d.%d (%s) 0x%x-0x%x\n",
++                    "OS-Version: %ld.%ld.%ld (%s) 0x%x-0x%x\n",
+                     ver.dwMajorVersion,
+                     ver.dwMinorVersion,
+                     ver.dwBuildNumber,
+diff --git a/src/Base/Tools.h b/src/Base/Tools.h
+index 22a705708f6b..f0d767ab003b 100644
+--- a/src/Base/Tools.h
++++ b/src/Base/Tools.h
+@@ -145,7 +145,7 @@ inline T toDegrees(T r)
+ 
+ inline float fromPercent(const long value)
+ {
+-    return std::roundf(value) / 100.0F;
++    return std::roundf(static_cast<float>(value)) / 100.0F;
+ }
+ 
+ inline long toPercent(float value)
+diff --git a/src/Gui/Dialogs/DlgPreferencePackManagementImp.cpp b/src/Gui/Dialogs/DlgPreferencePackManagementImp.cpp
+index e310ce0708a2..5f01f693fcd9 100644
+--- a/src/Gui/Dialogs/DlgPreferencePackManagementImp.cpp
++++ b/src/Gui/Dialogs/DlgPreferencePackManagementImp.cpp
+@@ -126,7 +126,7 @@ void DlgPreferencePackManagementImp::addTreeNode(const std::string &name, const
+             else
+                 button->setIcon(iconIsInvisible);
+             button->setToolTip(tr("Toggle visibility of built-in preference pack '%1'").arg(item->text(0)));
+-            connect(button, &QPushButton::clicked, [this, name, item]() {
++            connect(button, &QPushButton::clicked, [this, item]() {
+                 this->hideBuiltInPack(item->text(0).toStdString());
+                 });
+         break; case TreeWidgetType::USER:
+diff --git a/src/Gui/SoDatumLabel.cpp b/src/Gui/SoDatumLabel.cpp
+index 8f89e71873c8..fff3978b6f3f 100644
+--- a/src/Gui/SoDatumLabel.cpp
++++ b/src/Gui/SoDatumLabel.cpp
+@@ -1443,7 +1443,7 @@ void SoDatumLabel::drawAngle(const SbVec3f* points, float& angle, SbVec3f& textO
+     SbVec3f v0(cos(startangle+range/2),sin(startangle+range/2),0);
+ 
+     // leave some space for the text
+-    double textMargin = std::min(0.2F * std::abs(range), this->imgWidth / (2 * r));
++    double textMargin = std::min(0.2F*range,  this->imgWidth/(2*r));
+ 
+     textOffset = p0 + v0 * r;
+ 
+diff --git a/src/Gui/View3DInventor.cpp b/src/Gui/View3DInventor.cpp
+index 3238001f63c1..999eb24483ed 100644
+--- a/src/Gui/View3DInventor.cpp
++++ b/src/Gui/View3DInventor.cpp
+@@ -791,7 +791,7 @@ RayPickInfo View3DInventor::getObjInfoRay(Base::Vector3d* startvec, Base::Vector
+     vdy = dirvec->y;
+     vdz = dirvec->z;
+     // near plane clipping is required to avoid false intersections
+-    float nearClippingPlane = 0.1;
++    float nearClippingPlane = 0.1F;
+ 
+     RayPickInfo ret = {false,
+                        Base::Vector3d(),
+diff --git a/src/Gui/View3DInventorViewer.cpp b/src/Gui/View3DInventorViewer.cpp
+index eec3f6730343..36e430f215a6 100644
+--- a/src/Gui/View3DInventorViewer.cpp
++++ b/src/Gui/View3DInventorViewer.cpp
+@@ -462,9 +462,9 @@ void View3DInventorViewer::init()
+     fillLight = new SoDirectionalLight();
+     fillLight->ref();
+     fillLight->setName("filllight");
+-    fillLight->direction.setValue(-0.60, -0.35, -0.79);
+-    fillLight->intensity.setValue(0.6);
+-    fillLight->color.setValue(0.95, 0.95, 1.0);
++    fillLight->direction.setValue(-0.60F, -0.35F, -0.79F);
++    fillLight->intensity.setValue(0.6F);
++    fillLight->color.setValue(0.95F, 0.95F, 1.0F);
+     fillLight->on.setValue(false); // by default off
+ 
+     // Set up background scenegraph with image in it.
+diff --git a/src/Gui/ViewProviderPlane.cpp b/src/Gui/ViewProviderPlane.cpp
+index 42864dbc00cb..cfae77f73c58 100644
+--- a/src/Gui/ViewProviderPlane.cpp
++++ b/src/Gui/ViewProviderPlane.cpp
+@@ -135,7 +135,7 @@ void ViewProviderPlane::attach(App::DocumentObject * obj) {
+     faceSeparator->addChild(faceSet);
+ 
+     auto textTranslation = new SoTranslation();
+-    SbVec3f centeringVec = size * SbVec3f(0.36, 0.49, 0);  // NOLINT
++    SbVec3f centeringVec = size * SbVec3f(0.36F, 0.49F, 0.0F);  // NOLINT
+     textTranslation->translation.setValue(centeringVec);
+     sep->addChild(textTranslation);
+ 
+diff --git a/src/Mod/CAM/libarea/pyarea.cpp b/src/Mod/CAM/libarea/pyarea.cpp
+index 50aaabd64b3b..d95e50bc729d 100644
+--- a/src/Mod/CAM/libarea/pyarea.cpp
++++ b/src/Mod/CAM/libarea/pyarea.cpp
+@@ -48,7 +48,7 @@ static void print_curve(const CCurve& c)
+ #if defined SIZEOF_SIZE_T && SIZEOF_SIZE_T == 4
+     printf("number of vertices = %d\n", nvertices);
+ #elif defined(_WIN32)
+-    printf("number of vertices = %Iu\n", nvertices);
++    printf("number of vertices = %zu\n", nvertices);
+ #else
+     printf("number of vertices = %lu\n", nvertices);
+ #endif
+diff --git a/src/Mod/Fem/App/FemVTKTools.cpp b/src/Mod/Fem/App/FemVTKTools.cpp
+index fabd68b3d8cc..1bfe564705cb 100644
+--- a/src/Mod/Fem/App/FemVTKTools.cpp
++++ b/src/Mod/Fem/App/FemVTKTools.cpp
+@@ -1485,7 +1485,7 @@ void readResults(std::ifstream& ifstr,
+     std::vector<double> scaValues;
+     std::vector<int> nodes;
+     int countNodes = 0;
+-    int countScaPos;
++    size_t countScaPos;
+     // result block could have both vector/matrix and scalar components
+     // save each scalars entity in his own array
+     auto scalarPos = identifyScalarEntities(entityTypes);
+@@ -1542,7 +1542,7 @@ void readResults(std::ifstream& ifstr,
+                     }
+                 }
+             }
+-            catch (const std::out_of_range& ex) {
++            catch (const std::out_of_range&) {
+                 Base::Console().Warning("Invalid node: %d\n", node);
+             }
+             ++countNodes;
+diff --git a/src/Mod/Mesh/App/Core/MeshKernel.cpp b/src/Mod/Mesh/App/Core/MeshKernel.cpp
+index 72eadd086a12..5d5822106446 100644
+--- a/src/Mod/Mesh/App/Core/MeshKernel.cpp
++++ b/src/Mod/Mesh/App/Core/MeshKernel.cpp
+@@ -194,7 +194,7 @@ unsigned long MeshKernel::AddFacets(const std::vector<MeshFacet>& rclFAry, bool
+ {
+     // Build map of edges of the referencing facets we want to append
+ #ifdef FC_DEBUG
+-    unsigned long countPoints = CountPoints();
++    [[maybe_unused]] unsigned long countPoints = CountPoints();
+ #endif
+ 
+     // if the manifold check shouldn't be done then just add all faces
+diff --git a/src/Mod/Spreadsheet/App/PropertySheet.cpp b/src/Mod/Spreadsheet/App/PropertySheet.cpp
+index d144c4652d94..211fd79d1cc0 100644
+--- a/src/Mod/Spreadsheet/App/PropertySheet.cpp
++++ b/src/Mod/Spreadsheet/App/PropertySheet.cpp
+@@ -2300,7 +2300,7 @@ void PropertySheet::getLinksTo(std::vector<App::ObjectIdentifier>& identifiers,
+             const auto [docObj, depsList] = *it;
+             for (auto& [depName, paths] : depsList) {
+                 if (!subname) {
+-                    identifiers.emplace_back(owner, cellName.toString().c_str());
++                    identifiers.emplace_back(owner, cellName.toString());
+                     break;
+                 }
+                 if (std::any_of(paths.begin(),
+@@ -2314,7 +2314,7 @@ void PropertySheet::getLinksTo(std::vector<App::ObjectIdentifier>& identifiers,
+                                     return (sobjT.getSubObject() == subObject
+                                             && sobjT.getOldElementName() == subElement);
+                                 })) {
+-                    identifiers.emplace_back(owner, cellName.toString().c_str());
++                    identifiers.emplace_back(owner, cellName.toString());
+                 }
+             }
+         }
+diff --git a/src/Mod/TechDraw/App/Geometry.cpp b/src/Mod/TechDraw/App/Geometry.cpp
+index eb0ca42a5bd2..8519cf623f95 100644
+--- a/src/Mod/TechDraw/App/Geometry.cpp
++++ b/src/Mod/TechDraw/App/Geometry.cpp
+@@ -1715,7 +1715,7 @@ TopoDS_Face GeometryUtils::makePerforatedFace(FacePtr bigCheese,  const std::vec
+     try {
+         faceShape = Part::FaceMakerCheese::makeFace(cheeseIngredients);
+     }
+-    catch (const Standard_Failure &e) {
++    catch (const Standard_Failure&) {
+         Base::Console().Warning("Area - could not make holes in face\n");
+         return flippedFace;
+     }
+diff --git a/src/Mod/TechDraw/Gui/DimensionValidators.cpp b/src/Mod/TechDraw/Gui/DimensionValidators.cpp
+index e1d29c6cb66c..c277f6b1e6a8 100644
+--- a/src/Mod/TechDraw/Gui/DimensionValidators.cpp
++++ b/src/Mod/TechDraw/Gui/DimensionValidators.cpp
+@@ -744,6 +744,8 @@ long int TechDraw::mapGeometryTypeToDimType(long int dimType, DimensionGeometry
+                 return DrawViewDimension::Angle;
+             case DimensionGeometry::isAngle3Pt:
+                 return DrawViewDimension::Angle3Pt;
++            default:
++                break;  // For all other cases, return dimType
+         }
+     } else if (geometry2d != DimensionGeometry::isViewReference) {
+         switch (geometry2d) {
+@@ -757,6 +759,8 @@ long int TechDraw::mapGeometryTypeToDimType(long int dimType, DimensionGeometry
+                 return DrawViewDimension::Angle;
+             case DimensionGeometry::isAngle3Pt:
+                 return DrawViewDimension::Angle3Pt;
++            default:
++                break;  // For all other cases, return dimType
+         }
+     }
+     return dimType;
+diff --git a/tests/src/Base/Reader.cpp b/tests/src/Base/Reader.cpp
+index b692bf5979a9..17d6d1ec4f11 100644
+--- a/tests/src/Base/Reader.cpp
++++ b/tests/src/Base/Reader.cpp
+@@ -23,7 +23,7 @@ static std::string random_string(size_t length)
+ 
+     std::random_device rd;
+     std::mt19937 gen(rd());
+-    std::uniform_int_distribution<> dis(0, digits.size() - 1);
++    std::uniform_int_distribution<> dis(0, static_cast<int>(digits.size()) - 1);
+ 
+     std::string result;
+     for (size_t i = 0; i < length; ++i) {
+diff --git a/tests/src/Mod/Part/App/FuzzyBoolean.cpp b/tests/src/Mod/Part/App/FuzzyBoolean.cpp
+index 7a3192f50da8..262bf28bdf51 100644
+--- a/tests/src/Mod/Part/App/FuzzyBoolean.cpp
++++ b/tests/src/Mod/Part/App/FuzzyBoolean.cpp
+@@ -114,7 +114,7 @@ TEST_F(FuzzyBooleanTest, testFailsTooSmallFuzzy)
+     double oldFuzzy = Part::FuzzyHelper::getBooleanFuzzy();
+     Part::FuzzyHelper::setBooleanFuzzy(0.01);
+     _fuse->execute();
+-    EXPECT_FLOAT_EQ(Part::FuzzyHelper::getBooleanFuzzy(), 0.01);
++    EXPECT_DOUBLE_EQ(Part::FuzzyHelper::getBooleanFuzzy(), 0.01);
+     Part::FuzzyHelper::setBooleanFuzzy(oldFuzzy);
+ 
+     // Verify

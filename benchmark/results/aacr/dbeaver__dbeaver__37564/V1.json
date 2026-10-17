@@ -1,0 +1,67 @@
+{
+ "results": [
+  {
+   "filename": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java",
+   "summary": "在 DBNResource 的 getAdapter 中新增 InputStream 適配支援，但存在例外處理不符合 IAdaptable 慣例及日誌遺失 stacktrace 的問題。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 428,
+     "end_line": 428,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在 IAdaptable.getAdapter() 中拋出 RuntimeException 違反了 Eclipse Adaptable 機制的合約慣例。當無法適配時應回傳 null，直接拋出 unchecked exception 可能會導致外部呼叫端在查詢 adapter 時未捕捉而崩潰。"
+    },
+    {
+     "start_line": 427,
+     "end_line": 427,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "log.error() 未傳入例外物件 e，導致錯誤 stacktrace 遺失，不利於問題排查。"
+    },
+    {
+     "start_line": 38,
+     "end_line": 38,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "不建議使用萬用字元 import (java.nio.file.*)。在該檔案中實際上只使用了 Path。"
+    }
+   ]
+  },
+  {
+   "filename": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+   "summary": "新增了透過 InputStream 複製節點資料的支援，但存在 InputStream 資源未關閉與潛在的路徑遍歷風險。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 293,
+     "end_line": 293,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "獲取的 `InputStream` 未進行關閉。根據 JDK 規範，`Files.copy(InputStream, Path, ...)` 讀取完畢後並不會主動關閉傳入的 InputStream，可能導致檔案鎖定或資源洩漏。"
+    },
+    {
+     "start_line": 364,
+     "end_line": 364,
+     "category": "security",
+     "confidence": "n/a",
+     "comment": "直接使用 `node.getNodeDisplayName()` 透過 `folder.resolve(str)` 解析目標路徑，若節點名稱包含路徑遍歷字元（如 `../`），可能導致寫入預期目錄之外的路徑。"
+    },
+    {
+     "start_line": 363,
+     "end_line": 363,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "方法參數名稱 `str` 語意不明確。"
+    }
+   ]
+  }
+ ],
+ "n_files": 2,
+ "input_tokens": 6584,
+ "output_tokens": 678,
+ "calls": 2,
+ "tool_calls": null,
+ "elapsed_s": 21.7,
+ "model": "gemini-3.8-flash"
+}

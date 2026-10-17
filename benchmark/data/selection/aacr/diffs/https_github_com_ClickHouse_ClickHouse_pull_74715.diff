@@ -1,0 +1,349 @@
+diff --git a/src/Storages/ObjectStorageQueue/ObjectStorageQueueIFileMetadata.cpp b/src/Storages/ObjectStorageQueue/ObjectStorageQueueIFileMetadata.cpp
+index 3d6f064810cd..f5d499d044eb 100644
+--- a/src/Storages/ObjectStorageQueue/ObjectStorageQueueIFileMetadata.cpp
++++ b/src/Storages/ObjectStorageQueue/ObjectStorageQueueIFileMetadata.cpp
+@@ -121,11 +121,13 @@ ObjectStorageQueueIFileMetadata::ObjectStorageQueueIFileMetadata(
+     const std::string & failed_node_path_,
+     FileStatusPtr file_status_,
+     size_t max_loading_retries_,
++    std::atomic<size_t> & metadata_ref_count_,
+     LoggerPtr log_)
+     : path(path_)
+     , node_name(getNodeName(path_))
+     , file_status(file_status_)
+     , max_loading_retries(max_loading_retries_)
++    , metadata_ref_count(metadata_ref_count_)
+     , processing_node_path(processing_node_path_)
+     , processed_node_path(processed_node_path_)
+     , failed_node_path(failed_node_path_)
+@@ -259,15 +261,36 @@ bool ObjectStorageQueueIFileMetadata::trySetProcessing()
+     return success;
+ }
+ 
+-ObjectStorageQueueIFileMetadata::SetProcessingResponseIndexes
++std::optional<ObjectStorageQueueIFileMetadata::SetProcessingResponseIndexes>
+ ObjectStorageQueueIFileMetadata::prepareSetProcessingRequests(Coordination::Requests & requests)
+ {
+-    [[maybe_unused]] auto state = file_status->state.load();
+-    chassert (!(state == FileStatus::State::Processing
+-        || state == FileStatus::State::Processed
+-        || (state == FileStatus::State::Failed
+-            && file_status->retries
+-            && file_status->retries >= max_loading_retries)), fmt::format("Oops something went wrong: {}", state));
++    if (metadata_ref_count.load() > 1)
++    {
++        std::unique_lock processing_lock(file_status->processing_lock, std::defer_lock);
++        if (!processing_lock.try_lock())
++        {
++            /// This is possible in case on the same server
++            /// there are more than one S3(Azure)Queue table processing the same keeper path.
++            LOG_TEST(log, "File {} is being processed on this server by another table on this server", path);
++            return std::nullopt;
++        }
++
++        auto state = file_status->state.load();
++        if (state == FileStatus::State::Processing
++            || state == FileStatus::State::Processed
++            || (state == FileStatus::State::Failed
++                && file_status->retries
++                && file_status->retries >= max_loading_retries))
++        {
++            LOG_TEST(log, "File {} has non-processable state `{}` (retries: {}/{})",
++                    path, state, file_status->retries, max_loading_retries);
++
++            /// This is possible in case on the same server
++            /// there are more than one S3(Azure)Queue table processing the same keeper path.
++            LOG_TEST(log, "File {} is being processed on this server by another table on this server", path);
++            return std::nullopt;
++        }
++    }
+ 
+     return prepareProcessingRequestsImpl(requests);
+ }
+diff --git a/src/Storages/ObjectStorageQueue/ObjectStorageQueueIFileMetadata.h b/src/Storages/ObjectStorageQueue/ObjectStorageQueueIFileMetadata.h
+index fe5f1f0c9eaa..a970e1422b60 100644
+--- a/src/Storages/ObjectStorageQueue/ObjectStorageQueueIFileMetadata.h
++++ b/src/Storages/ObjectStorageQueue/ObjectStorageQueueIFileMetadata.h
+@@ -56,6 +56,7 @@ class ObjectStorageQueueIFileMetadata
+         const std::string & failed_node_path_,
+         FileStatusPtr file_status_,
+         size_t max_loading_retries_,
++        std::atomic<size_t> & metadata_ref_count_,
+         LoggerPtr log_);
+ 
+     virtual ~ObjectStorageQueueIFileMetadata();
+@@ -94,7 +95,7 @@ class ObjectStorageQueueIFileMetadata
+         size_t create_processing_node_idx = 0;
+         size_t set_processing_id_node_idx = 0;
+     };
+-    SetProcessingResponseIndexes prepareSetProcessingRequests(Coordination::Requests & requests);
++    std::optional<SetProcessingResponseIndexes> prepareSetProcessingRequests(Coordination::Requests & requests);
+     void prepareResetProcessingRequests(Coordination::Requests & requests);
+ 
+     /// Do some work after prepared requests to set file as Processed succeeded.
+@@ -139,6 +140,7 @@ class ObjectStorageQueueIFileMetadata
+     const std::string node_name;
+     const FileStatusPtr file_status;
+     const size_t max_loading_retries;
++    const std::atomic<size_t> & metadata_ref_count;
+ 
+     const std::string processing_node_path;
+     const std::string processed_node_path;
+diff --git a/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadata.cpp b/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadata.cpp
+index c9f02f5354b6..b0b27d44a7b8 100644
+--- a/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadata.cpp
++++ b/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadata.cpp
+@@ -179,6 +179,7 @@ ObjectStorageQueueMetadata::FileMetadataPtr ObjectStorageQueueMetadata::getFileM
+     const std::string & path,
+     ObjectStorageQueueOrderedFileMetadata::BucketInfoPtr bucket_info)
+ {
++    chassert(metadata_ref_count);
+     auto file_status = local_file_statuses->get(path, /* create */true);
+     switch (mode)
+     {
+@@ -190,6 +191,7 @@ ObjectStorageQueueMetadata::FileMetadataPtr ObjectStorageQueueMetadata::getFileM
+                 bucket_info,
+                 buckets_num,
+                 table_metadata.loading_retries,
++                *metadata_ref_count,
+                 log);
+         case ObjectStorageQueueMode::UNORDERED:
+             return std::make_shared<ObjectStorageQueueUnorderedFileMetadata>(
+@@ -197,6 +199,7 @@ ObjectStorageQueueMetadata::FileMetadataPtr ObjectStorageQueueMetadata::getFileM
+                 path,
+                 file_status,
+                 table_metadata.loading_retries,
++                *metadata_ref_count,
+                 log);
+     }
+ }
+@@ -444,6 +447,7 @@ ObjectStorageQueueTableMetadata ObjectStorageQueueMetadata::syncWithKeeper(
+ 
+         if (!table_metadata.last_processed_path.empty())
+         {
++            std::atomic<size_t> noop = 0;
+             ObjectStorageQueueOrderedFileMetadata(
+                 zookeeper_path,
+                 table_metadata.last_processed_path,
+@@ -451,6 +455,7 @@ ObjectStorageQueueTableMetadata ObjectStorageQueueMetadata::syncWithKeeper(
+                 /* bucket_info */nullptr,
+                 buckets_num,
+                 table_metadata.loading_retries,
++                noop,
+                 log).prepareProcessedAtStartRequests(requests, zookeeper);
+         }
+ 
+diff --git a/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadata.h b/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadata.h
+index 51417cb5a673..9ab4499fac65 100644
+--- a/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadata.h
++++ b/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadata.h
+@@ -141,6 +141,9 @@ class ObjectStorageQueueMetadata
+     ObjectStorageQueueOrderedFileMetadata::BucketHolderPtr
+     tryAcquireBucket(const Bucket & bucket, const Processor & processor);
+ 
++    /// Set local ref count for metadata.
++    void setMetadataRefCount(std::atomic<size_t> & ref_count_) { chassert(!metadata_ref_count); metadata_ref_count = &ref_count_; }
++
+ private:
+     void cleanupThreadFunc();
+     void cleanupThreadFuncImpl();
+@@ -186,6 +189,10 @@ class ObjectStorageQueueMetadata
+     std::shared_ptr<ServersHashRing> active_servers_hash_ring;
+     /// Guards `active_servers` and `active_servers_hash_ring`.
+     mutable SharedMutex active_servers_mutex;
++
++    /// Number of S3(Azure)Queue tables on the same
++    /// clickhouse server instance referencing the same metadata object.
++    std::atomic<size_t> * metadata_ref_count = nullptr;
+ };
+ 
+ using ObjectStorageQueueMetadataPtr = std::unique_ptr<ObjectStorageQueueMetadata>;
+diff --git a/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadataFactory.cpp b/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadataFactory.cpp
+index b347a9f619d3..88ae077a3654 100644
+--- a/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadataFactory.cpp
++++ b/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadataFactory.cpp
+@@ -24,6 +24,7 @@ ObjectStorageQueueMetadataFactory::FilesMetadataPtr ObjectStorageQueueMetadataFa
+     if (it == metadata_by_path.end())
+     {
+         it = metadata_by_path.emplace(zookeeper_path, std::move(metadata)).first;
++        it->second.metadata->setMetadataRefCount(*it->second.ref_count);
+     }
+     else
+     {
+@@ -34,7 +35,7 @@ ObjectStorageQueueMetadataFactory::FilesMetadataPtr ObjectStorageQueueMetadataFa
+     }
+ 
+     it->second.metadata->registerIfNot(storage_id, false);
+-    it->second.ref_count += 1;
++    *it->second.ref_count += 1;
+     return it->second.metadata;
+ }
+ 
+@@ -46,7 +47,7 @@ void ObjectStorageQueueMetadataFactory::remove(const std::string & zookeeper_pat
+     if (it == metadata_by_path.end())
+         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Metadata with zookeeper path {} does not exist", zookeeper_path);
+ 
+-    it->second.ref_count -= 1;
++    *it->second.ref_count -= 1;
+ 
+     size_t registry_size;
+     try
+diff --git a/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadataFactory.h b/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadataFactory.h
+index 18da1d2f6f44..abd4bddb05e7 100644
+--- a/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadataFactory.h
++++ b/src/Storages/ObjectStorageQueue/ObjectStorageQueueMetadataFactory.h
+@@ -26,7 +26,7 @@ class ObjectStorageQueueMetadataFactory final : private boost::noncopyable
+     {
+         explicit MetadataWithRefCount(std::shared_ptr<ObjectStorageQueueMetadata> metadata_) : metadata(metadata_) {}
+         std::shared_ptr<ObjectStorageQueueMetadata> metadata;
+-        size_t ref_count = 0;
++        std::unique_ptr<std::atomic<size_t>> ref_count = std::make_unique<std::atomic<size_t>>(0);
+     };
+     using MetadataByPath = std::unordered_map<std::string, MetadataWithRefCount>;
+ 
+diff --git a/src/Storages/ObjectStorageQueue/ObjectStorageQueueOrderedFileMetadata.cpp b/src/Storages/ObjectStorageQueue/ObjectStorageQueueOrderedFileMetadata.cpp
+index 1bdcc5fdeb7b..451ed3f2235f 100644
+--- a/src/Storages/ObjectStorageQueue/ObjectStorageQueueOrderedFileMetadata.cpp
++++ b/src/Storages/ObjectStorageQueue/ObjectStorageQueueOrderedFileMetadata.cpp
+@@ -122,6 +122,7 @@ ObjectStorageQueueOrderedFileMetadata::ObjectStorageQueueOrderedFileMetadata(
+     BucketInfoPtr bucket_info_,
+     size_t buckets_num_,
+     size_t max_loading_retries_,
++    std::atomic<size_t> & metadata_ref_count_,
+     LoggerPtr log_)
+     : ObjectStorageQueueIFileMetadata(
+         path_,
+@@ -130,6 +131,7 @@ ObjectStorageQueueOrderedFileMetadata::ObjectStorageQueueOrderedFileMetadata(
+         /* failed_node_path */zk_path_ / "failed" / getNodeName(path_),
+         file_status_,
+         max_loading_retries_,
++        metadata_ref_count_,
+         log_)
+     , buckets_num(buckets_num_)
+     , zk_path(zk_path_)
+diff --git a/src/Storages/ObjectStorageQueue/ObjectStorageQueueOrderedFileMetadata.h b/src/Storages/ObjectStorageQueue/ObjectStorageQueueOrderedFileMetadata.h
+index 6520ddc25075..46875a1d6a62 100644
+--- a/src/Storages/ObjectStorageQueue/ObjectStorageQueueOrderedFileMetadata.h
++++ b/src/Storages/ObjectStorageQueue/ObjectStorageQueueOrderedFileMetadata.h
+@@ -30,6 +30,7 @@ class ObjectStorageQueueOrderedFileMetadata : public ObjectStorageQueueIFileMeta
+         BucketInfoPtr bucket_info_,
+         size_t buckets_num_,
+         size_t max_loading_retries_,
++        std::atomic<size_t> & metadata_ref_count_,
+         LoggerPtr log_);
+ 
+     struct BucketHolder;
+diff --git a/src/Storages/ObjectStorageQueue/ObjectStorageQueueSource.cpp b/src/Storages/ObjectStorageQueue/ObjectStorageQueueSource.cpp
+index ef6ce44922f6..1f3a9a012fc5 100644
+--- a/src/Storages/ObjectStorageQueue/ObjectStorageQueueSource.cpp
++++ b/src/Storages/ObjectStorageQueue/ObjectStorageQueueSource.cpp
+@@ -148,6 +148,8 @@ ObjectStorageQueueSource::FileIterator::next()
+                 return {};
+             }
+ 
++            LOG_TEST(log, "Received batch of size: {}", result->size());
++
+             new_batch = std::move(result.value());
+             for (auto it = new_batch.begin(); it != new_batch.end();)
+             {
+@@ -187,13 +189,24 @@ ObjectStorageQueueSource::FileIterator::next()
+                 result_indexes.resize(new_batch.size());
+ 
+                 Coordination::Requests requests;
++                size_t num_successful_objects = 0;
+                 for (size_t i = 0; i < new_batch.size(); ++i)
+                 {
+                     const auto & object = new_batch[i];
+                     file_metadatas[i] = metadata->getFileMetadata(
+                         object->relative_path,
+                         /* bucket_info */{}); /// No buckets for Unordered mode.
+-                    result_indexes[i] = file_metadatas[i]->prepareSetProcessingRequests(requests);
++
++                    auto set_processing_result = file_metadatas[i]->prepareSetProcessingRequests(requests);
++                    if (set_processing_result.has_value())
++                    {
++                        result_indexes[i] = set_processing_result.value();
++                        ++num_successful_objects;
++                    }
++                    else
++                    {
++                        new_batch[i] = nullptr;
++                    }
+                 }
+ 
+                 Coordination::Responses responses;
+@@ -204,6 +217,9 @@ ObjectStorageQueueSource::FileIterator::next()
+                     LOG_TEST(log, "Successfully set {} files as processing", new_batch.size());
+                     for (size_t i = 0; i < new_batch.size(); ++i)
+                     {
++                        if (!new_batch[i])
++                            continue;
++
+                         const auto & response_indexes = result_indexes[i];
+                         const auto & set_response = dynamic_cast<const Coordination::SetResponse &>(
+                             *responses[response_indexes.set_processing_id_node_idx].get());
+@@ -220,6 +236,19 @@ ObjectStorageQueueSource::FileIterator::next()
+ 
+                     file_metadatas.clear();
+                 }
++
++                if (num_successful_objects != new_batch.size())
++                {
++                    Source::ObjectInfos new_batch_copy;
++                    new_batch_copy.reserve(num_successful_objects);
++
++                    for (auto & object : new_batch)
++                    {
++                        if (object)
++                            new_batch_copy.push_back(std::move(object));
++                    }
++                    new_batch = std::move(new_batch_copy);
++                }
+             }
+         }
+ 
+diff --git a/src/Storages/ObjectStorageQueue/ObjectStorageQueueUnorderedFileMetadata.cpp b/src/Storages/ObjectStorageQueue/ObjectStorageQueueUnorderedFileMetadata.cpp
+index e3c3a4cca70c..c56b17d406d0 100644
+--- a/src/Storages/ObjectStorageQueue/ObjectStorageQueueUnorderedFileMetadata.cpp
++++ b/src/Storages/ObjectStorageQueue/ObjectStorageQueueUnorderedFileMetadata.cpp
+@@ -23,6 +23,7 @@ ObjectStorageQueueUnorderedFileMetadata::ObjectStorageQueueUnorderedFileMetadata
+     const std::string & path_,
+     FileStatusPtr file_status_,
+     size_t max_loading_retries_,
++    std::atomic<size_t> & metadata_ref_count_,
+     LoggerPtr log_)
+     : ObjectStorageQueueIFileMetadata(
+         path_,
+@@ -31,6 +32,7 @@ ObjectStorageQueueUnorderedFileMetadata::ObjectStorageQueueUnorderedFileMetadata
+         /* failed_node_path */zk_path / "failed" / getNodeName(path_),
+         file_status_,
+         max_loading_retries_,
++        metadata_ref_count_,
+         log_)
+ {
+ }
+diff --git a/src/Storages/ObjectStorageQueue/ObjectStorageQueueUnorderedFileMetadata.h b/src/Storages/ObjectStorageQueue/ObjectStorageQueueUnorderedFileMetadata.h
+index 9f75af9bb59e..bdd7ab46dea3 100644
+--- a/src/Storages/ObjectStorageQueue/ObjectStorageQueueUnorderedFileMetadata.h
++++ b/src/Storages/ObjectStorageQueue/ObjectStorageQueueUnorderedFileMetadata.h
+@@ -16,6 +16,7 @@ class ObjectStorageQueueUnorderedFileMetadata : public ObjectStorageQueueIFileMe
+         const std::string & path_,
+         FileStatusPtr file_status_,
+         size_t max_loading_retries_,
++        std::atomic<size_t> & metadata_ref_count_,
+         LoggerPtr log_);
+ 
+     static std::vector<std::string> getMetadataPaths() { return {"processed", "failed", "processing"}; }
+diff --git a/tests/integration/test_storage_s3_queue/test.py b/tests/integration/test_storage_s3_queue/test.py
+index 81339d25d4ac..4f43224b938b 100644
+--- a/tests/integration/test_storage_s3_queue/test.py
++++ b/tests/integration/test_storage_s3_queue/test.py
+@@ -732,7 +732,7 @@ def test_streaming_to_many_views(started_cluster, mode):
+     keeper_path = f"/clickhouse/test_{table_name}_{generate_random_string()}"
+     files_path = f"{table_name}_data"
+ 
+-    for i in range(3):
++    for i in range(10):
+         table = f"{table_name}_{i + 1}"
+         create_table(
+             started_cluster,

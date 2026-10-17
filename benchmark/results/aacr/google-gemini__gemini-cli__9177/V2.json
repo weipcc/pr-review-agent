@@ -1,0 +1,47 @@
+{
+ "results": [
+  {
+   "change_intent": "Add an integration test verifying local extension installation, updating, listing, and uninstallation.",
+   "summary": "The test tests the extension lifecycle but fails to clean up or reset state if any assertion or command throws before reaching cleanup.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 23,
+     "end_line": 53,
+     "category": "bug",
+     "confidence": "medium",
+     "evidence": "test('installs a local extension, verifies a command, and updates it', async () => {\n  rig.setup('extension install test');\n  const testServerPath = join(rig.testDir!, 'gemini-extension.json');\n  writeFileSync(testServerPath, extension);\n  try {\n    await rig.runCommand(['extensions', 'uninstall', 'test-extension']);\n  } catch {\n    /* empty */\n  }\n\n  const result = await rig.runCommand(\n    ['extensions', 'install', `--path=${rig.testDir!}`],\n    { stdin: 'y\n' },\n  );\n  expect(result).toContain('test-extension');\n\n  const listResult = await rig.runCommand(['extensions', 'list']);\n  expect(listResult).toContain('test-extension');\n  writeFileSync(testServerPath, extensionUpdate);\n  const updateResult = await rig.runCommand([\n    'extensions',\n    'update',\n    `test-extension`,\n  ]);\n  expect(updateResult).toContain('0.0.2');\n\n  await rig.runCommand(['extensions', 'uninstall', 'test-extension']);\n\n  await rig.cleanup();\n  rmSync(rig.testDir!, { recursive: true, force: true });\n});",
+     "comment": "If any assertion or `runCommand` throws an error during the test run, `rig.cleanup()` and `rmSync` will not execute, leaving residual test files and potentially leaving the extension installed in user configuration for subsequent test runs.",
+     "suggestion": "Wrap the test execution body in a `try...finally` block (or use Vitest's `afterEach` hook) to ensure `rig.cleanup()` and directory removal always run even upon failure.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "integration-tests/extensions-install.test.ts"
+  },
+  {
+   "change_intent": "Add a runCommand helper method to TestRig supporting stdin input for testing CLI subcommands.",
+   "summary": "Added runCommand helper method; error handling on spawn and stdin could be hardened against unhandled errors.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 315,
+     "end_line": 326,
+     "category": "bug",
+     "confidence": "medium",
+     "evidence": "    const child = spawn('node', commandArgs, {\n      cwd: this.testDir!,\n      stdio: 'pipe',\n    });\n\n    let stdout = '';\n    let stderr = '';\n\n    if (options.stdin) {\n      child.stdin!.write(options.stdin);\n      child.stdin!.end();\n    }",
+     "comment": "The spawned child process does not register an 'error' event listener, and writing to child.stdin without error handling can throw an uncaught EPIPE error if the child process exits before stdin is written.",
+     "suggestion": "Listen to the 'error' event on `child` to reject the promise, and handle potential errors when writing to `child.stdin`.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "integration-tests/test-helper.ts"
+  }
+ ],
+ "n_files": 2,
+ "input_tokens": 6770,
+ "output_tokens": 775,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 7.9,
+ "model": "gemini-3.8-flash"
+}

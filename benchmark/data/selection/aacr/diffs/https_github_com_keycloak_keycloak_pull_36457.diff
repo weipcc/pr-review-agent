@@ -1,0 +1,314 @@
+diff --git a/model/storage-services/src/main/java/org/keycloak/exportimport/dir/DirImportProviderFactory.java b/model/storage-services/src/main/java/org/keycloak/exportimport/dir/DirImportProviderFactory.java
+index 2f664e0e8e81..2325046eb629 100755
+--- a/model/storage-services/src/main/java/org/keycloak/exportimport/dir/DirImportProviderFactory.java
++++ b/model/storage-services/src/main/java/org/keycloak/exportimport/dir/DirImportProviderFactory.java
+@@ -28,6 +28,7 @@
+ import org.keycloak.provider.ProviderConfigurationBuilder;
+ 
+ import java.util.List;
++import java.util.Map;
+ 
+ import static org.keycloak.exportimport.ExportImportConfig.DEFAULT_STRATEGY;
+ 
+@@ -45,10 +46,10 @@ public class DirImportProviderFactory implements ImportProviderFactory {
+     private Config.Scope config;
+ 
+     @Override
+-    public ImportProvider create(KeycloakSession session) {
++    public ImportProvider create(KeycloakSession session, Map<String, String> overrides) {
+         Strategy strategy = Enum.valueOf(Strategy.class, System.getProperty(ExportImportConfig.STRATEGY, config.get(STRATEGY, DEFAULT_STRATEGY.toString())));
+         String realmName = System.getProperty(ExportImportConfig.REALM_NAME, config.get(REALM_NAME));
+-        String dir = System.getProperty(ExportImportConfig.DIR, config.get(DIR));
++        String dir = overrides.getOrDefault(ExportImportConfig.DIR, System.getProperty(ExportImportConfig.DIR, config.get(DIR)));
+         return new DirImportProvider(session.getKeycloakSessionFactory(), strategy)
+                 .withDir(dir)
+                 .withRealmName(realmName);
+@@ -73,6 +74,7 @@ public String getId() {
+         return PROVIDER_ID;
+     }
+ 
++    @Override
+     public List<ProviderConfigProperty> getConfigMetadata() {
+         return ProviderConfigurationBuilder.create()
+                 .property()
+diff --git a/model/storage-services/src/main/java/org/keycloak/exportimport/singlefile/SingleFileImportProviderFactory.java b/model/storage-services/src/main/java/org/keycloak/exportimport/singlefile/SingleFileImportProviderFactory.java
+index 79e7f45fe121..792cb8a92feb 100755
+--- a/model/storage-services/src/main/java/org/keycloak/exportimport/singlefile/SingleFileImportProviderFactory.java
++++ b/model/storage-services/src/main/java/org/keycloak/exportimport/singlefile/SingleFileImportProviderFactory.java
+@@ -29,6 +29,7 @@
+ 
+ import java.io.File;
+ import java.util.List;
++import java.util.Map;
+ 
+ import static org.keycloak.exportimport.ExportImportConfig.DEFAULT_STRATEGY;
+ 
+@@ -47,9 +48,9 @@ public class SingleFileImportProviderFactory implements ImportProviderFactory {
+     private Config.Scope config;
+ 
+     @Override
+-    public ImportProvider create(KeycloakSession session) {
++    public ImportProvider create(KeycloakSession session, Map<String, String> overrides) {
+         Strategy strategy = Enum.valueOf(Strategy.class, System.getProperty(ExportImportConfig.STRATEGY, config.get(STRATEGY, DEFAULT_STRATEGY.toString())));
+-        String fileName = System.getProperty(ExportImportConfig.FILE, config.get(FILE));
++        String fileName = overrides.getOrDefault(ExportImportConfig.FILE, System.getProperty(ExportImportConfig.FILE, config.get(FILE)));
+         if (fileName == null) {
+             throw new IllegalArgumentException("Property " + FILE + " needs to be provided!");
+         }
+@@ -75,6 +76,7 @@ public String getId() {
+         return PROVIDER_ID;
+     }
+ 
++    @Override
+     public List<ProviderConfigProperty> getConfigMetadata() {
+         return ProviderConfigurationBuilder.create()
+                 .property()
+diff --git a/server-spi-private/src/main/java/org/keycloak/exportimport/ImportProviderFactory.java b/server-spi-private/src/main/java/org/keycloak/exportimport/ImportProviderFactory.java
+index 2bced0c5ceb8..06db428e0dcc 100644
+--- a/server-spi-private/src/main/java/org/keycloak/exportimport/ImportProviderFactory.java
++++ b/server-spi-private/src/main/java/org/keycloak/exportimport/ImportProviderFactory.java
+@@ -17,10 +17,21 @@
+ 
+ package org.keycloak.exportimport;
+ 
++import java.util.Map;
++
++import org.keycloak.models.KeycloakSession;
+ import org.keycloak.provider.ProviderFactory;
+ 
+ /**
+  * @author <a href="mailto:mposolda@redhat.com">Marek Posolda</a>
+  */
+ public interface ImportProviderFactory extends ProviderFactory<ImportProvider> {
++
++    ImportProvider create(KeycloakSession session, Map<String, String> overrides);
++
++    @Override
++    default ImportProvider create(KeycloakSession session) {
++        return create(session, Map.of());
++    }
++
+ }
+diff --git a/services/src/main/java/org/keycloak/exportimport/ExportImportManager.java b/services/src/main/java/org/keycloak/exportimport/ExportImportManager.java
+index 02479e4eaa05..3a3a68e37231 100644
+--- a/services/src/main/java/org/keycloak/exportimport/ExportImportManager.java
++++ b/services/src/main/java/org/keycloak/exportimport/ExportImportManager.java
+@@ -29,9 +29,10 @@
+ import java.nio.file.Path;
+ import java.nio.file.Paths;
+ import java.util.HashSet;
++import java.util.List;
++import java.util.Map;
+ import java.util.Objects;
+ import java.util.Set;
+-import java.util.function.Supplier;
+ import java.util.stream.Stream;
+ 
+ import static org.keycloak.exportimport.ExportImportConfig.PROVIDER;
+@@ -48,7 +49,7 @@ public class ExportImportManager {
+     private final KeycloakSession session;
+ 
+     private ExportProvider exportProvider;
+-    private ImportProvider importProvider;
++    private List<ImportProvider> importProviders = List.of();
+ 
+     public ExportImportManager(KeycloakSession session) {
+         this.sessionFactory = session.getKeycloakSessionFactory();
+@@ -69,34 +70,22 @@ public ExportImportManager(KeycloakSession session) {
+             }
+         } else if (ExportImportConfig.ACTION_IMPORT.equals(exportImportAction)) {
+             String providerId = System.getProperty(PROVIDER, Config.scope("import").get("importer", PROVIDER_DEFAULT));
+-            importProvider = session.getProvider(ImportProvider.class, providerId);
++            ImportProvider importProvider = session.getProvider(ImportProvider.class, providerId);
+             if (importProvider == null) {
+                 throw new RuntimeException("Import provider '" + providerId + "' not found");
+             }
++            importProviders = List.of(importProvider);
+         } else if (ExportImportConfig.getDir().isPresent()) { // import at startup
+             ExportImportConfig.setStrategy(Strategy.IGNORE_EXISTING);
+             ExportImportConfig.setReplacePlaceholders(true);
+             // enables logging of what is imported
+             ExportImportConfig.setAction(ExportImportConfig.ACTION_IMPORT);
++            importProviders = getStartupImportProviders();
+         }
+     }
+ 
+     public boolean isImportMasterIncluded() {
+-        if (importProvider != null) {
+-            try {
+-                return importProvider.isMasterRealmExported();
+-            } catch (IOException e) {
+-                throw new RuntimeException(e);
+-            }
+-        } else {
+-            return isImportMasterIncludedAtStartup();
+-        }
+-        
+-    }
+-    
+-    boolean isImportMasterIncludedAtStartup() {
+-        return getStartupImportProviders().map(Supplier::get)
+-                .anyMatch(provider -> {
++        return importProviders.stream().anyMatch(provider -> {
+                     try {
+                         return provider.isMasterRealmExported();
+                     } catch (IOException e) {
+@@ -110,19 +99,7 @@ public boolean isRunExport() {
+     }
+ 
+     public void runImport() {
+-        if (importProvider != null) {
+-            try {
+-                importProvider.importModel();
+-            } catch (IOException e) {
+-                throw new RuntimeException("Failed to run import", e);
+-            }
+-        } else {
+-            runImportAtStartup();
+-        }
+-    }
+-    
+-    public void runImportAtStartup() {
+-        getStartupImportProviders().map(Supplier::get).forEach(ip -> {
++        importProviders.forEach(ip -> {
+             try {
+                 ip.importModel();
+             } catch (IOException e) {
+@@ -131,21 +108,20 @@ public void runImportAtStartup() {
+         });
+     }
+ 
+-    private Stream<Supplier<ImportProvider>> getStartupImportProviders() {
++    private List<ImportProvider> getStartupImportProviders() {
+         var dirProp = ExportImportConfig.getDir();
+         if (dirProp.isEmpty()) {
+-            return Stream.empty();
++            return List.of();
+         }
+         String dir = dirProp.get();
+-        
++
+         Stream<ProviderFactory> factories = sessionFactory.getProviderFactoriesStream(ImportProvider.class);
+ 
+         return factories.flatMap(factory -> {
+             String providerId = factory.getId();
+ 
+             if ("dir".equals(providerId)) {
+-                Supplier<ImportProvider> func = () -> session.getProvider(ImportProvider.class, providerId);
+-                return Stream.of(func);
++                return Stream.of(session.getProvider(ImportProvider.class, providerId));
+             }
+             if ("singleFile".equals(providerId)) {
+                 Set<String> filesToImport = new HashSet<>();
+@@ -168,23 +144,13 @@ private Stream<Supplier<ImportProvider>> getStartupImportProviders() {
+ 
+                     filesToImport.add(file.getAbsolutePath());
+                 }
+-                
+-                return filesToImport.stream().map(file -> () -> {
+-                    // we need a new session to pickup the static system property
+-                    // file setting - it is picked up by the provider only at create time
+-                    // this will eventually need to be consolidated with the master existance check
+-                    // to prevent double parsing
+-                    KeycloakSession newSession = session.getKeycloakSessionFactory().create();
+-                    try {
+-                        ExportImportConfig.setFile(file);
+-                        return newSession.getProvider(ImportProvider.class, providerId);
+-                    } finally {
+-                        newSession.close();
+-                    }
+-                });
++
++                if (factory instanceof ImportProviderFactory) {
++                    return filesToImport.stream().map(file -> ((ImportProviderFactory)factory).create(session, Map.of(ExportImportConfig.FILE, file)));
++                }
+             }
+             return Stream.empty();
+-        });
++        }).toList();
+     }
+ 
+     public void runExport() {
+diff --git a/services/src/test/java/org/keycloak/exportimport/ExportImportManagerTest.java b/services/src/test/java/org/keycloak/exportimport/ExportImportManagerTest.java
+index 6b22706ed933..ee87a326d739 100644
+--- a/services/src/test/java/org/keycloak/exportimport/ExportImportManagerTest.java
++++ b/services/src/test/java/org/keycloak/exportimport/ExportImportManagerTest.java
+@@ -13,30 +13,37 @@
+ import org.keycloak.provider.Provider;
+ import org.keycloak.services.DefaultKeycloakContext;
+ import org.keycloak.services.DefaultKeycloakSession;
++import org.keycloak.services.DefaultKeycloakSessionFactory;
+ 
+ public class ExportImportManagerTest {
+-    
++
+     @After
+     public void reset() {
+         ExportImportConfig.reset();
+     }
+-    
++
+     @Test
+     public void testImportOnStartup() {
+         ExportImportConfig.setDir("/some/dir");
+-        new ExportImportManager(new DefaultKeycloakSession(null) {
++        new ExportImportManager(new DefaultKeycloakSession(new DefaultKeycloakSessionFactory() {
++
++            @Override
++            public KeycloakSession create() {
++                return null;
++            }
++        }) {
+ 
+             @Override
+             protected DefaultKeycloakContext createKeycloakContext(KeycloakSession session) {
+                 return null;
+             }
+-            
++
+         });
+         assertEquals(ExportImportConfig.ACTION_IMPORT, ExportImportConfig.getAction());
+         assertEquals(Strategy.IGNORE_EXISTING.toString(), ExportImportConfig.getStrategy());
+         assertTrue(ExportImportConfig.isReplacePlaceholders());
+     }
+-    
++
+     @Test
+     public void testImport() {
+         ExportImportConfig.setAction(ExportImportConfig.ACTION_IMPORT);
+@@ -46,28 +53,28 @@ public void testImport() {
+             protected DefaultKeycloakContext createKeycloakContext(KeycloakSession session) {
+                 return null;
+             }
+-            
++
+             @Override
+             public <T extends Provider> T getProvider(Class<T> clazz, String id) {
+                 return (T) new ImportProvider() {
+-                    
++
+                     @Override
+                     public void close() {
+-                        
++
+                     }
+-                    
++
+                     @Override
+                     public boolean isMasterRealmExported() throws IOException {
+                         return false;
+                     }
+-                    
++
+                     @Override
+                     public void importModel() throws IOException {
+-                        
++
+                     }
+                 };
+             }
+-            
++
+         });
+         assertEquals(ExportImportConfig.ACTION_IMPORT, ExportImportConfig.getAction());
+         assertNull(ExportImportConfig.getStrategy());

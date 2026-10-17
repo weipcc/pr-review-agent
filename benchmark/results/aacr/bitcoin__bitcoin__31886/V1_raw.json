@@ -1,0 +1,27 @@
+{
+ "results": [
+  {
+   "summary": "本次改動在 netinfo 中增加了本機服務資訊，但在標頭格式化時將臨時的 std::string 賦值給 std::string_view，導致懸空參照 (dangling string_view) 的嚴重 bug。",
+   "issues": [
+    {
+     "line": 585,
+     "severity": "bug",
+     "comment": "三元運算子中 strprintf 返回的是臨時的 std::string 物件。當賦值給 std::string_view 時，該臨時物件在該行陳述句結束時就會被解構，導致 services 變成懸空參照 (dangling string_view)。在下一行使用 services 會引發未定義行為 (Undefined Behavior) 或記憶體存取錯誤。",
+     "suggestion": "將型別改為 std::string，例如：const std::string services{DetailsRequested() ? strprintf(\" - services %s\", FormatServices(networkinfo[\"localservicesnames\"])) : \"\"};"
+    },
+    {
+     "line": 484,
+     "severity": "style",
+     "comment": "ServicesList 函式並未修改成員變數，可標記為 const 成員函式；另外 ToLower 外層有多餘的括號 ((services[i].get_str()))。",
+     "suggestion": "建議宣告為 std::string ServicesList(const UniValue& services) const，並移除多餘的括號：ToLower(services[i].get_str())。"
+    }
+   ],
+   "filename": "src/bitcoin-cli.cpp"
+  }
+ ],
+ "n_files": 1,
+ "elapsed_s": 12.5,
+ "calls": 1,
+ "input_tokens": 4628,
+ "output_tokens": 348
+}

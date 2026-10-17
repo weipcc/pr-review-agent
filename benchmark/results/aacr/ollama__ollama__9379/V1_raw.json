@@ -1,0 +1,45 @@
+{
+ "results": [
+  {
+   "summary": "新增了相對路徑驗證與 root 目錄限制，但對 Windows 路徑分隔符缺乏防護，且預先以 O_CREATE 開檔可能導致建立連結或處理子目錄時發生錯誤。",
+   "issues": [
+    {
+     "line": 161,
+     "severity": "security",
+     "comment": "validRelative 僅防範了正斜線（/）的路徑遍歷與絕對路徑特徵，未處理 Windows 路徑分隔符（\\）與磁碟機代號（如 C:）。在 Windows 環境下，惡意輸入（如 ..\\ 或 \\..\\）可以繞過檢查，造成目錄遍歷或寫入非預期路徑的安全疑慮。",
+     "suggestion": "建議使用 Go 1.20+ 提供的 filepath.IsLocal(path) 來驗證相對路徑且無逃逸，或先以 filepath.ToSlash 將路徑標準化，並防範 Windows 磁碟機代號。"
+    },
+    {
+     "line": 277,
+     "severity": "bug",
+     "comment": "在執行 createLink 之前使用 root.OpenFile(fp, os.O_CREATE|os.O_WRONLY, 0o644) 會預先在 tmpDir 中建立空檔案。若 createLink 底層使用 os.Link 或 os.Symlink，會因為目標檔案已存在而報錯 (EEXIST)。此外，若 fp 含有巢狀子目錄（例如 sub/model.safetensors），因父目錄尚未建立，root.OpenFile 會直接回傳找不到目錄的錯誤而終止處理。",
+     "suggestion": "若僅需驗證路徑是否侷限在 root 內，應避免使用 O_CREATE 建立實體檔案；若允許包含子目錄，應先確保父目錄存在（例如 root.MkdirAll），並注意不要預先建立檔案以免干擾 createLink 的運作。"
+    }
+   ],
+   "filename": "server/create.go"
+  },
+  {
+   "summary": "新增了 safetensors 轉換與相對路徑驗證的單元測試，測試覆蓋完整，但測試環境隔離與錯誤輸出訊息有小瑕疵需要修正。",
+   "issues": [
+    {
+     "line": 18,
+     "severity": "bug",
+     "comment": "註解標明應將測試資料存放在暫存目錄，但使用 cmp.Or(os.Getenv(\"OLLAMA_MODELS\"), t.TempDir()) 會在環境中已設定 OLLAMA_MODELS 時優先使用該路徑，導致測試產生的模型層資料寫入開發者本機或 CI 的真實模型目錄，破壞測試隔離性。",
+     "suggestion": "移除 cmp.Or，直接使用暫存目錄：t.Setenv(\"OLLAMA_MODELS\", t.TempDir())"
+    },
+    {
+     "line": 171,
+     "severity": "style",
+     "comment": "測試失敗訊息中使用 %T 僅會印出錯誤型態（如 *errors.errorString），無法看出具體錯誤內容；且 errors.Is 驗證的是錯誤值/包裝鏈而非型態，使用 %T 會導致除錯訊息不具鑑別度。",
+     "suggestion": "改為使用 %v 印出實際錯誤值：t.Errorf(\"validRelative(%q) returned error %v, expected to wrap %v\", path, err, errFilePath)"
+    }
+   ],
+   "filename": "server/create_test.go"
+  }
+ ],
+ "n_files": 2,
+ "elapsed_s": 71.4,
+ "calls": 2,
+ "input_tokens": 10726,
+ "output_tokens": 788
+}

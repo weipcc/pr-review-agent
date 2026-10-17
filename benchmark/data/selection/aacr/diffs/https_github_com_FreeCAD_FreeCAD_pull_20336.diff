@@ -1,0 +1,316 @@
+diff --git a/src/App/PropertyLinks.cpp b/src/App/PropertyLinks.cpp
+index fdcfd5517fdb..75b9d6464b5a 100644
+--- a/src/App/PropertyLinks.cpp
++++ b/src/App/PropertyLinks.cpp
+@@ -1955,7 +1955,7 @@ std::vector<std::string> updateLinkSubs(const App::DocumentObject* obj,
+     std::vector<std::string> res;
+     for (auto it = subs.begin(); it != subs.end(); ++it) {
+         const auto& sub = *it;
+-        auto new_sub = (*f)(obj, sub.c_str(), std::forward<Args>(args)...);
++        auto new_sub = (*f)(obj, sub.c_str(), args...);
+         if (new_sub.size()) {
+             if (res.empty()) {
+                 res.reserve(subs.size());
+diff --git a/src/App/PropertyStandard.cpp b/src/App/PropertyStandard.cpp
+index b7eda1a93e72..77f12cd51319 100644
+--- a/src/App/PropertyStandard.cpp
++++ b/src/App/PropertyStandard.cpp
+@@ -601,7 +601,11 @@ bool PropertyEnumeration::getPyPathValue(const ObjectIdentifier& path, Py::Objec
+     std::string p = path.getSubPathStr();
+     if (p == ".Enum" || p == ".All") {
+         Base::PyGILStateLocker lock;
+-        Py::Tuple res(_enum.maxValue() + 1);
++        auto maxEnumValue = _enum.maxValue();
++        if (maxEnumValue < 0) {
++            return false;  // The enum is invalid
++        }
++        Py::Tuple res(maxEnumValue + 1);
+         std::vector<std::string> enums = _enum.getEnumVector();
+         PropertyString tmp;
+         for (int i = 0; i < int(enums.size()); ++i) {
+diff --git a/src/Gui/WorkbenchManipulatorPython.cpp b/src/Gui/WorkbenchManipulatorPython.cpp
+index b85b49c99acd..e7c220da4111 100644
+--- a/src/Gui/WorkbenchManipulatorPython.cpp
++++ b/src/Gui/WorkbenchManipulatorPython.cpp
+@@ -26,8 +26,11 @@
+ #include "WorkbenchManipulatorPython.h"
+ #include "MenuManager.h"
+ #include "ToolBarManager.h"
++#include <Base/Console.h>
+ #include <Base/Interpreter.h>
+ 
++FC_LOG_LEVEL_INIT("WorkbenchManipulatorPython", true, true)
++
+ using namespace Gui;
+ 
+ void WorkbenchManipulatorPython::installManipulator(const Py::Object& obj)
+@@ -153,6 +156,11 @@ void WorkbenchManipulatorPython::tryModifyMenuBar(const Py::Dict& dict, MenuItem
+         std::string command = static_cast<std::string>(Py::String(dict.getItem(remove)));
+         if (auto par = menuBar->findParentOf(command)) {
+             if (MenuItem* item = par->findItem(command)) {
++                if (item == menuBar) {
++                    // Can't remove the menubar itself - Coverity issue 512853
++                    FC_WARN("Cannot remove top-level menubar");
++                    return;
++                }
+                 par->removeItem(item);
+                 delete item;  // NOLINT
+             }
+@@ -310,6 +318,11 @@ void WorkbenchManipulatorPython::tryModifyToolBar(const Py::Dict& dict, ToolBarI
+         else {
+             for (auto it : toolBar->getItems()) {
+                 if (ToolBarItem* item = it->findItem(command)) {
++                    if (item == toolBar) {
++                        // Can't remove the toolBar itself - Coverity issue 513838
++                        FC_WARN("Cannot remove top-level toolbar");
++                        return;
++                    }
+                     it->removeItem(item);
+                     delete item;  // NOLINT
+                     break;
+diff --git a/src/Mod/CAM/PathSimulator/AppGL/DlgCAMSimulator.cpp b/src/Mod/CAM/PathSimulator/AppGL/DlgCAMSimulator.cpp
+index 0ffa463d6718..59806559c69c 100644
+--- a/src/Mod/CAM/PathSimulator/AppGL/DlgCAMSimulator.cpp
++++ b/src/Mod/CAM/PathSimulator/AppGL/DlgCAMSimulator.cpp
+@@ -46,6 +46,11 @@ DlgCAMSimulator::DlgCAMSimulator(QWindow* parent)
+     mMillSimulator = new MillSimulation();
+ }
+ 
++DlgCAMSimulator::~DlgCAMSimulator()
++{
++    delete mMillSimulator;
++}
++
+ void DlgCAMSimulator::render(QPainter* painter)
+ {
+     Q_UNUSED(painter);
+diff --git a/src/Mod/CAM/PathSimulator/AppGL/DlgCAMSimulator.h b/src/Mod/CAM/PathSimulator/AppGL/DlgCAMSimulator.h
+index b962424971ad..ddd8ed981ea0 100644
+--- a/src/Mod/CAM/PathSimulator/AppGL/DlgCAMSimulator.h
++++ b/src/Mod/CAM/PathSimulator/AppGL/DlgCAMSimulator.h
+@@ -62,7 +62,7 @@ class DlgCAMSimulator: public QWindow, public QOpenGLExtraFunctions
+     Q_OBJECT
+ public:
+     explicit DlgCAMSimulator(QWindow* parent = nullptr);
+-    ~DlgCAMSimulator() override = default;
++    ~DlgCAMSimulator() override;
+ 
+     virtual void render(QPainter* painter);
+     virtual void render();
+diff --git a/src/Mod/Fem/App/FemVTKTools.cpp b/src/Mod/Fem/App/FemVTKTools.cpp
+index 1bfe564705cb..78958fff92cb 100644
+--- a/src/Mod/Fem/App/FemVTKTools.cpp
++++ b/src/Mod/Fem/App/FemVTKTools.cpp
+@@ -1278,9 +1278,9 @@ readNodes(std::ifstream& ifstr, const std::string& lines, vtkSmartPointer<vtkPoi
+ {
+     std::string keyCode = "    2C";
+     std::string keyCodeCoord = " -1";
+-    long numNodes;
+-    int indicator;
+-    int node;
++    long numNodes {0};
++    int indicator {0};
++    int node {0};
+     long nodeID = 0;
+ 
+     // frd file might have nodes that are not numbered starting from zero.
+@@ -1479,13 +1479,13 @@ void readResults(std::ifstream& ifstr,
+     // enter in node values block
+     std::string code1 = " -1";
+     std::string code2 = " -2";
+-    int node;
+-    double value;
++    int node {-1};
++    double value {0.0};
+     std::vector<double> vecValues;
+     std::vector<double> scaValues;
+     std::vector<int> nodes;
+     int countNodes = 0;
+-    size_t countScaPos;
++    size_t countScaPos {0};
+     // result block could have both vector/matrix and scalar components
+     // save each scalars entity in his own array
+     auto scalarPos = identifyScalarEntities(entityTypes);
+@@ -1563,9 +1563,15 @@ void readResults(std::ifstream& ifstr,
+         }
+         if ((vecValues.size() + scaValues.size()) == numComps) {
+             if (!vecValues.empty()) {
++                if (node == -1) {
++                    throw Base::FileException("File to load not readable");
++                }
+                 vecArray->SetTuple(mapNodes.at(node), vecValues.data());
+             }
+             if (!scaValues.empty()) {
++                if (node == -1) {
++                    throw Base::FileException("File to load not readable");
++                }
+                 std::vector<vtkSmartPointer<vtkDoubleArray>>::iterator it1;
+                 std::vector<double>::iterator it2;
+                 for (it1 = scaArrays.begin(), it2 = scaValues.begin();
+diff --git a/src/Mod/Mesh/App/Core/MeshKernel.cpp b/src/Mod/Mesh/App/Core/MeshKernel.cpp
+index 5d5822106446..be46d392c410 100644
+--- a/src/Mod/Mesh/App/Core/MeshKernel.cpp
++++ b/src/Mod/Mesh/App/Core/MeshKernel.cpp
+@@ -1033,6 +1033,12 @@ void MeshKernel::Read(std::istream& rclIn)
+         MeshPointArray pointArray;
+         MeshFacetArray facetArray;
+ 
++        // Sanity checks so we don't over-allocate below: limit the mesh to 1 billion points and
++        // 1 billion facets. Coverity issue 515697.
++        if (uCtPts > 1e9 || uCtFts > 1e9) {
++            throw Base::BadFormatError("Mesh seems to have over a billion points or facets");
++        }
++
+         float ratio = 0;
+         if (uCtPts > 0) {
+             ratio = static_cast<float>(uCtFts) / static_cast<float>(uCtPts);
+diff --git a/src/Mod/Part/App/Geometry.cpp b/src/Mod/Part/App/Geometry.cpp
+index b547e1c790f9..bb3d7d2a8dbd 100644
+--- a/src/Mod/Part/App/Geometry.cpp
++++ b/src/Mod/Part/App/Geometry.cpp
+@@ -469,7 +469,7 @@ void Geometry::createNewTag()
+     boost::lock_guard<boost::mutex> guard(random_number_mutex);
+ 
+     if (!seeded) {
+-        ran.seed(static_cast<unsigned int>(std::time(nullptr)));
++        ran.seed(static_cast<std::uint64_t>(std::time(nullptr)));
+         seeded = true;
+     }
+     static boost::uuids::basic_random_generator<boost::mt19937> gen(&ran);
+diff --git a/src/Mod/Part/App/PropertyTopoShape.h b/src/Mod/Part/App/PropertyTopoShape.h
+index 8234da4cf343..87b038de5a60 100644
+--- a/src/Mod/Part/App/PropertyTopoShape.h
++++ b/src/Mod/Part/App/PropertyTopoShape.h
+@@ -126,7 +126,7 @@ struct PartExport ShapeHistory {
+     using MapList = std::map<int, std::vector<int> >;
+     using List = std::vector<int>;
+ 
+-    TopAbs_ShapeEnum type;
++    TopAbs_ShapeEnum type {TopAbs_SHAPE};
+     MapList shapeMap;
+     ShapeHistory() {}
+     /**
+diff --git a/src/Mod/Part/App/modelRefine.cpp b/src/Mod/Part/App/modelRefine.cpp
+index e755922daf54..ebf58c6c279e 100644
+--- a/src/Mod/Part/App/modelRefine.cpp
++++ b/src/Mod/Part/App/modelRefine.cpp
+@@ -1071,8 +1071,13 @@ bool FaceUniter::process()
+                         checkFinalShell = true;
+                     }
+                     facesToSew.push_back(newFace);
+-                    if (facesToRemove.capacity() <= facesToRemove.size() + adjacencySplitter.getGroup(adjacentIndex).size())
+-                        facesToRemove.reserve(facesToRemove.size() + adjacencySplitter.getGroup(adjacentIndex).size());
++
++                    // This reserve is probably not actually an improvement over letting
++                    // emplace_back allocate as needed. Leaving the code here for study if someone
++                    // wants to measure it. Coverity issue 356645. - chennes, March 2025
++                    //if (facesToRemove.capacity() <= facesToRemove.size() + adjacencySplitter.getGroup(adjacentIndex).size())
++                    //    facesToRemove.reserve(facesToRemove.size() + adjacencySplitter.getGroup(adjacentIndex).size());
++
+                     FaceVectorType temp = adjacencySplitter.getGroup(adjacentIndex);
+                     facesToRemove.insert(facesToRemove.end(), temp.begin(), temp.end());
+                     // the first shape will be marked as modified, i.e. replaced by newFace, all others are marked as deleted
+diff --git a/src/Mod/PartDesign/App/FeatureHole.cpp b/src/Mod/PartDesign/App/FeatureHole.cpp
+index 4cc4cb86e95c..32c07f445ef0 100644
+--- a/src/Mod/PartDesign/App/FeatureHole.cpp
++++ b/src/Mod/PartDesign/App/FeatureHole.cpp
+@@ -1371,6 +1371,9 @@ void Hole::findClosestDesignation()
+     // Intended for thread type changes
+     // finds the closest diameter of the new thread type
+     int threadType = ThreadType.getValue();
++    if (threadType == -1) {
++        throw Base::IndexError(QT_TRANSLATE_NOOP("Exception", "Thread type is invalid"));
++    }
+     int closestSize = 0;
+     double diameter = ThreadDiameter.getValue();
+     if (diameter == 0)
+diff --git a/src/Mod/Sketcher/App/AppSketcherPy.cpp b/src/Mod/Sketcher/App/AppSketcherPy.cpp
+index 00a6d937cb7a..590cc013be14 100644
+--- a/src/Mod/Sketcher/App/AppSketcherPy.cpp
++++ b/src/Mod/Sketcher/App/AppSketcherPy.cpp
+@@ -95,8 +95,8 @@ class Module: public Py::ExtensionModule<Module>
+             }
+ 
+             if (file.hasExtension("skf")) {
+-                auto filename = file.fileNamePure().c_str();
+-                auto* pcFeature = pcDoc->addObject<Sketcher::SketchObjectSF>(filename);
++                auto filename = file.fileNamePure();
++                auto* pcFeature = pcDoc->addObject<Sketcher::SketchObjectSF>(filename.c_str());
+                 pcFeature->SketchFlatFile.setValue(EncodedName.c_str());
+ 
+                 pcDoc->recompute();
+diff --git a/src/Mod/Sketcher/Gui/Command.cpp b/src/Mod/Sketcher/Gui/Command.cpp
+index d61e4f29fc8f..cbc709ef56ba 100644
+--- a/src/Mod/Sketcher/Gui/Command.cpp
++++ b/src/Mod/Sketcher/Gui/Command.cpp
+@@ -1044,6 +1044,14 @@ void CmdSketcherMergeSketches::activated(int iMsg)
+ 
+         int addedConstraints = mergesketch->addCopyOfConstraints(*Obj);
+ 
++        // Coverity issue 513796: make sure the loop below can complete
++        if (addedConstraints < 0) {
++            continue;  // There were no constraints
++        }
++        if (addedConstraints - baseConstraints < 0) {
++            throw Base::ValueError("Constraint error in CmdSketcherMergeSketches");
++        }
++
+         for (int i = 0; i <= (addedConstraints - baseConstraints); i++) {
+             Sketcher::Constraint* constraint =
+                 mergesketch->Constraints.getValues()[i + baseConstraints];
+diff --git a/src/Mod/Spreadsheet/Gui/AppSpreadsheetGui.cpp b/src/Mod/Spreadsheet/Gui/AppSpreadsheetGui.cpp
+index 3da681481545..b9b964868c74 100644
+--- a/src/Mod/Spreadsheet/Gui/AppSpreadsheetGui.cpp
++++ b/src/Mod/Spreadsheet/Gui/AppSpreadsheetGui.cpp
+@@ -69,8 +69,8 @@ class Module: public Py::ExtensionModule<Module>
+     {
+         try {
+             Base::FileInfo file(Name);
+-            auto filename = file.fileNamePure().c_str();
+-            auto* pcSheet = pcDoc->addObject<Spreadsheet::Sheet>(filename);
++            auto filename = file.fileNamePure();
++            auto* pcSheet = pcDoc->addObject<Spreadsheet::Sheet>(filename.c_str());
+ 
+             pcSheet->importFromFile(Name, '\t', '"', '\\');
+             pcSheet->execute();
+diff --git a/src/Mod/TechDraw/App/EdgeWalker.cpp b/src/Mod/TechDraw/App/EdgeWalker.cpp
+index a1775037d4ba..ae3d5b0af75e 100644
+--- a/src/Mod/TechDraw/App/EdgeWalker.cpp
++++ b/src/Mod/TechDraw/App/EdgeWalker.cpp
+@@ -450,6 +450,13 @@ std::vector<edge_t> EdgeWalker::getEmbeddingRow(int v)
+ //*******************************************
+ // WalkerEdge Methods
+ //*******************************************
++WalkerEdge::WalkerEdge()
++{
++    // Ensure the edge is properly initialized (Coverity defect 316559)
++    ed.m_source = 0;
++    ed.m_target = 0;
++}
++
+ bool WalkerEdge::isEqual(WalkerEdge w)
+ {
+     if ((v1 == w.v1 && v2 == w.v2)  ||
+diff --git a/src/Mod/TechDraw/App/EdgeWalker.h b/src/Mod/TechDraw/App/EdgeWalker.h
+index 98bbf37fb6e6..726f449026dd 100644
+--- a/src/Mod/TechDraw/App/EdgeWalker.h
++++ b/src/Mod/TechDraw/App/EdgeWalker.h
+@@ -71,14 +71,15 @@ using planar_embedding_t =
+ class TechDrawExport WalkerEdge
+ {
+ public:
++    WalkerEdge();
+     static bool weCompare(WalkerEdge i, WalkerEdge j);
+     bool isEqual(WalkerEdge w);
+     std::string dump();
+ 
+-    std::size_t v1;
+-    std::size_t v2;
++    std::size_t v1 {0};
++    std::size_t v2 {0};
+     edge_t ed;
+-    std::size_t idx;
++    std::size_t idx {0};
+ };
+ 
+ class TechDrawExport ewWire

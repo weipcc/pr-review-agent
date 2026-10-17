@@ -1,0 +1,193 @@
+diff --git a/.env b/.env
+index b7dd9e24f39..42c23ac87fa 100644
+--- a/.env
++++ b/.env
+@@ -22,6 +22,7 @@ _APP_OPTIONS_FORCE_HTTPS=disabled
+ _APP_OPTIONS_ROUTER_FORCE_HTTPS=disabled
+ _APP_OPENSSL_KEY_V1=your-secret-key
+ _APP_DOMAIN=traefik
++_APP_CONSOLE_DOMAIN=localhost
+ _APP_DOMAIN_FUNCTIONS=functions.localhost
+ _APP_DOMAIN_SITES=sites.localhost
+ _APP_DOMAIN_TARGET_CNAME=test.localhost
+diff --git a/app/config/templates/site.php b/app/config/templates/site.php
+index a853955a971..c6f0119ed93 100644
+--- a/app/config/templates/site.php
++++ b/app/config/templates/site.php
+@@ -6,13 +6,8 @@
+  * List of Appwrite Sites templates
+  */
+ 
+-$protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') == 'disabled' ? 'http' : 'https';
+-$hostname = System::getEnv('_APP_DOMAIN');
+-
+-// TODO: Development override
+-if (System::getEnv('_APP_ENV') === 'development') {
+-    $hostname = 'localhost';
+-}
++$protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') === 'disabled' ? 'http' : 'https';
++$hostname = System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''));
+ 
+ $url = $protocol . '://' . $hostname;
+ 
+diff --git a/app/controllers/api/vcs.php b/app/controllers/api/vcs.php
+index e8bbd2854c7..6afe2d67297 100644
+--- a/app/controllers/api/vcs.php
++++ b/app/controllers/api/vcs.php
+@@ -116,8 +116,10 @@
+             }
+ 
+             $commentStatus = $isAuthorized ? 'waiting' : 'failed';
++            $protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') === 'disabled' ? 'http' : 'https';
++            $hostname = System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''));
+ 
+-            $authorizeUrl = $request->getProtocol() . '://' . $request->getHostname() . "/console/git/authorize-contributor?projectId={$projectId}&installationId={$installationId}&repositoryId={$repositoryId}&providerPullRequestId={$providerPullRequestId}";
++            $authorizeUrl = $protocol . '://' . $hostname . "/console/git/authorize-contributor?projectId={$projectId}&installationId={$installationId}&repositoryId={$repositoryId}&providerPullRequestId={$providerPullRequestId}";
+ 
+             $action = $isAuthorized ? ['type' => 'logs'] : ['type' => 'authorize', 'url' => $authorizeUrl];
+ 
+@@ -378,7 +380,7 @@
+                 }
+                 $owner = $github->getOwnerName($providerInstallationId);
+ 
+-                $providerTargetUrl = $request->getProtocol() . '://' . $request->getHostname() . "/console/project-$region-$projectId/$resourceCollection/$resourceType-$resourceId";
++                $providerTargetUrl = $protocol . '://' . $hostname . "/console/project-$region-$projectId/$resourceCollection/$resourceType-$resourceId";
+                 $github->updateCommitStatus($repositoryName, $providerCommitHash, $owner, 'pending', $message, $providerTargetUrl, $name);
+             }
+ 
+@@ -437,6 +439,8 @@
+         ]);
+ 
+         $appName = System::getEnv('_APP_VCS_GITHUB_APP_NAME');
++        $protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') === 'disabled' ? 'http' : 'https';
++        $hostname = System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''));
+ 
+         if (empty($appName)) {
+             throw new Exception(Exception::GENERAL_SERVER_ERROR, 'GitHub App name is not configured. Please configure VCS (Version Control System) variables in .env file.');
+@@ -444,7 +448,7 @@
+ 
+         $url = "https://github.com/apps/$appName/installations/new?" . \http_build_query([
+             'state' => $state,
+-            'redirect_uri' => $request->getProtocol() . '://' . $request->getHostname() . "/v1/vcs/github/callback"
++            'redirect_uri' => $protocol . '://' . $hostname . "/v1/vcs/github/callback"
+         ]);
+ 
+         $response
+@@ -494,10 +498,12 @@
+         }
+ 
+         $region = $project->getAttribute('region', 'default');
++        $protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') === 'disabled' ? 'http' : 'https';
++        $hostname = System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''));
+ 
+         $defaultState = [
+-            'success' => $request->getProtocol() . '://' . $request->getHostname() . "/console/project-$region-$projectId/settings/git-installations",
+-            'failure' => $request->getProtocol() . '://' . $request->getHostname() . "/console/project-$region-$projectId/settings/git-installations",
++            'success' => $protocol . '://' . $hostname . "/console/project-$region-$projectId/settings/git-installations",
++            'failure' => $protocol . '://' . $hostname . "/console/project-$region-$projectId/settings/git-installations",
+         ];
+ 
+         $state = \array_merge($defaultState, $state ?? []);
+diff --git a/app/controllers/general.php b/app/controllers/general.php
+index 225762ce7e9..16621e1124c 100644
+--- a/app/controllers/general.php
++++ b/app/controllers/general.php
+@@ -76,7 +76,7 @@ function router(App $utopia, Database $dbForPlatform, callable $getProjectDB, Sw
+     }
+ 
+     $errorView = __DIR__ . '/../views/general/error.phtml';
+-    $url = (System::getEnv('_APP_OPTIONS_FORCE_HTTPS') == 'disabled' ? 'http' : 'https') . '://' . System::getEnv('_APP_DOMAIN', '');
++    $url = (System::getEnv('_APP_OPTIONS_FORCE_HTTPS') == 'disabled' ? 'http' : 'https') . '://' . System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''));
+ 
+     if ($rule->isEmpty()) {
+         $appDomainFunctionsFallback = System::getEnv('_APP_DOMAIN_FUNCTIONS_FALLBACK', '');
+@@ -267,7 +267,7 @@ function router(App $utopia, Database $dbForPlatform, callable $getProjectDB, Sw
+             }
+ 
+             if (!$authorized) {
+-                $url = (System::getEnv('_APP_OPTIONS_FORCE_HTTPS') == 'disabled' ? 'http' : 'https') . "://" . System::getEnv('_APP_DOMAIN');
++                $url = (System::getEnv('_APP_OPTIONS_FORCE_HTTPS') == 'disabled' ? 'http' : 'https') . "://" . System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''));
+                 $response
+                     ->addHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                     ->addHeader('Pragma', 'no-cache')
+@@ -453,7 +453,7 @@ function router(App $utopia, Database $dbForPlatform, callable $getProjectDB, Sw
+             $vars[$var->getAttribute('key')] = $var->getAttribute('value', '');
+         }
+ 
+-        $protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') == 'disabled' ? 'http' : 'https';
++        $protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') === 'disabled' ? 'http' : 'https';
+         $hostname = System::getEnv('_APP_DOMAIN');
+         $endpoint = $protocol . '://' . $hostname . "/v1";
+ 
+diff --git a/app/views/general/error.phtml b/app/views/general/error.phtml
+index a427f1d5e88..de859a9c862 100644
+--- a/app/views/general/error.phtml
++++ b/app/views/general/error.phtml
+@@ -15,7 +15,7 @@ $labelClass = '';
+ $buttons = [];
+ 
+ $protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') == 'disabled' ? 'http' : 'https';
+-$hostname = System::getEnv('_APP_DOMAIN');
++$hostname = System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''));
+ // TODO: remove this later
+ if (System::getEnv('_APP_ENV') === 'development') {
+     $hostname = 'localhost';
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 99097b53efc..a01165d9499 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -116,6 +116,7 @@ services:
+       - _APP_OPTIONS_ROUTER_FORCE_HTTPS
+       - _APP_OPENSSL_KEY_V1
+       - _APP_DOMAIN
++      - _APP_CONSOLE_DOMAIN
+       - _APP_DOMAIN_TARGET_CNAME
+       - _APP_DOMAIN_TARGET_AAAA
+       - _APP_DOMAIN_TARGET_A
+@@ -482,6 +483,7 @@ services:
+       - _APP_OPTIONS_FORCE_HTTPS
+       - _APP_OPTIONS_ROUTER_FORCE_HTTPS
+       - _APP_DOMAIN
++      - _APP_CONSOLE_DOMAIN
+       - _APP_STORAGE_DEVICE
+       - _APP_STORAGE_S3_ACCESS_KEY
+       - _APP_STORAGE_S3_SECRET
+diff --git a/src/Appwrite/Platform/Modules/Functions/Workers/Builds.php b/src/Appwrite/Platform/Modules/Functions/Workers/Builds.php
+index b8c47265300..25b3473829c 100644
+--- a/src/Appwrite/Platform/Modules/Functions/Workers/Builds.php
++++ b/src/Appwrite/Platform/Modules/Functions/Workers/Builds.php
+@@ -1447,7 +1447,7 @@ protected function runGitAction(
+             $name = "{$resourceName} ({$projectName})";
+ 
+             $protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') == 'disabled' ? 'http' : 'https';
+-            $hostname = System::getEnv('_APP_DOMAIN');
++            $hostname = System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''));
+ 
+             $projectId = $project->getId();
+             $region = $project->getAttribute('region', 'default');
+diff --git a/src/Appwrite/Vcs/Comment.php b/src/Appwrite/Vcs/Comment.php
+index 5f528e660fb..a66706a4a2d 100644
+--- a/src/Appwrite/Vcs/Comment.php
++++ b/src/Appwrite/Vcs/Comment.php
+@@ -86,8 +86,8 @@ public function generateComment(): string
+ 
+         $i = 0;
+         foreach ($projects as $projectId => $project) {
+-            $protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') == 'disabled' ? 'http' : 'https';
+-            $hostname = System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN'));
++            $protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') === 'disabled' ? 'http' : 'https';
++            $hostname = System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''));
+ 
+             $text .= "## {$project['name']}\n\n";
+             $text .= "Project ID: `{$projectId}`\n\n";
+@@ -200,8 +200,8 @@ public function generateComment(): string
+ 
+     public function generatImage(string $pathLight, string $pathDark, string $alt, int $width): string
+     {
+-        $protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') == 'disabled' ? 'http' : 'https';
+-        $hostname = System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN'));
++        $protocol = System::getEnv('_APP_OPTIONS_FORCE_HTTPS') === 'disabled' ? 'http' : 'https';
++        $hostname = System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''));
+ 
+         $imageLight = $protocol . '://' . $hostname . $pathLight;
+         $imageDark = $protocol . '://' . $hostname . $pathDark;

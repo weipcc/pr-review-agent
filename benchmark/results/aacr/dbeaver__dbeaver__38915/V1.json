@@ -1,0 +1,46 @@
+{
+ "results": [
+  {
+   "filename": "plugins/org.jkiss.dbeaver.ext.databricks/src/org/jkiss/dbeaver/ext/databricks/DatabricksDataSource.java",
+   "summary": "新增 DatabricksExecutionContext 及其上下文狀態初始化邏輯，但在複製既有 context 狀態時遺漏了 schema 的傳遞。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 93,
+     "end_line": 93,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在從既有 context (initFrom) 初始化狀態時，setDefaultCatalog 的 schema 參數被固定傳入 null。Databricks（尤其是 Unity Catalog）採用 catalog.schema 兩層命名空間，將 schema 設為 null 會導致新 context 遺失當前作用中的 schema；若在非 Unity Catalog（只有 schema 沒有 catalog）環境下，甚至完全不會同步任何狀態。"
+    }
+   ]
+  },
+  {
+   "filename": "plugins/org.jkiss.dbeaver.ext.databricks/src/org/jkiss/dbeaver/ext/databricks/DatabricksExecutionContext.java",
+   "summary": "新增 DatabricksExecutionContext 實作預設 catalog 的追蹤與查詢，但 setDefaultCatalog 異常處理存在吞沒錯誤的問題。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 68,
+     "end_line": 68,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在 setDefaultCatalog 中 catch 了 DBCException 卻僅記錄 debug log 而未向外拋出，這會導致 catalog 切換失敗時調用方（如 UI）無法感知錯誤，誤認為操作已成功。"
+    },
+    {
+     "start_line": 1,
+     "end_line": 1,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "檔案最開頭存在不必要的多餘空白行。"
+    }
+   ]
+  }
+ ],
+ "n_files": 2,
+ "input_tokens": 5011,
+ "output_tokens": 452,
+ "calls": 2,
+ "tool_calls": null,
+ "elapsed_s": 25.6,
+ "model": "gemini-3.8-flash"
+}

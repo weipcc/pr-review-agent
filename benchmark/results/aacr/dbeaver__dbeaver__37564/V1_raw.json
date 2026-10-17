@@ -1,0 +1,57 @@
+{
+ "results": [
+  {
+   "summary": "在 DBNResource 的 getAdapter 中新增 InputStream 適配支援，但存在例外處理不符合 IAdaptable 慣例及日誌遺失 stacktrace 的問題。",
+   "issues": [
+    {
+     "line": 428,
+     "severity": "bug",
+     "comment": "在 IAdaptable.getAdapter() 中拋出 RuntimeException 違反了 Eclipse Adaptable 機制的合約慣例。當無法適配時應回傳 null，直接拋出 unchecked exception 可能會導致外部呼叫端在查詢 adapter 時未捕捉而崩潰。",
+     "suggestion": "建議在 catch 區塊記錄錯誤後回傳 null，避免拋出 RuntimeException。"
+    },
+    {
+     "line": 427,
+     "severity": "bug",
+     "comment": "log.error() 未傳入例外物件 e，導致錯誤 stacktrace 遺失，不利於問題排查。",
+     "suggestion": "改為 log.error(\"Error getting file content\", e);"
+    },
+    {
+     "line": 38,
+     "severity": "style",
+     "comment": "不建議使用萬用字元 import (java.nio.file.*)。在該檔案中實際上只使用了 Path。",
+     "suggestion": "還原為明確的 import java.nio.file.Path;"
+    }
+   ],
+   "filename": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java"
+  },
+  {
+   "summary": "新增了透過 InputStream 複製節點資料的支援，但存在 InputStream 資源未關閉與潛在的路徑遍歷風險。",
+   "issues": [
+    {
+     "line": 293,
+     "severity": "bug",
+     "comment": "獲取的 `InputStream` 未進行關閉。根據 JDK 規範，`Files.copy(InputStream, Path, ...)` 讀取完畢後並不會主動關閉傳入的 InputStream，可能導致檔案鎖定或資源洩漏。",
+     "suggestion": "建議使用 try-with-resources 來管理 `InputStream`，例如：`try (InputStream in = node.getAdapter(InputStream.class)) { if (in != null) { ... } }`。"
+    },
+    {
+     "line": 364,
+     "severity": "security",
+     "comment": "直接使用 `node.getNodeDisplayName()` 透過 `folder.resolve(str)` 解析目標路徑，若節點名稱包含路徑遍歷字元（如 `../`），可能導致寫入預期目錄之外的路徑。",
+     "suggestion": "建議驗證檔名不含路徑分隔符號或 `..`，或者在 resolve 後確認 `targetFile.normalize().startsWith(folder.normalize())`。"
+    },
+    {
+     "line": 363,
+     "severity": "style",
+     "comment": "方法參數名稱 `str` 語意不明確。",
+     "suggestion": "建議將參數名稱 `str` 改為 `fileName`。"
+    }
+   ],
+   "filename": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java"
+  }
+ ],
+ "n_files": 2,
+ "elapsed_s": 21.7,
+ "calls": 2,
+ "input_tokens": 6584,
+ "output_tokens": 678
+}

@@ -1,0 +1,54 @@
+{
+ "results": [
+  {
+   "change_intent": "Redact user data in query buffer logging when hide-user-data-from-log is enabled during client protocol errors.",
+   "summary": "The ternary expression using comma-separated arguments causes severe runtime errors: a segmentation fault when the config is enabled, and a format string vulnerability when disabled.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 2771,
+     "end_line": 2776,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "snprintf(buf, sizeof(buf), server.hide_user_data_from_log ?\n                     (\"Query buffer during protocol error: [hide_user_data_from_log]Redacted %zu bytes\",\n                      sdslen(c->querybuf) - c->qb_pos) :\n                     (\"Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'\",\n                      PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,\n                      PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2));",
+     "comment": "In C, parentheses around comma-separated expressions invoke the comma operator rather than passing multiple arguments to `snprintf`. Consequently, `snprintf` only receives three arguments (`buf`, `sizeof(buf)`, and the evaluated result of the ternary expression as the format string). When `server.hide_user_data_from_log` is non-zero, the format string receives `sdslen(c->querybuf) - c->qb_pos` (a size_t integer cast to a pointer), causing an immediate segmentation fault. When `server.hide_user_data_from_log` is 0, the format string receives the end of `c->querybuf` (user-controlled data) with no further arguments, introducing a critical format string vulnerability.",
+     "suggestion": "Use standard `if`/`else` control flow to call `snprintf` with the appropriate format strings and argument lists, or handle `server.hide_user_data_from_log` before checking buffer length.",
+     "suggested_code": "        if (server.hide_user_data_from_log) {\n            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: [hide_user_data_from_log]Redacted\");\n        } else if (c->querybuf && sdslen(c->querybuf) - c->qb_pos < PROTO_DUMP_LEN) {\n            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%s'\", c->querybuf + c->qb_pos);\n        } else if (c->querybuf) {\n            snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'\",\n                     PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,\n                     PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2);\n        }"
+    }
+   ],
+   "filename": "src/networking.c"
+  }
+ ],
+ "n_files": 1,
+ "input_tokens": 57500,
+ "output_tokens": 5848,
+ "calls": null,
+ "tool_calls": [
+  {
+   "command": "git show ea2e48a807e1d4a1a5a684a2a699eda1934a0c6f:src/networking.c | sed -n '2760,2785p'",
+   "output_preview": "[exit code: 0]\nstatic void setProtocolError(const char *errstr, client *c) {\n    if (server.verbosity <= LL_VERBOSE || c->flag.primary) {\n        sds client = catClientInfoString(sdsempty(), c, server.hide_user_data_from_log);\n\n        /* Sample some protocol to given an idea about what was inside. */\n        char buf[256];\n        buf[0] = '\\0';\n        if (c->querybuf && sdslen(c->querybuf) - c-"
+  },
+  {
+   "command": "grep -rn --exclude-dir=.git 'hide_user_data_from_log' .",
+   "output_preview": "[exit code: 0]\n./src/server.c:4447:        sds client = catClientInfoShortString(sdsempty(), c, server.hide_user_data_from_log);\n./src/cluster_legacy.c:6927:            sds client = catClientInfoShortString(sdsempty(), c, server.hide_user_data_from_log);\n./src/cluster_legacy.c:7045:        sds client = catClientInfoShortString(sdsempty(), c, server.hide_user_data_from_log);\n./src/cluster_legacy.c:"
+  },
+  {
+   "command": "git grep -C 5 'hide_user_data_from_log' src/debug.c",
+   "output_preview": "[blocked] only `git show` is allowed. run_bash is read-only; allowed: grep, egrep, fgrep, sed, head, tail, wc, ls, find, cat, nl, sort, uniq, cut, `git show <rev>:<path>`."
+  },
+  {
+   "command": "grep -C 5 'hide_user_data_from_log' src/debug.c",
+   "output_preview": "[exit code: 0]\n\n/* Checks if the argument at the given index should be redacted from logs. */\nint shouldRedactArg(const client *c, int idx) {\n    serverAssert(idx < c->argc);\n    /* Don't redact if the config is disabled */\n    if (!server.hide_user_data_from_log) return 0;\n    /* first_sensitive_arg_idx value should be changed based on the command type. */\n    int first_sensitive_arg_idx = 1;\n   "
+  },
+  {
+   "command": "grep -C 5 'hide_user_data_from_log' src/replication.c",
+   "output_preview": "[exit code: 0]\n * replication backlog and show a few final bytes to make simpler to\n * guess what kind of bug it could be. */\nvoid showLatestBacklog(void) {\n    if (server.repl_backlog == NULL) return;\n    if (listLength(server.repl_buffer_blocks) == 0) return;\n    if (server.hide_user_data_from_log) {\n        serverLog(LL_NOTICE,\n                  \"hide-user-data-from-log is on, skip logging back"
+  },
+  {
+   "command": "sed -n '2755,2795p' src/networking.c",
+   "output_preview": "[exit code: 0]\n\n/* Helper function. Record protocol error details in server log,\n * and set the client as CLIENT_CLOSE_AFTER_REPLY and\n * CLIENT_PROTOCOL_ERROR. */\n#define PROTO_DUMP_LEN 128\nstatic void setProtocolError(const char *errstr, client *c) {\n    if (server.verbosity <= LL_VERBOSE || c->flag.primary) {\n        sds client = catClientInfoString(sdsempty(), c, server.hide_user_data_from_log"
+  }
+ ],
+ "elapsed_s": 60.7,
+ "model": "gemini-3.8-flash"
+}

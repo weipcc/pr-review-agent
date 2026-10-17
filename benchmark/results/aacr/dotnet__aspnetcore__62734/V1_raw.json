@@ -1,0 +1,14 @@
+{
+ "results": [
+  {
+   "summary": "增加 V3 密碼雜湊驗證時 Salt 長度的上限檢查（8 KiB），有助於防範惡意構造的大容量 Salt 所引發的資源耗盡（DoS）風險，改動安全且符合規範。",
+   "issues": [],
+   "filename": "src/Identity/Extensions.Core/src/PasswordHasher.cs"
+  }
+ ],
+ "n_files": 1,
+ "elapsed_s": 7.2,
+ "calls": 1,
+ "input_tokens": 5072,
+ "output_tokens": 66
+}

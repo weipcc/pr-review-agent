@@ -1,0 +1,505 @@
+diff --git a/backend/backend.proto b/backend/backend.proto
+index 0a341ca2a9ed..fea4214f9895 100644
+--- a/backend/backend.proto
++++ b/backend/backend.proto
+@@ -159,6 +159,8 @@ message Reply {
+   bytes message = 1;
+   int32 tokens = 2;
+   int32 prompt_tokens = 3;
++  double timing_prompt_processing = 4;
++  double timing_token_generation = 5;
+ }
+ 
+ message ModelOptions {
+@@ -348,4 +350,4 @@ message StatusResponse {
+ message Message {
+   string role = 1;
+   string content = 2;
+-}
+\ No newline at end of file
++}
+diff --git a/backend/cpp/llama/grpc-server.cpp b/backend/cpp/llama/grpc-server.cpp
+index 7632aebc41b0..486a605cce5b 100644
+--- a/backend/cpp/llama/grpc-server.cpp
++++ b/backend/cpp/llama/grpc-server.cpp
+@@ -2414,6 +2414,13 @@ class BackendServiceImpl final : public backend::Backend::Service {
+                 int32_t tokens_evaluated = result.result_json.value("tokens_evaluated", 0);
+                 reply.set_prompt_tokens(tokens_evaluated);
+ 
++                if (result.result_json.contains("timings")) {
++                    double timing_prompt_processing = result.result_json.at("timings").value("prompt_ms", 0.0);
++                    reply.set_timing_prompt_processing(timing_prompt_processing);
++                    double timing_token_generation = result.result_json.at("timings").value("predicted_ms", 0.0);
++                    reply.set_timing_token_generation(timing_token_generation);
++                }
++                
+                 // Log Request Correlation Id
+                 LOG_VERBOSE("correlation:", {
+                     { "id", data["correlation_id"] }
+@@ -2454,6 +2461,13 @@ class BackendServiceImpl final : public backend::Backend::Service {
+             reply->set_prompt_tokens(tokens_evaluated);
+             reply->set_tokens(tokens_predicted);
+             reply->set_message(completion_text);
++
++            if (result.result_json.contains("timings")) {
++                double timing_prompt_processing = result.result_json.at("timings").value("prompt_ms", 0.0);
++                reply->set_timing_prompt_processing(timing_prompt_processing);
++                double timing_token_generation = result.result_json.at("timings").value("predicted_ms", 0.0);
++                reply->set_timing_token_generation(timing_token_generation);
++            }
+         }
+         else
+         {
+diff --git a/core/backend/llm.go b/core/backend/llm.go
+index 9a4d0d46b92d..d91ded51d962 100644
+--- a/core/backend/llm.go
++++ b/core/backend/llm.go
+@@ -27,8 +27,10 @@ type LLMResponse struct {
+ }
+ 
+ type TokenUsage struct {
+-	Prompt     int
+-	Completion int
++	Prompt                 int
++	Completion             int
++	TimingPromptProcessing float64
++	TimingTokenGeneration  float64
+ }
+ 
+ func ModelInference(ctx context.Context, s string, messages []schema.Message, images, videos, audios []string, loader *model.ModelLoader, c config.BackendConfig, o *config.ApplicationConfig, tokenCallback func(string, TokenUsage) bool) (func() (LLMResponse, error), error) {
+@@ -123,6 +125,8 @@ func ModelInference(ctx context.Context, s string, messages []schema.Message, im
+ 
+ 				tokenUsage.Prompt = int(reply.PromptTokens)
+ 				tokenUsage.Completion = int(reply.Tokens)
++				tokenUsage.TimingTokenGeneration = reply.TimingTokenGeneration
++				tokenUsage.TimingPromptProcessing = reply.TimingPromptProcessing
+ 
+ 				for len(partialRune) > 0 {
+ 					r, size := utf8.DecodeRune(partialRune)
+@@ -157,6 +161,10 @@ func ModelInference(ctx context.Context, s string, messages []schema.Message, im
+ 			if tokenUsage.Completion == 0 {
+ 				tokenUsage.Completion = int(reply.Tokens)
+ 			}
++
++			tokenUsage.TimingTokenGeneration = reply.TimingTokenGeneration
++			tokenUsage.TimingPromptProcessing = reply.TimingPromptProcessing
++
+ 			return LLMResponse{
+ 				Response: string(reply.Message),
+ 				Usage:    tokenUsage,
+diff --git a/core/cli/run.go b/core/cli/run.go
+index a0e16155e2c6..b86fe2a65065 100644
+--- a/core/cli/run.go
++++ b/core/cli/run.go
+@@ -70,6 +70,7 @@ type RunCMD struct {
+ 	WatchdogBusyTimeout                string   `env:"LOCALAI_WATCHDOG_BUSY_TIMEOUT,WATCHDOG_BUSY_TIMEOUT" default:"5m" help:"Threshold beyond which a busy backend should be stopped" group:"backends"`
+ 	Federated                          bool     `env:"LOCALAI_FEDERATED,FEDERATED" help:"Enable federated instance" group:"federated"`
+ 	DisableGalleryEndpoint             bool     `env:"LOCALAI_DISABLE_GALLERY_ENDPOINT,DISABLE_GALLERY_ENDPOINT" help:"Disable the gallery endpoints" group:"api"`
++	MachineTag                         string   `env:"LOCALAI_MACHINE_TAG" help:"Add Machine-Tag header to each response which is useful to track the machine in the P2P network" group:"api"`
+ 	LoadToMemory                       []string `env:"LOCALAI_LOAD_TO_MEMORY,LOAD_TO_MEMORY" help:"A list of models to load into memory at startup" group:"models"`
+ }
+ 
+@@ -107,6 +108,7 @@ func (r *RunCMD) Run(ctx *cliContext.Context) error {
+ 		config.WithHttpGetExemptedEndpoints(r.HttpGetExemptedEndpoints),
+ 		config.WithP2PNetworkID(r.Peer2PeerNetworkID),
+ 		config.WithLoadToMemory(r.LoadToMemory),
++		config.WithMachineTag(r.MachineTag),
+ 	}
+ 
+ 	if r.DisableMetricsEndpoint {
+diff --git a/core/config/application_config.go b/core/config/application_config.go
+index 3f321e700baf..1ffcb297f98c 100644
+--- a/core/config/application_config.go
++++ b/core/config/application_config.go
+@@ -65,6 +65,8 @@ type ApplicationConfig struct {
+ 	ModelsURL []string
+ 
+ 	WatchDogBusyTimeout, WatchDogIdleTimeout time.Duration
++
++	MachineTag string
+ }
+ 
+ type AppOption func(*ApplicationConfig)
+@@ -94,6 +96,12 @@ func WithModelPath(path string) AppOption {
+ 	}
+ }
+ 
++func WithMachineTag(tag string) AppOption {
++	return func(o *ApplicationConfig) {
++		o.MachineTag = tag
++	}
++}
++
+ func WithCors(b bool) AppOption {
+ 	return func(o *ApplicationConfig) {
+ 		o.CORS = b
+diff --git a/core/http/app.go b/core/http/app.go
+index 47d89a106561..d1e80f8d9cc1 100644
+--- a/core/http/app.go
++++ b/core/http/app.go
+@@ -89,6 +89,14 @@ func API(application *application.Application) (*fiber.App, error) {
+ 
+ 	router.Use(middleware.StripPathPrefix())
+ 
++	if application.ApplicationConfig().MachineTag != "" {
++		router.Use(func(c *fiber.Ctx) error {
++			c.Response().Header.Set("Machine-Tag", application.ApplicationConfig().MachineTag)
++
++			return c.Next()
++		})
++	}
++
+ 	router.Hooks().OnListen(func(listenData fiber.ListenData) error {
+ 		scheme := "http"
+ 		if listenData.TLS {
+diff --git a/core/http/endpoints/localai/tts.go b/core/http/endpoints/localai/tts.go
+index 7c73c6337a0d..9116f9fa8b09 100644
+--- a/core/http/endpoints/localai/tts.go
++++ b/core/http/endpoints/localai/tts.go
+@@ -24,7 +24,6 @@ import (
+ //		@Router		/tts [post]
+ func TTSEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, appConfig *config.ApplicationConfig) func(c *fiber.Ctx) error {
+ 	return func(c *fiber.Ctx) error {
+-
+ 		input := new(schema.TTSRequest)
+ 
+ 		// Get input data from the request body
+diff --git a/core/http/endpoints/localai/vad.go b/core/http/endpoints/localai/vad.go
+index c5a5d929fa83..2ed6125c33a7 100644
+--- a/core/http/endpoints/localai/vad.go
++++ b/core/http/endpoints/localai/vad.go
+@@ -19,7 +19,6 @@ import (
+ // @Router		/vad [post]
+ func VADEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, appConfig *config.ApplicationConfig) func(c *fiber.Ctx) error {
+ 	return func(c *fiber.Ctx) error {
+-
+ 		input := new(schema.VADRequest)
+ 
+ 		// Get input data from the request body
+diff --git a/core/http/endpoints/openai/chat.go b/core/http/endpoints/openai/chat.go
+index c2b201bd31d0..cbce369a69c0 100644
+--- a/core/http/endpoints/openai/chat.go
++++ b/core/http/endpoints/openai/chat.go
+@@ -30,7 +30,7 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
+ 	var id, textContentToReturn string
+ 	var created int
+ 
+-	process := func(s string, req *schema.OpenAIRequest, config *config.BackendConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse) {
++	process := func(s string, req *schema.OpenAIRequest, config *config.BackendConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse, extraUsage bool) {
+ 		initialMessage := schema.OpenAIResponse{
+ 			ID:      id,
+ 			Created: created,
+@@ -40,18 +40,24 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
+ 		}
+ 		responses <- initialMessage
+ 
+-		ComputeChoices(req, s, config, startupOptions, loader, func(s string, c *[]schema.Choice) {}, func(s string, usage backend.TokenUsage) bool {
++		ComputeChoices(req, s, config, startupOptions, loader, func(s string, c *[]schema.Choice) {}, func(s string, tokenUsage backend.TokenUsage) bool {
++			usage := schema.OpenAIUsage{
++				PromptTokens:     tokenUsage.Prompt,
++				CompletionTokens: tokenUsage.Completion,
++				TotalTokens:      tokenUsage.Prompt + tokenUsage.Completion,
++			}
++			if extraUsage {
++				usage.TimingTokenGeneration = tokenUsage.TimingTokenGeneration
++				usage.TimingPromptProcessing = tokenUsage.TimingPromptProcessing
++			}
++
+ 			resp := schema.OpenAIResponse{
+ 				ID:      id,
+ 				Created: created,
+ 				Model:   req.Model, // we have to return what the user sent here, due to OpenAI spec.
+ 				Choices: []schema.Choice{{Delta: &schema.Message{Content: &s}, Index: 0}},
+ 				Object:  "chat.completion.chunk",
+-				Usage: schema.OpenAIUsage{
+-					PromptTokens:     usage.Prompt,
+-					CompletionTokens: usage.Completion,
+-					TotalTokens:      usage.Prompt + usage.Completion,
+-				},
++				Usage:   usage,
+ 			}
+ 
+ 			responses <- resp
+@@ -59,7 +65,7 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
+ 		})
+ 		close(responses)
+ 	}
+-	processTools := func(noAction string, prompt string, req *schema.OpenAIRequest, config *config.BackendConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse) {
++	processTools := func(noAction string, prompt string, req *schema.OpenAIRequest, config *config.BackendConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse, extraUsage bool) {
+ 		result := ""
+ 		_, tokenUsage, _ := ComputeChoices(req, prompt, config, startupOptions, loader, func(s string, c *[]schema.Choice) {}, func(s string, usage backend.TokenUsage) bool {
+ 			result += s
+@@ -90,6 +96,15 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
+ 				log.Error().Err(err).Msg("error handling question")
+ 				return
+ 			}
++			usage := schema.OpenAIUsage{
++				PromptTokens:     tokenUsage.Prompt,
++				CompletionTokens: tokenUsage.Completion,
++				TotalTokens:      tokenUsage.Prompt + tokenUsage.Completion,
++			}
++			if extraUsage {
++				usage.TimingTokenGeneration = tokenUsage.TimingTokenGeneration
++				usage.TimingPromptProcessing = tokenUsage.TimingPromptProcessing
++			}
+ 
+ 			resp := schema.OpenAIResponse{
+ 				ID:      id,
+@@ -97,11 +112,7 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
+ 				Model:   req.Model, // we have to return what the user sent here, due to OpenAI spec.
+ 				Choices: []schema.Choice{{Delta: &schema.Message{Content: &result}, Index: 0}},
+ 				Object:  "chat.completion.chunk",
+-				Usage: schema.OpenAIUsage{
+-					PromptTokens:     tokenUsage.Prompt,
+-					CompletionTokens: tokenUsage.Completion,
+-					TotalTokens:      tokenUsage.Prompt + tokenUsage.Completion,
+-				},
++				Usage:   usage,
+ 			}
+ 
+ 			responses <- resp
+@@ -170,6 +181,9 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
+ 		}
+ 		c.Set("X-Correlation-ID", correlationID)
+ 
++		// Opt-in extra usage flag
++		extraUsage := c.Get("LocalAI-Extra-Usage", "") != ""
++
+ 		modelFile, input, err := readRequest(c, cl, ml, startupOptions, true)
+ 		if err != nil {
+ 			return fmt.Errorf("failed reading parameters from request:%w", err)
+@@ -319,9 +333,9 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
+ 			responses := make(chan schema.OpenAIResponse)
+ 
+ 			if !shouldUseFn {
+-				go process(predInput, input, config, ml, responses)
++				go process(predInput, input, config, ml, responses, extraUsage)
+ 			} else {
+-				go processTools(noActionName, predInput, input, config, ml, responses)
++				go processTools(noActionName, predInput, input, config, ml, responses, extraUsage)
+ 			}
+ 
+ 			c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+@@ -449,6 +463,15 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
+ 			if err != nil {
+ 				return err
+ 			}
++			usage := schema.OpenAIUsage{
++				PromptTokens:     tokenUsage.Prompt,
++				CompletionTokens: tokenUsage.Completion,
++				TotalTokens:      tokenUsage.Prompt + tokenUsage.Completion,
++			}
++			if extraUsage {
++				usage.TimingTokenGeneration = tokenUsage.TimingTokenGeneration
++				usage.TimingPromptProcessing = tokenUsage.TimingPromptProcessing
++			}
+ 
+ 			resp := &schema.OpenAIResponse{
+ 				ID:      id,
+@@ -456,11 +479,7 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
+ 				Model:   input.Model, // we have to return what the user sent here, due to OpenAI spec.
+ 				Choices: result,
+ 				Object:  "chat.completion",
+-				Usage: schema.OpenAIUsage{
+-					PromptTokens:     tokenUsage.Prompt,
+-					CompletionTokens: tokenUsage.Completion,
+-					TotalTokens:      tokenUsage.Prompt + tokenUsage.Completion,
+-				},
++				Usage:   usage,
+ 			}
+ 			respData, _ := json.Marshal(resp)
+ 			log.Debug().Msgf("Response: %s", respData)
+diff --git a/core/http/endpoints/openai/completion.go b/core/http/endpoints/openai/completion.go
+index 04ebc847905f..339e9bc2327e 100644
+--- a/core/http/endpoints/openai/completion.go
++++ b/core/http/endpoints/openai/completion.go
+@@ -30,8 +30,17 @@ func CompletionEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, e
+ 	id := uuid.New().String()
+ 	created := int(time.Now().Unix())
+ 
+-	process := func(s string, req *schema.OpenAIRequest, config *config.BackendConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse) {
+-		ComputeChoices(req, s, config, appConfig, loader, func(s string, c *[]schema.Choice) {}, func(s string, usage backend.TokenUsage) bool {
++	process := func(s string, req *schema.OpenAIRequest, config *config.BackendConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse, extraUsage bool) {
++		ComputeChoices(req, s, config, appConfig, loader, func(s string, c *[]schema.Choice) {}, func(s string, tokenUsage backend.TokenUsage) bool {
++			usage := schema.OpenAIUsage{
++				PromptTokens:     tokenUsage.Prompt,
++				CompletionTokens: tokenUsage.Completion,
++				TotalTokens:      tokenUsage.Prompt + tokenUsage.Completion,
++			}
++			if extraUsage {
++				usage.TimingTokenGeneration = tokenUsage.TimingTokenGeneration
++				usage.TimingPromptProcessing = tokenUsage.TimingPromptProcessing
++			}
+ 			resp := schema.OpenAIResponse{
+ 				ID:      id,
+ 				Created: created,
+@@ -43,11 +52,7 @@ func CompletionEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, e
+ 					},
+ 				},
+ 				Object: "text_completion",
+-				Usage: schema.OpenAIUsage{
+-					PromptTokens:     usage.Prompt,
+-					CompletionTokens: usage.Completion,
+-					TotalTokens:      usage.Prompt + usage.Completion,
+-				},
++				Usage:  usage,
+ 			}
+ 			log.Debug().Msgf("Sending goroutine: %s", s)
+ 
+@@ -60,6 +65,10 @@ func CompletionEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, e
+ 	return func(c *fiber.Ctx) error {
+ 		// Add Correlation
+ 		c.Set("X-Correlation-ID", id)
++
++		// Opt-in extra usage flag
++		extraUsage := c.Get("LocalAI-Extra-Usage", "") != ""
++
+ 		modelFile, input, err := readRequest(c, cl, ml, appConfig, true)
+ 		if err != nil {
+ 			return fmt.Errorf("failed reading parameters from request:%w", err)
+@@ -113,7 +122,7 @@ func CompletionEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, e
+ 
+ 			responses := make(chan schema.OpenAIResponse)
+ 
+-			go process(predInput, input, config, ml, responses)
++			go process(predInput, input, config, ml, responses, extraUsage)
+ 
+ 			c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+ 
+@@ -170,11 +179,20 @@ func CompletionEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, e
+ 				return err
+ 			}
+ 
+-			totalTokenUsage.Prompt += tokenUsage.Prompt
+-			totalTokenUsage.Completion += tokenUsage.Completion
++			totalTokenUsage.TimingTokenGeneration += tokenUsage.TimingTokenGeneration
++			totalTokenUsage.TimingPromptProcessing += tokenUsage.TimingPromptProcessing
+ 
+ 			result = append(result, r...)
+ 		}
++		usage := schema.OpenAIUsage{
++			PromptTokens:     totalTokenUsage.Prompt,
++			CompletionTokens: totalTokenUsage.Completion,
++			TotalTokens:      totalTokenUsage.Prompt + totalTokenUsage.Completion,
++		}
++		if extraUsage {
++			usage.TimingTokenGeneration = totalTokenUsage.TimingTokenGeneration
++			usage.TimingPromptProcessing = totalTokenUsage.TimingPromptProcessing
++		}
+ 
+ 		resp := &schema.OpenAIResponse{
+ 			ID:      id,
+@@ -182,11 +200,7 @@ func CompletionEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, e
+ 			Model:   input.Model, // we have to return what the user sent here, due to OpenAI spec.
+ 			Choices: result,
+ 			Object:  "text_completion",
+-			Usage: schema.OpenAIUsage{
+-				PromptTokens:     totalTokenUsage.Prompt,
+-				CompletionTokens: totalTokenUsage.Completion,
+-				TotalTokens:      totalTokenUsage.Prompt + totalTokenUsage.Completion,
+-			},
++			Usage:   usage,
+ 		}
+ 
+ 		jsonResult, _ := json.Marshal(resp)
+diff --git a/core/http/endpoints/openai/edit.go b/core/http/endpoints/openai/edit.go
+index a6d609fbfeb3..e10a12d102c7 100644
+--- a/core/http/endpoints/openai/edit.go
++++ b/core/http/endpoints/openai/edit.go
+@@ -25,6 +25,9 @@ import (
+ func EditEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluator *templates.Evaluator, appConfig *config.ApplicationConfig) func(c *fiber.Ctx) error {
+ 
+ 	return func(c *fiber.Ctx) error {
++		// Opt-in extra usage flag
++		extraUsage := c.Get("LocalAI-Extra-Usage", "") != ""
++
+ 		modelFile, input, err := readRequest(c, cl, ml, appConfig, true)
+ 		if err != nil {
+ 			return fmt.Errorf("failed reading parameters from request:%w", err)
+@@ -61,8 +64,20 @@ func EditEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
+ 			totalTokenUsage.Prompt += tokenUsage.Prompt
+ 			totalTokenUsage.Completion += tokenUsage.Completion
+ 
++			totalTokenUsage.TimingTokenGeneration += tokenUsage.TimingTokenGeneration
++			totalTokenUsage.TimingPromptProcessing += tokenUsage.TimingPromptProcessing
++
+ 			result = append(result, r...)
+ 		}
++		usage := schema.OpenAIUsage{
++			PromptTokens:     totalTokenUsage.Prompt,
++			CompletionTokens: totalTokenUsage.Completion,
++			TotalTokens:      totalTokenUsage.Prompt + totalTokenUsage.Completion,
++		}
++		if extraUsage {
++			usage.TimingTokenGeneration = totalTokenUsage.TimingTokenGeneration
++			usage.TimingPromptProcessing = totalTokenUsage.TimingPromptProcessing
++		}
+ 
+ 		id := uuid.New().String()
+ 		created := int(time.Now().Unix())
+@@ -72,11 +87,7 @@ func EditEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
+ 			Model:   input.Model, // we have to return what the user sent here, due to OpenAI spec.
+ 			Choices: result,
+ 			Object:  "edit",
+-			Usage: schema.OpenAIUsage{
+-				PromptTokens:     totalTokenUsage.Prompt,
+-				CompletionTokens: totalTokenUsage.Completion,
+-				TotalTokens:      totalTokenUsage.Prompt + totalTokenUsage.Completion,
+-			},
++			Usage:   usage,
+ 		}
+ 
+ 		jsonResult, _ := json.Marshal(resp)
+diff --git a/core/http/endpoints/openai/inference.go b/core/http/endpoints/openai/inference.go
+index da75d3a1ea5b..f59e3b605f9d 100644
+--- a/core/http/endpoints/openai/inference.go
++++ b/core/http/endpoints/openai/inference.go
+@@ -52,6 +52,8 @@ func ComputeChoices(
+ 
+ 		tokenUsage.Prompt += prediction.Usage.Prompt
+ 		tokenUsage.Completion += prediction.Usage.Completion
++		tokenUsage.TimingPromptProcessing += prediction.Usage.TimingPromptProcessing
++		tokenUsage.TimingTokenGeneration += prediction.Usage.TimingTokenGeneration
+ 
+ 		finetunedResponse := backend.Finetune(*config, predInput, prediction.Response)
+ 		cb(finetunedResponse, &result)
+diff --git a/core/http/endpoints/openai/list.go b/core/http/endpoints/openai/list.go
+index 80dcb3e49442..9d21f8fe2f74 100644
+--- a/core/http/endpoints/openai/list.go
++++ b/core/http/endpoints/openai/list.go
+@@ -12,7 +12,7 @@ import (
+ // @Summary List and describe the various models available in the API.
+ // @Success 200 {object} schema.ModelsDataResponse "Response"
+ // @Router /v1/models [get]
+-func ListModelsEndpoint(bcl *config.BackendConfigLoader, ml *model.ModelLoader) func(ctx *fiber.Ctx) error {
++func ListModelsEndpoint(bcl *config.BackendConfigLoader, ml *model.ModelLoader, appConfig *config.ApplicationConfig) func(ctx *fiber.Ctx) error {
+ 	return func(c *fiber.Ctx) error {
+ 		// If blank, no filter is applied.
+ 		filter := c.Query("filter")
+diff --git a/core/http/routes/openai.go b/core/http/routes/openai.go
+index 5ff301b673bc..a48ced6562da 100644
+--- a/core/http/routes/openai.go
++++ b/core/http/routes/openai.go
+@@ -130,6 +130,6 @@ func RegisterOpenAIRoutes(app *fiber.App,
+ 	}
+ 
+ 	// List models
+-	app.Get("/v1/models", openai.ListModelsEndpoint(application.BackendLoader(), application.ModelLoader()))
+-	app.Get("/models", openai.ListModelsEndpoint(application.BackendLoader(), application.ModelLoader()))
++	app.Get("/v1/models", openai.ListModelsEndpoint(application.BackendLoader(), application.ModelLoader(), application.ApplicationConfig()))
++	app.Get("/models", openai.ListModelsEndpoint(application.BackendLoader(), application.ModelLoader(), application.ApplicationConfig()))
+ }
+diff --git a/core/schema/openai.go b/core/schema/openai.go
+index 15bcd13df3e9..b06120ae226f 100644
+--- a/core/schema/openai.go
++++ b/core/schema/openai.go
+@@ -23,6 +23,9 @@ type OpenAIUsage struct {
+ 	PromptTokens     int `json:"prompt_tokens"`
+ 	CompletionTokens int `json:"completion_tokens"`
+ 	TotalTokens      int `json:"total_tokens"`
++	// Extra timing data, disabled by default as is't not a part of OpenAI specification
++	TimingPromptProcessing float64 `json:"timing_prompt_processing,omitempty"`
++	TimingTokenGeneration  float64 `json:"timing_token_generation,omitempty"`
+ }
+ 
+ type Item struct {

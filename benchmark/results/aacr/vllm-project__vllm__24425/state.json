@@ -1,0 +1,28 @@
+{
+ "owner": "vllm-project",
+ "repo": "vllm",
+ "full": "vllm-project/vllm",
+ "pr_number": 24425,
+ "title": "[P/D] MultiConnector supports shutdown",
+ "body": "\n## Purpose\nPart of https://github.com/vllm-project/vllm/pull/22699\n\n\nMultiConnector calls the shutdown method of each Connector during shutdown.\n## Test Plan\n\n## Test Result\n\n\n",
+ "base_sha": "f4962a6d55a340ebb569d377c842deff7611d8f7",
+ "review_sha": "6217b0c46176fa51196d862e02e1b3722eefa4de",
+ "head_now": "d67e5ba822935a1fd2dd01a11ca01c01b3b9b4c6",
+ "raw_diff": "diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py b/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py\nindex 65bcb4d93b1e..e2ddfde33635 100644\n--- a/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py\n+++ b/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py\n@@ -87,6 +87,18 @@ def clear_connector_metadata(self) -> None:\n         for c in self._connectors:\n             c.clear_connector_metadata()\n \n+    def shutdown(self):\n+        exceptions = []\n+        for c in self._connectors:\n+            try:\n+                c.shutdown()\n+            except Exception as e:\n+                logger.exception(\"Exception during connector %s shutdown: %s\",\n+                                 c.__class__.__name__, str(e))\n+                exceptions.append(e)\n+        if exceptions:\n+            raise exceptions[0]\n+\n     # ==============================\n     # Worker-side methods\n     # ==============================\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py",
+   "body": "Redundant exception message in logger.exception call: the current implementation includes the exception string in the format specifier, but logger.exception automatically appends full exception details, causing duplication. Remove the `: %s` format specifier and `str(e)` argument.",
+   "from_line": 96,
+   "to_line": 97,
+   "category": "Code Defect",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -87,6 +87,18 @@ def clear_connector_metadata(self) -> None:\n         for c in self._connectors:\n             c.clear_connector_metadata()\n \n+    def shutdown(self):\n+        exceptions = []\n+        for c in self._connectors:\n+            try:\n+                c.shutdown()\n+            except Exception as e:\n+                logger.exception(\"Exception during connector %s shutdown: %s\",\n+                                 c.__class__.__name__, str(e))\n+                exceptions.append(e)\n+        if exceptions:\n+            raise exceptions[0]\n+\n     # ==============================\n     # Worker-side methods\n     # ==============================",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "Python"
+}

@@ -1,0 +1,264 @@
+diff --git a/packages/@n8n/api-types/src/index.ts b/packages/@n8n/api-types/src/index.ts
+index 2077b2d29463..37efd224befe 100644
+--- a/packages/@n8n/api-types/src/index.ts
++++ b/packages/@n8n/api-types/src/index.ts
+@@ -45,6 +45,8 @@ export {
+ 	type User,
+ 	type UsersList,
+ 	usersListSchema,
++	userBaseSchema,
++	userDetailSchema,
+ } from './schemas/user.schema';
+ 
+ export {
+diff --git a/packages/@n8n/api-types/src/schemas/__tests__/user.schema.test.ts b/packages/@n8n/api-types/src/schemas/__tests__/user.schema.test.ts
+index 3ed2487d2161..b689e314923b 100644
+--- a/packages/@n8n/api-types/src/schemas/__tests__/user.schema.test.ts
++++ b/packages/@n8n/api-types/src/schemas/__tests__/user.schema.test.ts
+@@ -1,4 +1,4 @@
+-import { roleSchema, userListItemSchema, usersListSchema } from '../user.schema';
++import { roleSchema, userDetailSchema, userBaseSchema, usersListSchema } from '../user.schema';
+ 
+ describe('user.schema', () => {
+ 	describe('roleSchema', () => {
+@@ -14,7 +14,7 @@ describe('user.schema', () => {
+ 		});
+ 	});
+ 
+-	describe('userListItemSchema', () => {
++	describe('userDetailSchema', () => {
+ 		test.each([
+ 			{
+ 				name: 'valid user',
+@@ -80,7 +80,78 @@ describe('user.schema', () => {
+ 				isValid: false,
+ 			},
+ 		])('should validate $name', ({ data, isValid }) => {
+-			const result = userListItemSchema.safeParse(data);
++			const result = userDetailSchema.safeParse(data);
++			expect(result.success).toBe(isValid);
++		});
++	});
++
++	describe('userBaseSchema', () => {
++		test.each([
++			{
++				name: 'valid user',
++				data: {
++					id: '123',
++					firstName: 'John',
++					lastName: 'Doe',
++					email: 'johndoe@example.com',
++					role: 'global:member',
++					isPending: false,
++					lastActive: '2023-10-01T12:00:00Z',
++					projects: ['project1', 'project2'],
++				},
++				isValid: true,
++			},
++			{
++				name: 'user with undefined fields',
++				data: {
++					id: '123',
++					role: 'global:member',
++					isPending: false,
++				},
++				isValid: true,
++			},
++			{
++				name: 'invalid email',
++				data: {
++					id: '123',
++					firstName: 'John',
++					lastName: 'Doe',
++					email: 'not-an-email',
++					role: 'global:member',
++					isPending: false,
++					lastActive: '2023-10-01T12:00:00Z',
++					projects: ['project1', 'project2'],
++				},
++				isValid: false,
++			},
++			{
++				name: 'missing required fields',
++				data: {
++					firstName: 'John',
++					lastName: 'Doe',
++					email: null,
++					role: 'global:member',
++					isPending: false,
++					lastActive: '2023-10-01T12:00:00Z',
++				},
++				isValid: false,
++			},
++			{
++				name: 'invalid role',
++				data: {
++					id: '123',
++					firstName: 'John',
++					lastName: 'Doe',
++					email: 'johndoe@example.com',
++					role: 'invalid-role',
++					isPending: false,
++					lastActive: '2023-10-01T12:00:00Z',
++					projects: ['project1', 'project2'],
++				},
++				isValid: false,
++			},
++		])('should validate $name', ({ data, isValid }) => {
++			const result = userBaseSchema.safeParse(data);
+ 			expect(result.success).toBe(isValid);
+ 		});
+ 	});
+diff --git a/packages/@n8n/api-types/src/schemas/user.schema.ts b/packages/@n8n/api-types/src/schemas/user.schema.ts
+index baf0f4a39892..a3bad669a75a 100644
+--- a/packages/@n8n/api-types/src/schemas/user.schema.ts
++++ b/packages/@n8n/api-types/src/schemas/user.schema.ts
+@@ -22,12 +22,15 @@ export const userProjectSchema = z.object({
+ 	name: z.string(),
+ });
+ 
+-export const userListItemSchema = z.object({
++export const userBaseSchema = z.object({
+ 	id: z.string(),
+ 	firstName: z.string().nullable().optional(),
+ 	lastName: z.string().nullable().optional(),
+ 	email: z.string().email().nullable().optional(),
+ 	role: roleSchema.optional(),
++});
++
++export const userDetailSchema = userBaseSchema.extend({
+ 	isPending: z.boolean().optional(),
+ 	isOwner: z.boolean().optional(),
+ 	signInType: z.string().optional(),
+@@ -41,8 +44,8 @@ export const userListItemSchema = z.object({
+ 
+ export const usersListSchema = z.object({
+ 	count: z.number(),
+-	items: z.array(userListItemSchema),
++	items: z.array(userDetailSchema),
+ });
+ 
+-export type User = z.infer<typeof userListItemSchema>;
++export type User = z.infer<typeof userDetailSchema>;
+ export type UsersList = z.infer<typeof usersListSchema>;
+diff --git a/packages/cli/src/controllers/users.controller.ts b/packages/cli/src/controllers/users.controller.ts
+index 1942c7507263..b9917dcb05d3 100644
+--- a/packages/cli/src/controllers/users.controller.ts
++++ b/packages/cli/src/controllers/users.controller.ts
+@@ -1,6 +1,8 @@
+ import {
+ 	RoleChangeRequestDto,
+ 	SettingsUpdateRequestDto,
++	userDetailSchema,
++	userBaseSchema,
+ 	UsersListFilterDto,
+ 	usersListSchema,
+ } from '@n8n/api-types';
+@@ -74,6 +76,7 @@ export class UsersController {
+ 	private removeSupplementaryFields(
+ 		publicUsers: Array<Partial<PublicUser>>,
+ 		listQueryOptions: UsersListFilterDto,
++		currentUser: User,
+ 	) {
+ 		const { select } = listQueryOptions;
+ 
+@@ -93,7 +96,12 @@ export class UsersController {
+ 			}
+ 		}
+ 
+-		return publicUsers;
++		const usersSeesAllDetails = hasGlobalScope(currentUser, 'user:create');
++		return publicUsers.map((user) => {
++			return usersSeesAllDetails || user.id === currentUser.id
++				? userDetailSchema.parse(user)
++				: userBaseSchema.parse(user);
++		});
+ 	}
+ 
+ 	@Get('/')
+@@ -133,7 +141,7 @@ export class UsersController {
+ 
+ 		return usersListSchema.parse({
+ 			count,
+-			items: this.removeSupplementaryFields(publicUsers, listQueryOptions),
++			items: this.removeSupplementaryFields(publicUsers, listQueryOptions, req.user),
+ 		});
+ 	}
+ 
+diff --git a/packages/cli/test/integration/users.api.test.ts b/packages/cli/test/integration/users.api.test.ts
+index e6db3f68d96f..731a93d228a7 100644
+--- a/packages/cli/test/integration/users.api.test.ts
++++ b/packages/cli/test/integration/users.api.test.ts
+@@ -630,7 +630,6 @@ describe('GET /users', () => {
+ 				const nonPendingUser = responseData.items.find((user) => user.id === member1.id);
+ 
+ 				expect(nonPendingUser).toBeDefined();
+-				expect(nonPendingUser!.isPending).toBe(false);
+ 				expect(nonPendingUser!.inviteAcceptUrl).toBeUndefined();
+ 			});
+ 		});
+@@ -770,6 +769,63 @@ describe('GET /users', () => {
+ 				await userRepository.delete({ id: user2.id });
+ 			});
+ 		});
++
++		describe('field restrictions based on user:create scope', () => {
++			test('should return limited fields for members without user:create scope', async () => {
++				const response = await memberAgent.get('/users').expect(200);
++
++				const users = response.body.data.items;
++
++				expect(users).toBeInstanceOf(Array);
++
++				// Fields that should be restricted for members without user:create scope
++				const restrictionsFields = [
++					'mfaEnabled',
++					'settings',
++					'personalizationAnswers',
++					'inviteAcceptUrl',
++					'lastActiveAt',
++					'isOwner',
++					'signInType',
++					'projectRelations',
++				];
++
++				// Verify that sensitive/admin fields are NOT present for members
++				users.forEach((user: any) => {
++					// Basic fields should be present
++					expect(user).toHaveProperty('id');
++
++					if (user.id !== member1.id) {
++						// Admin-only fields should NOT be present
++						restrictionsFields.forEach((field) => {
++							expect(user).not.toHaveProperty(field);
++						});
++					} else {
++						// Admin-only fields should be present for own user
++						expect(user).toHaveProperty('mfaEnabled');
++						expect(user).toHaveProperty('settings');
++						expect(user).toHaveProperty('personalizationAnswers');
++						expect(user).toHaveProperty('lastActiveAt');
++						expect(user).toHaveProperty('isOwner');
++						expect(user).toHaveProperty('signInType');
++					}
++				});
++			});
++
++			test('should return full fields for owners/admins with user:create scope', async () => {
++				const response = await ownerAgent.get('/users').expect(200);
++
++				const users = response.body.data.items;
++
++				expect(users).toBeInstanceOf(Array);
++
++				// Verify that admin fields ARE present for owners
++				const userWithMfa = users.find((u: any) => u.email === 'member1@n8n.io');
++				expect(userWithMfa).toHaveProperty('mfaEnabled', true);
++				expect(userWithMfa).toHaveProperty('isOwner');
++				expect(userWithMfa).toHaveProperty('signInType');
++			});
++		});
+ 	});
+ });
+ 

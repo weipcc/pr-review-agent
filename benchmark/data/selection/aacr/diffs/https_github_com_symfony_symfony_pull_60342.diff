@@ -1,0 +1,50 @@
+diff --git a/src/Symfony/Component/Notifier/Bridge/Mercure/MercureOptions.php b/src/Symfony/Component/Notifier/Bridge/Mercure/MercureOptions.php
+index 4f3f80c0d7649..85a513cee6901 100644
+--- a/src/Symfony/Component/Notifier/Bridge/Mercure/MercureOptions.php
++++ b/src/Symfony/Component/Notifier/Bridge/Mercure/MercureOptions.php
+@@ -22,6 +22,21 @@ final class MercureOptions implements MessageOptionsInterface
+ 
+     /**
+      * @param string|string[]|null $topics
++     * @param array{
++     *     badge?: string,
++     *     body?: string,
++     *     data?: mixed,
++     *     dir?: 'auto'|'ltr'|'rtl',
++     *     icon?: string,
++     *     image?: string,
++     *     lang?: string,
++     *     renotify?: bool,
++     *     requireInteraction?: bool,
++     *     silent?: bool,
++     *     tag?: string,
++     *     timestamp?: int,
++     *     vibrate?: int|list<int>,
++     * }|null $content
+      */
+     public function __construct(
+         string|array|null $topics = null,
+@@ -62,6 +77,23 @@ public function getRetry(): ?int
+         return $this->retry;
+     }
+ 
++    /**
++     * @return array{
++     *      badge?: string,
++     *      body?: string,
++     *      data?: mixed,
++     *      dir?: 'auto'|'ltr'|'rtl',
++     *      icon?: string,
++     *      image?: string,
++     *      lang?: string,
++     *      renotify?: bool,
++     *      requireInteraction?: bool,
++     *      silent?: bool,
++     *      tag?: string,
++     *      timestamp?: int,
++     *      vibrate?: int|list<int>,
++     *  }|null
++     */
+     public function getContent(): ?array
+     {
+         return $this->content;

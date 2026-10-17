@@ -1,0 +1,29 @@
+{
+ "results": [
+  {
+   "change_intent": "Redact user data from protocol error logs when hide-user-data-from-log configuration is enabled.",
+   "summary": "The change introduces a critical bug by using the C comma operator in a ternary expression within snprintf, resulting in crashes or undefined behavior.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 2771,
+     "end_line": 2777,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "snprintf(buf, sizeof(buf), server.hide_user_data_from_log ?\n                     (\"Query buffer during protocol error: [hide_user_data_from_log]Redacted %zu bytes\",\n                      sdslen(c->querybuf) - c->qb_pos) :\n                     (\"Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'\",\n                      PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,\n                      PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2));",
+     "comment": "In C, parentheses containing comma-separated expressions evaluate as the comma operator, not argument lists. Consequently, the ternary expression evaluates to only the final operand (a size_t when true, or a pointer when false), passing it as the format string argument to snprintf with no subsequent variadic arguments. When hide_user_data_from_log is true, an integer size is passed as the `const char *format` pointer, causing a crash (SIGSEGV) or undefined behavior at runtime.",
+     "suggestion": "Split the conditional formatting into an `if-else` statement so each `snprintf` call receives its own format string and arguments properly.",
+     "suggested_code": "            if (server.hide_user_data_from_log) {\n                snprintf(buf, sizeof(buf), \"Query buffer during protocol error: [hide_user_data_from_log]Redacted %zu bytes\",\n                         sdslen(c->querybuf) - c->qb_pos);\n            } else {\n                snprintf(buf, sizeof(buf), \"Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'\",\n                         PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,\n                         PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2);\n            }"
+    }
+   ],
+   "filename": "src/networking.c"
+  }
+ ],
+ "n_files": 1,
+ "input_tokens": 5779,
+ "output_tokens": 628,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 29.4,
+ "model": "gemini-3.8-flash"
+}

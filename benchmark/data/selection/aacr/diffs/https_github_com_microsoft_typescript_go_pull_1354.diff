@@ -1,0 +1,694 @@
+diff --git a/cmd/tsgo/api.go b/cmd/tsgo/api.go
+index 702ce143a2d..9438c39115d 100644
+--- a/cmd/tsgo/api.go
++++ b/cmd/tsgo/api.go
+@@ -26,7 +26,6 @@ func runAPI(args []string) int {
+ 		Out:                os.Stdout,
+ 		Err:                os.Stderr,
+ 		Cwd:                *cwd,
+-		NewLine:            "\n",
+ 		DefaultLibraryPath: defaultLibraryPath,
+ 	})
+ 
+diff --git a/cmd/tsgo/sys.go b/cmd/tsgo/sys.go
+index cb8ce522222..cfdafdd2091 100644
+--- a/cmd/tsgo/sys.go
++++ b/cmd/tsgo/sys.go
+@@ -4,11 +4,9 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"os"
+-	"runtime"
+ 	"time"
+ 
+ 	"github.com/microsoft/typescript-go/internal/bundled"
+-	"github.com/microsoft/typescript-go/internal/core"
+ 	"github.com/microsoft/typescript-go/internal/execute"
+ 	"github.com/microsoft/typescript-go/internal/tspath"
+ 	"github.com/microsoft/typescript-go/internal/vfs"
+@@ -19,7 +17,6 @@ type osSys struct {
+ 	writer             io.Writer
+ 	fs                 vfs.FS
+ 	defaultLibraryPath string
+-	newLine            string
+ 	cwd                string
+ 	start              time.Time
+ }
+@@ -44,10 +41,6 @@ func (s *osSys) GetCurrentDirectory() string {
+ 	return s.cwd
+ }
+ 
+-func (s *osSys) NewLine() string {
+-	return s.newLine
+-}
+-
+ func (s *osSys) Writer() io.Writer {
+ 	return s.writer
+ }
+@@ -69,7 +62,6 @@ func newSystem() *osSys {
+ 		fs:                 bundled.WrapFS(osvfs.FS()),
+ 		defaultLibraryPath: bundled.LibPath(),
+ 		writer:             os.Stdout,
+-		newLine:            core.IfElse(runtime.GOOS == "windows", "\r\n", "\n"),
+ 		start:              time.Now(),
+ 	}
+ }
+diff --git a/internal/api/api.go b/internal/api/api.go
+index b5223711258..1c714767942 100644
+--- a/internal/api/api.go
++++ b/internal/api/api.go
+@@ -111,11 +111,6 @@ func (api *API) Trace(s string) {
+ 	api.options.Logger.Info(s)
+ }
+ 
+-// NewLine implements ProjectHost.
+-func (api *API) NewLine() string {
+-	return api.host.NewLine()
+-}
+-
+ // PositionEncoding implements ProjectHost.
+ func (api *API) PositionEncoding() lsproto.PositionEncodingKind {
+ 	return lsproto.PositionEncodingKindUTF8
+diff --git a/internal/api/host.go b/internal/api/host.go
+index 83d45a8c60f..21136ac5d90 100644
+--- a/internal/api/host.go
++++ b/internal/api/host.go
+@@ -6,5 +6,4 @@ type APIHost interface {
+ 	FS() vfs.FS
+ 	DefaultLibraryPath() string
+ 	GetCurrentDirectory() string
+-	NewLine() string
+ }
+diff --git a/internal/api/server.go b/internal/api/server.go
+index e6c5a6d5753..afc558bd56e 100644
+--- a/internal/api/server.go
++++ b/internal/api/server.go
+@@ -61,7 +61,6 @@ type ServerOptions struct {
+ 	Out                io.Writer
+ 	Err                io.Writer
+ 	Cwd                string
+-	NewLine            string
+ 	DefaultLibraryPath string
+ }
+ 
+@@ -98,7 +97,6 @@ func NewServer(options *ServerOptions) *Server {
+ 		w:                  bufio.NewWriter(options.Out),
+ 		stderr:             options.Err,
+ 		cwd:                options.Cwd,
+-		newLine:            options.NewLine,
+ 		fs:                 bundled.WrapFS(osvfs.FS()),
+ 		defaultLibraryPath: options.DefaultLibraryPath,
+ 	}
+@@ -126,11 +124,6 @@ func (s *Server) GetCurrentDirectory() string {
+ 	return s.cwd
+ }
+ 
+-// NewLine implements APIHost.
+-func (s *Server) NewLine() string {
+-	return s.newLine
+-}
+-
+ func (s *Server) Run() error {
+ 	for {
+ 		messageType, method, payload, err := s.readRequest("")
+diff --git a/internal/checker/checker_test.go b/internal/checker/checker_test.go
+index 161be261eb1..3034d35b5da 100644
+--- a/internal/checker/checker_test.go
++++ b/internal/checker/checker_test.go
+@@ -36,7 +36,7 @@ foo.bar;`
+ 	fs = bundled.WrapFS(fs)
+ 
+ 	cd := "/"
+-	host := compiler.NewCompilerHost(nil, cd, fs, bundled.LibPath(), nil)
++	host := compiler.NewCompilerHost(cd, fs, bundled.LibPath())
+ 
+ 	parsed, errors := tsoptions.GetParsedCommandLineOfConfigFile("/tsconfig.json", &core.CompilerOptions{}, host, nil)
+ 	assert.Equal(t, len(errors), 0, "Expected no errors in parsed command line")
+@@ -70,7 +70,7 @@ func TestCheckSrcCompiler(t *testing.T) {
+ 
+ 	rootPath := tspath.CombinePaths(tspath.NormalizeSlashes(repo.TypeScriptSubmodulePath), "src", "compiler")
+ 
+-	host := compiler.NewCompilerHost(nil, rootPath, fs, bundled.LibPath(), nil)
++	host := compiler.NewCompilerHost(rootPath, fs, bundled.LibPath())
+ 	parsed, errors := tsoptions.GetParsedCommandLineOfConfigFile(tspath.CombinePaths(rootPath, "tsconfig.json"), &core.CompilerOptions{}, host, nil)
+ 	assert.Equal(t, len(errors), 0, "Expected no errors in parsed command line")
+ 	p := compiler.NewProgram(compiler.ProgramOptions{
+@@ -87,7 +87,7 @@ func BenchmarkNewChecker(b *testing.B) {
+ 
+ 	rootPath := tspath.CombinePaths(tspath.NormalizeSlashes(repo.TypeScriptSubmodulePath), "src", "compiler")
+ 
+-	host := compiler.NewCompilerHost(nil, rootPath, fs, bundled.LibPath(), nil)
++	host := compiler.NewCompilerHost(rootPath, fs, bundled.LibPath())
+ 	parsed, errors := tsoptions.GetParsedCommandLineOfConfigFile(tspath.CombinePaths(rootPath, "tsconfig.json"), &core.CompilerOptions{}, host, nil)
+ 	assert.Equal(b, len(errors), 0, "Expected no errors in parsed command line")
+ 	p := compiler.NewProgram(compiler.ProgramOptions{
+diff --git a/internal/compiler/host.go b/internal/compiler/host.go
+index 82c8c697a37..8c480e896a8 100644
+--- a/internal/compiler/host.go
++++ b/internal/compiler/host.go
+@@ -2,7 +2,6 @@ package compiler
+ 
+ import (
+ 	"github.com/microsoft/typescript-go/internal/ast"
+-	"github.com/microsoft/typescript-go/internal/collections"
+ 	"github.com/microsoft/typescript-go/internal/core"
+ 	"github.com/microsoft/typescript-go/internal/parser"
+ 	"github.com/microsoft/typescript-go/internal/tsoptions"
+@@ -15,50 +14,36 @@ type CompilerHost interface {
+ 	FS() vfs.FS
+ 	DefaultLibraryPath() string
+ 	GetCurrentDirectory() string
+-	NewLine() string
+ 	Trace(msg string)
+ 	GetSourceFile(opts ast.SourceFileParseOptions) *ast.SourceFile
+ 	GetResolvedProjectReference(fileName string, path tspath.Path) *tsoptions.ParsedCommandLine
+ }
+ 
+-type FileInfo struct {
+-	Name string
+-	Size int64
+-}
+-
+ var _ CompilerHost = (*compilerHost)(nil)
+ 
+ type compilerHost struct {
+-	options             *core.CompilerOptions
+-	currentDirectory    string
+-	fs                  vfs.FS
+-	defaultLibraryPath  string
+-	extendedConfigCache *collections.SyncMap[tspath.Path, *tsoptions.ExtendedConfigCacheEntry]
++	currentDirectory   string
++	fs                 vfs.FS
++	defaultLibraryPath string
+ }
+ 
+ func NewCachedFSCompilerHost(
+-	options *core.CompilerOptions,
+ 	currentDirectory string,
+ 	fs vfs.FS,
+ 	defaultLibraryPath string,
+-	extendedConfigCache *collections.SyncMap[tspath.Path, *tsoptions.ExtendedConfigCacheEntry],
+ ) CompilerHost {
+-	return NewCompilerHost(options, currentDirectory, cachedvfs.From(fs), defaultLibraryPath, extendedConfigCache)
++	return NewCompilerHost(currentDirectory, cachedvfs.From(fs), defaultLibraryPath)
+ }
+ 
+ func NewCompilerHost(
+-	options *core.CompilerOptions,
+ 	currentDirectory string,
+ 	fs vfs.FS,
+ 	defaultLibraryPath string,
+-	extendedConfigCache *collections.SyncMap[tspath.Path, *tsoptions.ExtendedConfigCacheEntry],
+ ) CompilerHost {
+ 	return &compilerHost{
+-		options:             options,
+-		currentDirectory:    currentDirectory,
+-		fs:                  fs,
+-		defaultLibraryPath:  defaultLibraryPath,
+-		extendedConfigCache: extendedConfigCache,
++		currentDirectory:   currentDirectory,
++		fs:                 fs,
++		defaultLibraryPath: defaultLibraryPath,
+ 	}
+ }
+ 
+@@ -70,21 +55,10 @@ func (h *compilerHost) DefaultLibraryPath() string {
+ 	return h.defaultLibraryPath
+ }
+ 
+-func (h *compilerHost) SetOptions(options *core.CompilerOptions) {
+-	h.options = options
+-}
+-
+ func (h *compilerHost) GetCurrentDirectory() string {
+ 	return h.currentDirectory
+ }
+ 
+-func (h *compilerHost) NewLine() string {
+-	if h.options == nil {
+-		return "\n"
+-	}
+-	return h.options.NewLine.GetNewLineCharacter()
+-}
+-
+ func (h *compilerHost) Trace(msg string) {
+ 	//!!! TODO: implement
+ }
+diff --git a/internal/compiler/program_test.go b/internal/compiler/program_test.go
+index 0043848cefe..c723b234abf 100644
+--- a/internal/compiler/program_test.go
++++ b/internal/compiler/program_test.go
+@@ -240,7 +240,7 @@ func TestProgram(t *testing.T) {
+ 						CompilerOptions: &opts,
+ 					},
+ 				},
+-				Host: NewCompilerHost(&opts, "c:/dev/src", fs, bundled.LibPath(), nil),
++				Host: NewCompilerHost("c:/dev/src", fs, bundled.LibPath()),
+ 			})
+ 
+ 			actualFiles := []string{}
+@@ -277,7 +277,7 @@ func BenchmarkNewProgram(b *testing.B) {
+ 						CompilerOptions: &opts,
+ 					},
+ 				},
+-				Host: NewCompilerHost(&opts, "c:/dev/src", fs, bundled.LibPath(), nil),
++				Host: NewCompilerHost("c:/dev/src", fs, bundled.LibPath()),
+ 			}
+ 
+ 			for b.Loop() {
+@@ -294,7 +294,7 @@ func BenchmarkNewProgram(b *testing.B) {
+ 		fs := osvfs.FS()
+ 		fs = bundled.WrapFS(fs)
+ 
+-		host := NewCompilerHost(nil, rootPath, fs, bundled.LibPath(), nil)
++		host := NewCompilerHost(rootPath, fs, bundled.LibPath())
+ 
+ 		parsed, errors := tsoptions.GetParsedCommandLineOfConfigFile(tspath.CombinePaths(rootPath, "tsconfig.json"), nil, host, nil)
+ 		assert.Equal(b, len(errors), 0, "Expected no errors in parsed command line")
+diff --git a/internal/execute/outputs.go b/internal/execute/outputs.go
+index 9a1f73d4ca0..3e2e9a7ddd2 100644
+--- a/internal/execute/outputs.go
++++ b/internal/execute/outputs.go
+@@ -98,7 +98,7 @@ func reportStatistics(sys System, program *compiler.Program, result compileAndEm
+ }
+ 
+ func printVersion(sys System) {
+-	fmt.Fprint(sys.Writer(), diagnostics.Version_0.Format(core.Version())+sys.NewLine())
++	fmt.Fprintln(sys.Writer(), diagnostics.Version_0.Format(core.Version()))
+ 	sys.EndWrite()
+ }
+ 
+@@ -144,7 +144,7 @@ func getHeader(sys System, message string) []string {
+ 	//         header.push("".padStart(leftAlign) + tsIconSecondLine + sys.newLine);
+ 	//     }
+ 	//     else {
+-	header = append(header, message+sys.NewLine(), sys.NewLine())
++	header = append(header, message+"\n", "\n")
+ 	//     }
+ 	return header
+ }
+@@ -156,15 +156,15 @@ func printEasyHelp(sys System, simpleOptions []*tsoptions.CommandLineOption) {
+ 		for _, example := range examples {
+ 			// !!! colors
+ 			// output.push("  " + colors.blue(example) + sys.newLine);
+-			output = append(output, "  ", example, sys.NewLine())
++			output = append(output, "  ", example, "\n")
+ 		}
+-		output = append(output, "  ", desc.Format(), sys.NewLine(), sys.NewLine())
++		output = append(output, "  ", desc.Format(), "\n", "\n")
+ 	}
+ 
+ 	msg := diagnostics.X_tsc_Colon_The_TypeScript_Compiler.Format() + " - " + diagnostics.Version_0.Format(core.Version())
+ 	output = append(output, getHeader(sys, msg)...)
+ 
+-	output = append(output /*colors.bold(*/, diagnostics.COMMON_COMMANDS.Format() /*)*/, sys.NewLine(), sys.NewLine())
++	output = append(output /*colors.bold(*/, diagnostics.COMMON_COMMANDS.Format() /*)*/, "\n", "\n")
+ 
+ 	example([]string{"tsc"}, diagnostics.Compiles_the_current_project_tsconfig_json_in_the_working_directory)
+ 	example([]string{"tsc app.ts util.ts"}, diagnostics.Ignoring_tsconfig_json_compiles_the_specified_files_with_default_compiler_options)
+@@ -206,15 +206,15 @@ func generateSectionOptionsOutput(
+ 	afterOptionsDescription *string,
+ ) (output []string) {
+ 	// !!! color
+-	output = append(output /*createColors(sys).bold(*/, sectionName /*)*/, sys.NewLine(), sys.NewLine())
++	output = append(output /*createColors(sys).bold(*/, sectionName /*)*/, "\n", "\n")
+ 
+ 	if beforeOptionsDescription != nil {
+-		output = append(output, *beforeOptionsDescription, sys.NewLine(), sys.NewLine())
++		output = append(output, *beforeOptionsDescription, "\n", "\n")
+ 	}
+ 	if !subCategory {
+ 		output = append(output, generateGroupOptionOutput(sys, options)...)
+ 		if afterOptionsDescription != nil {
+-			output = append(output, *afterOptionsDescription, sys.NewLine(), sys.NewLine())
++			output = append(output, *afterOptionsDescription, "\n", "\n")
+ 		}
+ 		return output
+ 	}
+@@ -227,11 +227,11 @@ func generateSectionOptionsOutput(
+ 		categoryMap[curCategory] = append(categoryMap[curCategory], option)
+ 	}
+ 	for key, value := range categoryMap {
+-		output = append(output, "### ", key, sys.NewLine(), sys.NewLine())
++		output = append(output, "### ", key, "\n", "\n")
+ 		output = append(output, generateGroupOptionOutput(sys, value)...)
+ 	}
+ 	if afterOptionsDescription != nil {
+-		output = append(output, *afterOptionsDescription, sys.NewLine(), sys.NewLine())
++		output = append(output, *afterOptionsDescription, "\n", "\n")
+ 	}
+ 
+ 	return output
+@@ -258,8 +258,8 @@ func generateGroupOptionOutput(sys System, optionsList []*tsoptions.CommandLineO
+ 	}
+ 
+ 	// make sure always a blank line in the end.
+-	if len(lines) < 2 || lines[len(lines)-2] != sys.NewLine() {
+-		lines = append(lines, sys.NewLine())
++	if len(lines) < 2 || lines[len(lines)-2] != "\n" {
++		lines = append(lines, "\n")
+ 	}
+ 
+ 	return lines
+@@ -312,25 +312,25 @@ func generateOptionOutput(
+ 		// !!!     }
+ 		// !!!     text.push(sys.newLine);
+ 	} else {
+-		text = append(text /* !!! colors.blue(name) */, name, sys.NewLine())
++		text = append(text /* !!! colors.blue(name) */, name, "\n")
+ 		if option.Description != nil {
+ 			text = append(text, option.Description.Format())
+ 		}
+-		text = append(text, sys.NewLine())
++		text = append(text, "\n")
+ 		if showAdditionalInfoOutput(valueCandidates, option) {
+ 			if valueCandidates != nil {
+ 				text = append(text, valueCandidates.valueType, " ", valueCandidates.possibleValues)
+ 			}
+ 			if defaultValueDescription != "" {
+ 				if valueCandidates != nil {
+-					text = append(text, sys.NewLine())
++					text = append(text, "\n")
+ 				}
+ 				text = append(text, diagnostics.X_default_Colon.Format(), " ", defaultValueDescription)
+ 			}
+ 
+-			text = append(text, sys.NewLine())
++			text = append(text, "\n")
+ 		}
+-		text = append(text, sys.NewLine())
++		text = append(text, "\n")
+ 	}
+ 
+ 	return text
+diff --git a/internal/execute/system.go b/internal/execute/system.go
+index 3861a043924..a31101dd3c1 100644
+--- a/internal/execute/system.go
++++ b/internal/execute/system.go
+@@ -13,7 +13,6 @@ type System interface {
+ 	FS() vfs.FS
+ 	DefaultLibraryPath() string
+ 	GetCurrentDirectory() string
+-	NewLine() string // #241 eventually we want to use "\n"
+ 
+ 	Now() time.Time
+ 	SinceStart() time.Duration
+diff --git a/internal/execute/testsys_test.go b/internal/execute/testsys_test.go
+index 92eda1f4ad2..789dcec0889 100644
+--- a/internal/execute/testsys_test.go
++++ b/internal/execute/testsys_test.go
+@@ -72,10 +72,6 @@ func (s *testSys) GetCurrentDirectory() string {
+ 	return s.cwd
+ }
+ 
+-func (s *testSys) NewLine() string {
+-	return "\n"
+-}
+-
+ func (s *testSys) Writer() io.Writer {
+ 	return s.currentWrite
+ }
+diff --git a/internal/execute/tsc.go b/internal/execute/tsc.go
+index c2fefa12bd5..615247e19ca 100644
+--- a/internal/execute/tsc.go
++++ b/internal/execute/tsc.go
+@@ -46,7 +46,7 @@ func CommandLine(sys System, cb cbType, commandLineArgs []string) ExitStatus {
+ 		// !!! build mode
+ 		switch strings.ToLower(commandLineArgs[0]) {
+ 		case "-b", "--b", "-build", "--build":
+-			fmt.Fprint(sys.Writer(), "Build mode is currently unsupported."+sys.NewLine())
++			fmt.Fprintln(sys.Writer(), "Build mode is currently unsupported.")
+ 			sys.EndWrite()
+ 			return ExitStatusNotImplemented
+ 			// case "-f":
+@@ -63,12 +63,12 @@ func CommandLine(sys System, cb cbType, commandLineArgs []string) ExitStatus {
+ }
+ 
+ func fmtMain(sys System, input, output string) ExitStatus {
+-	ctx := format.WithFormatCodeSettings(context.Background(), format.GetDefaultFormatCodeSettings(sys.NewLine()), sys.NewLine())
++	ctx := format.WithFormatCodeSettings(context.Background(), format.GetDefaultFormatCodeSettings("\n"), "\n")
+ 	input = string(tspath.ToPath(input, sys.GetCurrentDirectory(), sys.FS().UseCaseSensitiveFileNames()))
+ 	output = string(tspath.ToPath(output, sys.GetCurrentDirectory(), sys.FS().UseCaseSensitiveFileNames()))
+ 	fileContent, ok := sys.FS().ReadFile(input)
+ 	if !ok {
+-		fmt.Fprint(sys.Writer(), "File not found: "+input+sys.NewLine())
++		fmt.Fprintln(sys.Writer(), "File not found:", input)
+ 		return ExitStatusNotImplemented
+ 	}
+ 	text := fileContent
+@@ -82,7 +82,7 @@ func fmtMain(sys System, input, output string) ExitStatus {
+ 	newText := applyBulkEdits(text, edits)
+ 
+ 	if err := sys.FS().WriteFile(output, newText, false); err != nil {
+-		fmt.Fprint(sys.Writer(), err.Error()+sys.NewLine())
++		fmt.Fprintln(sys.Writer(), err.Error())
+ 		return ExitStatusNotImplemented
+ 	}
+ 	return ExitStatusSuccess
+@@ -188,7 +188,6 @@ func executeCommandLineWorker(sys System, cb cbType, commandLine *tsoptions.Pars
+ 			cb,
+ 			configParseResult,
+ 			reportDiagnostic,
+-			&extendedConfigCache,
+ 			configTime,
+ 		), nil
+ 	} else {
+@@ -208,7 +207,6 @@ func executeCommandLineWorker(sys System, cb cbType, commandLine *tsoptions.Pars
+ 		cb,
+ 		commandLine,
+ 		reportDiagnostic,
+-		nil,
+ 		0, /*configTime*/
+ 	), nil
+ }
+@@ -232,10 +230,9 @@ func performCompilation(
+ 	cb cbType,
+ 	config *tsoptions.ParsedCommandLine,
+ 	reportDiagnostic diagnosticReporter,
+-	extendedConfigCache *collections.SyncMap[tspath.Path, *tsoptions.ExtendedConfigCacheEntry],
+ 	configTime time.Duration,
+ ) ExitStatus {
+-	host := compiler.NewCachedFSCompilerHost(config.CompilerOptions(), sys.GetCurrentDirectory(), sys.FS(), sys.DefaultLibraryPath(), extendedConfigCache)
++	host := compiler.NewCachedFSCompilerHost(sys.GetCurrentDirectory(), sys.FS(), sys.DefaultLibraryPath())
+ 	// todo: cache, statistics, tracing
+ 	parseStart := sys.Now()
+ 	program := compiler.NewProgram(compiler.ProgramOptions{
+@@ -374,7 +371,7 @@ func listFiles(sys System, program *compiler.Program) {
+ 	// !!! explainFiles
+ 	if options.ListFiles.IsTrue() || options.ListFilesOnly.IsTrue() {
+ 		for _, file := range program.GetSourceFiles() {
+-			fmt.Fprintf(sys.Writer(), "%s%s", file.FileName(), sys.NewLine())
++			fmt.Fprintln(sys.Writer(), file.FileName())
+ 		}
+ 	}
+ }
+diff --git a/internal/execute/watch.go b/internal/execute/watch.go
+index 6d587951d1c..e1b2b9dbb3e 100644
+--- a/internal/execute/watch.go
++++ b/internal/execute/watch.go
+@@ -24,7 +24,7 @@ func start(w *watcher) ExitStatus {
+ func (w *watcher) initialize() {
+ 	// if this function is updated, make sure to update `StartForTest` in export_test.go as needed
+ 	if w.configFileName == "" {
+-		w.host = compiler.NewCompilerHost(w.options.CompilerOptions(), w.sys.GetCurrentDirectory(), w.sys.FS(), w.sys.DefaultLibraryPath(), nil)
++		w.host = compiler.NewCompilerHost(w.sys.GetCurrentDirectory(), w.sys.FS(), w.sys.DefaultLibraryPath())
+ 	}
+ }
+ 
+@@ -42,12 +42,12 @@ func (w *watcher) doCycle() {
+ 		JSDocParsingMode: ast.JSDocParsingModeParseForTypeErrors,
+ 	})
+ 	if w.hasBeenModified(w.program) {
+-		fmt.Fprint(w.sys.Writer(), "build starting at ", w.sys.Now(), w.sys.NewLine())
++		fmt.Fprintln(w.sys.Writer(), "build starting at", w.sys.Now())
+ 		timeStart := w.sys.Now()
+ 		w.compileAndEmit()
+-		fmt.Fprint(w.sys.Writer(), "build finished in ", w.sys.Now().Sub(timeStart), w.sys.NewLine())
++		fmt.Fprintln(w.sys.Writer(), "build finished in", w.sys.Now().Sub(timeStart))
+ 	} else {
+ 		// print something???
+-		// fmt.Fprint(w.sys.Writer(), "no changes detected at ", w.sys.Now(), w.sys.NewLine())
++		// fmt.Fprintln(w.sys.Writer(), "no changes detected at", w.sys.Now())
+ 	}
+ }
+diff --git a/internal/execute/watcher.go b/internal/execute/watcher.go
+index 5697c7525dd..716a262460b 100644
+--- a/internal/execute/watcher.go
++++ b/internal/execute/watcher.go
+@@ -56,11 +56,11 @@ func (w *watcher) hasErrorsInTsConfig() bool {
+ 		}
+ 		// CompilerOptions contain fields which should not be compared; clone to get a copy without those set.
+ 		if !reflect.DeepEqual(w.options.CompilerOptions().Clone(), configParseResult.CompilerOptions().Clone()) {
+-			// fmt.Fprint(w.sys.Writer(), "build triggered due to config change", w.sys.NewLine())
++			// fmt.Fprintln(w.sys.Writer(), "build triggered due to config change")
+ 			w.configModified = true
+ 		}
+ 		w.options = configParseResult
+-		w.host = compiler.NewCompilerHost(w.options.CompilerOptions(), w.sys.GetCurrentDirectory(), w.sys.FS(), w.sys.DefaultLibraryPath(), &extendedConfigCache)
++		w.host = compiler.NewCompilerHost(w.sys.GetCurrentDirectory(), w.sys.FS(), w.sys.DefaultLibraryPath())
+ 	}
+ 	return false
+ }
+@@ -80,7 +80,7 @@ func (w *watcher) hasBeenModified(program *compiler.Program) bool {
+ 		currState[fileName] = s.ModTime()
+ 		if !filesModified {
+ 			if currState[fileName] != w.prevModified[fileName] {
+-				// fmt.Fprint(w.sys.Writer(), "build triggered from ", fileName, ": ", w.prevModified[fileName], " -> ", currState[fileName], w.sys.NewLine())
++				// fmt.Fprint(w.sys.Writer(), "build triggered from ", fileName, ": ", w.prevModified[fileName], " -> ", currState[fileName], "\n")
+ 				filesModified = true
+ 			}
+ 			// catch cases where no files are modified, but some were deleted
+@@ -88,7 +88,7 @@ func (w *watcher) hasBeenModified(program *compiler.Program) bool {
+ 		}
+ 	}
+ 	if !filesModified && len(w.prevModified) > 0 {
+-		// fmt.Fprint(w.sys.Writer(), "build triggered due to deleted file", w.sys.NewLine())
++		// fmt.Fprintln(w.sys.Writer(), "build triggered due to deleted file")
+ 		filesModified = true
+ 	}
+ 	w.prevModified = currState
+diff --git a/internal/fourslash/fourslash.go b/internal/fourslash/fourslash.go
+index 773a4d7486b..df2f2968165 100644
+--- a/internal/fourslash/fourslash.go
++++ b/internal/fourslash/fourslash.go
+@@ -161,7 +161,6 @@ func NewFourslash(t *testing.T, capabilities *lsproto.ClientCapabilities, conten
+ 		Err: &err,
+ 
+ 		Cwd:                "/",
+-		NewLine:            core.NewLineKindLF,
+ 		FS:                 fs,
+ 		DefaultLibraryPath: bundled.LibPath(),
+ 
+diff --git a/internal/lsp/server.go b/internal/lsp/server.go
+index 234d58f5049..f1b0c5a20a2 100644
+--- a/internal/lsp/server.go
++++ b/internal/lsp/server.go
+@@ -29,7 +29,6 @@ type ServerOptions struct {
+ 	Err io.Writer
+ 
+ 	Cwd                string
+-	NewLine            core.NewLineKind
+ 	FS                 vfs.FS
+ 	DefaultLibraryPath string
+ 	TypingsLocation    string
+@@ -50,7 +49,6 @@ func NewServer(opts *ServerOptions) *Server {
+ 		pendingClientRequests: make(map[lsproto.ID]pendingClientRequest),
+ 		pendingServerRequests: make(map[lsproto.ID]chan *lsproto.ResponseMessage),
+ 		cwd:                   opts.Cwd,
+-		newLine:               opts.NewLine,
+ 		fs:                    opts.FS,
+ 		defaultLibraryPath:    opts.DefaultLibraryPath,
+ 		typingsLocation:       opts.TypingsLocation,
+@@ -134,7 +132,6 @@ type Server struct {
+ 	pendingServerRequestsMu sync.Mutex
+ 
+ 	cwd                string
+-	newLine            core.NewLineKind
+ 	fs                 vfs.FS
+ 	defaultLibraryPath string
+ 	typingsLocation    string
+@@ -176,11 +173,6 @@ func (s *Server) GetCurrentDirectory() string {
+ 	return s.cwd
+ }
+ 
+-// NewLine implements project.ServiceHost.
+-func (s *Server) NewLine() string {
+-	return s.newLine.GetNewLineCharacter()
+-}
+-
+ // Trace implements project.ServiceHost.
+ func (s *Server) Trace(msg string) {
+ 	s.Log(msg)
+diff --git a/internal/project/host.go b/internal/project/host.go
+index 94c4618e47a..8fb664b1f14 100644
+--- a/internal/project/host.go
++++ b/internal/project/host.go
+@@ -20,7 +20,6 @@ type ServiceHost interface {
+ 	DefaultLibraryPath() string
+ 	TypingsLocation() string
+ 	GetCurrentDirectory() string
+-	NewLine() string
+ 
+ 	Client() Client
+ }
+diff --git a/internal/project/project.go b/internal/project/project.go
+index d23850af30b..18a43cb8d24 100644
+--- a/internal/project/project.go
++++ b/internal/project/project.go
+@@ -77,7 +77,6 @@ const (
+ type ProjectHost interface {
+ 	tsoptions.ParseConfigHost
+ 	module.ResolutionHost
+-	NewLine() string
+ 	DefaultLibraryPath() string
+ 	TypingsInstaller() *TypingsInstaller
+ 	DocumentStore() *DocumentStore
+@@ -294,11 +293,6 @@ func (p *Project) GetProgram() *compiler.Program {
+ 	return program
+ }
+ 
+-// NewLine implements compiler.CompilerHost.
+-func (p *Project) NewLine() string {
+-	return p.host.NewLine()
+-}
+-
+ // Trace implements compiler.CompilerHost.
+ func (p *Project) Trace(msg string) {
+ 	p.host.Log(msg)
+diff --git a/internal/project/service.go b/internal/project/service.go
+index a3802f6c711..a6b6c70e47d 100644
+--- a/internal/project/service.go
++++ b/internal/project/service.go
+@@ -119,11 +119,6 @@ func (s *Service) HasLevel(level LogLevel) bool {
+ 	return s.options.Logger.HasLevel(level)
+ }
+ 
+-// NewLine implements ProjectHost.
+-func (s *Service) NewLine() string {
+-	return s.host.NewLine()
+-}
+-
+ // DefaultLibraryPath implements ProjectHost.
+ func (s *Service) DefaultLibraryPath() string {
+ 	return s.host.DefaultLibraryPath()
+diff --git a/internal/testutil/harnessutil/harnessutil.go b/internal/testutil/harnessutil/harnessutil.go
+index 043bfa27cb9..ac3f1658b64 100644
+--- a/internal/testutil/harnessutil/harnessutil.go
++++ b/internal/testutil/harnessutil/harnessutil.go
+@@ -209,7 +209,7 @@ func CompileFilesEx(
+ 	fs = bundled.WrapFS(fs)
+ 	fs = NewOutputRecorderFS(fs)
+ 
+-	host := createCompilerHost(fs, bundled.LibPath(), compilerOptions, currentDirectory)
++	host := createCompilerHost(fs, bundled.LibPath(), currentDirectory)
+ 	var configFile *tsoptions.TsConfigSourceFile
+ 	var errors []*ast.Diagnostic
+ 	if tsconfig != nil {
+@@ -506,9 +506,9 @@ func (h *cachedCompilerHost) GetSourceFile(opts ast.SourceFileParseOptions) *ast
+ 	return result
+ }
+ 
+-func createCompilerHost(fs vfs.FS, defaultLibraryPath string, options *core.CompilerOptions, currentDirectory string) compiler.CompilerHost {
++func createCompilerHost(fs vfs.FS, defaultLibraryPath string, currentDirectory string) compiler.CompilerHost {
+ 	return &cachedCompilerHost{
+-		CompilerHost: compiler.NewCompilerHost(options, currentDirectory, fs, defaultLibraryPath, nil),
++		CompilerHost: compiler.NewCompilerHost(currentDirectory, fs, defaultLibraryPath),
+ 	}
+ }
+ 
+diff --git a/internal/testutil/projecttestutil/projecttestutil.go b/internal/testutil/projecttestutil/projecttestutil.go
+index 3a83290c205..5acbcbe062d 100644
+--- a/internal/testutil/projecttestutil/projecttestutil.go
++++ b/internal/testutil/projecttestutil/projecttestutil.go
+@@ -74,11 +74,6 @@ func (p *ProjectServiceHost) Log(msg ...any) {
+ 	fmt.Fprintln(&p.output, msg...)
+ }
+ 
+-// NewLine implements project.ProjectServiceHost.
+-func (p *ProjectServiceHost) NewLine() string {
+-	return "\n"
+-}
+-
+ // Client implements project.ProjectServiceHost.
+ func (p *ProjectServiceHost) Client() project.Client {
+ 	return p.ClientMock

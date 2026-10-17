@@ -1,0 +1,219 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 4270aa5f30a..12eeb4e27e5 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -4750,8 +4750,10 @@ name = "uv-cache-key"
+ version = "0.0.1"
+ dependencies = [
+  "hex",
++ "memchr",
+  "seahash",
+  "url",
++ "urlencoding",
+ ]
+ 
+ [[package]]
+diff --git a/crates/uv-cache-key/Cargo.toml b/crates/uv-cache-key/Cargo.toml
+index 7816c1d13f7..fe8f915d613 100644
+--- a/crates/uv-cache-key/Cargo.toml
++++ b/crates/uv-cache-key/Cargo.toml
+@@ -18,5 +18,7 @@ workspace = true
+ 
+ [dependencies]
+ hex = { workspace = true }
++memchr = { workspace = true }
+ seahash = { workspace = true }
+ url = { workspace = true }
++urlencoding = { workspace = true }
+diff --git a/crates/uv-cache-key/src/canonical_url.rs b/crates/uv-cache-key/src/canonical_url.rs
+index b46d591bb6e..5da0e01f7fc 100644
+--- a/crates/uv-cache-key/src/canonical_url.rs
++++ b/crates/uv-cache-key/src/canonical_url.rs
+@@ -1,3 +1,4 @@
++use std::borrow::Cow;
+ use std::fmt::{Debug, Formatter};
+ use std::hash::{Hash, Hasher};
+ use std::ops::Deref;
+@@ -26,11 +27,6 @@ impl CanonicalUrl {
+             return Self(url);
+         }
+ 
+-        // If the URL has no host, then it's not a valid URL anyway.
+-        if !url.has_host() {
+-            return Self(url);
+-        }
+-
+         // Strip credentials.
+         let _ = url.set_password(None);
+         let _ = url.set_username("");
+@@ -76,6 +72,23 @@ impl CanonicalUrl {
+             }
+         }
+ 
++        // Decode any percent-encoded characters in the path.
++        if memchr::memchr(b'%', url.path().as_bytes()).is_some() {
++            let decoded = url
++                .path_segments()
++                .unwrap()
++                .map(|segment| {
++                    urlencoding::decode(segment)
++                        .unwrap_or(Cow::Borrowed(segment))
++                        .into_owned()
++                })
++                .collect::<Vec<_>>();
++
++            let mut path_segments = url.path_segments_mut().unwrap();
++            path_segments.clear();
++            path_segments.extend(decoded);
++        }
++
+         Self(url)
+     }
+ 
+@@ -276,6 +289,38 @@ mod tests {
+             CanonicalUrl::parse("git+https:://github.com/pypa/sample-namespace-packages.git")?,
+         );
+ 
++        // Two URLs should _not_ be considered equal based on percent-decoding slashes.
++        assert_ne!(
++            CanonicalUrl::parse("https://github.com/pypa/sample%2Fnamespace%2Fpackages")?,
++            CanonicalUrl::parse("https://github.com/pypa/sample/namespace/packages")?,
++        );
++
++        // Two URLs should be considered equal regardless of percent-encoding.
++        assert_eq!(
++            CanonicalUrl::parse("https://github.com/pypa/sample%2Bnamespace%2Bpackages")?,
++            CanonicalUrl::parse("https://github.com/pypa/sample+namespace+packages")?,
++        );
++
++        // Two URLs should _not_ be considered equal based on percent-decoding slashes.
++        assert_ne!(
++            CanonicalUrl::parse(
++                "file:///home/ferris/my_project%2Fmy_project-0.1.0-py3-none-any.whl"
++            )?,
++            CanonicalUrl::parse(
++                "file:///home/ferris/my_project/my_project-0.1.0-py3-none-any.whl"
++            )?,
++        );
++
++        // Two URLs should be considered equal regardless of percent-encoding.
++        assert_eq!(
++            CanonicalUrl::parse(
++                "file:///home/ferris/my_project/my_project-0.1.0+foo-py3-none-any.whl"
++            )?,
++            CanonicalUrl::parse(
++                "file:///home/ferris/my_project/my_project-0.1.0%2Bfoo-py3-none-any.whl"
++            )?,
++        );
++
+         Ok(())
+     }
+ 
+diff --git a/crates/uv-distribution-types/src/any.rs b/crates/uv-distribution-types/src/any.rs
+index 1f39535a77f..6a29a0ff8a4 100644
+--- a/crates/uv-distribution-types/src/any.rs
++++ b/crates/uv-distribution-types/src/any.rs
+@@ -1,6 +1,8 @@
+ use std::hash::Hash;
+ 
++use uv_cache_key::CanonicalUrl;
+ use uv_normalize::PackageName;
++use uv_pep440::Version;
+ 
+ use crate::cached::CachedDist;
+ use crate::installed::InstalledDist;
+@@ -8,19 +10,29 @@ use crate::{InstalledMetadata, InstalledVersion, Name};
+ 
+ /// A distribution which is either installable, is a wheel in our cache or is already installed.
+ ///
+-/// Note equality and hash operations are only based on the name and version, not the kind.
++/// Note equality and hash operations are only based on the name and canonical version, not the
++/// kind.
+ #[derive(Debug, Clone, Eq)]
+ #[allow(clippy::large_enum_variant)]
+ pub enum LocalDist {
+-    Cached(CachedDist),
+-    Installed(InstalledDist),
++    Cached(CachedDist, CanonicalVersion),
++    Installed(InstalledDist, CanonicalVersion),
++}
++
++impl LocalDist {
++    fn canonical_version(&self) -> &CanonicalVersion {
++        match self {
++            Self::Cached(_, version) => version,
++            Self::Installed(_, version) => version,
++        }
++    }
+ }
+ 
+ impl Name for LocalDist {
+     fn name(&self) -> &PackageName {
+         match self {
+-            Self::Cached(dist) => dist.name(),
+-            Self::Installed(dist) => dist.name(),
++            Self::Cached(dist, _) => dist.name(),
++            Self::Installed(dist, _) => dist.name(),
+         }
+     }
+ }
+@@ -28,33 +40,53 @@ impl Name for LocalDist {
+ impl InstalledMetadata for LocalDist {
+     fn installed_version(&self) -> InstalledVersion {
+         match self {
+-            Self::Cached(dist) => dist.installed_version(),
+-            Self::Installed(dist) => dist.installed_version(),
++            Self::Cached(dist, _) => dist.installed_version(),
++            Self::Installed(dist, _) => dist.installed_version(),
+         }
+     }
+ }
+ 
+ impl From<CachedDist> for LocalDist {
+     fn from(dist: CachedDist) -> Self {
+-        Self::Cached(dist)
++        let version = CanonicalVersion::from(dist.installed_version());
++        Self::Cached(dist, version)
+     }
+ }
+ 
+ impl From<InstalledDist> for LocalDist {
+     fn from(dist: InstalledDist) -> Self {
+-        Self::Installed(dist)
++        let version = CanonicalVersion::from(dist.installed_version());
++        Self::Installed(dist, version)
+     }
+ }
+ 
+ impl Hash for LocalDist {
+     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+         self.name().hash(state);
+-        self.installed_version().hash(state);
++        self.canonical_version().hash(state);
+     }
+ }
+ 
+ impl PartialEq for LocalDist {
+     fn eq(&self, other: &Self) -> bool {
+-        self.name() == other.name() && self.installed_version() == other.installed_version()
++        self.name() == other.name() && self.canonical_version() == other.canonical_version()
++    }
++}
++
++/// Like [`InstalledVersion`], but with [`CanonicalUrl`] to ensure robust URL comparisons.
++#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
++pub enum CanonicalVersion {
++    Version(Version),
++    Url(CanonicalUrl, Version),
++}
++
++impl From<InstalledVersion<'_>> for CanonicalVersion {
++    fn from(installed_version: InstalledVersion<'_>) -> Self {
++        match installed_version {
++            InstalledVersion::Version(version) => Self::Version(version.clone()),
++            InstalledVersion::Url(url, version) => {
++                Self::Url(CanonicalUrl::new(url), version.clone())
++            }
++        }
+     }
+ }

@@ -1,0 +1,433 @@
+diff --git a/docs/documentation/upgrading/topics/changes/changes-26_2_0.adoc b/docs/documentation/upgrading/topics/changes/changes-26_2_0.adoc
+index 0ee5e55da66f..c91f38958bc1 100644
+--- a/docs/documentation/upgrading/topics/changes/changes-26_2_0.adoc
++++ b/docs/documentation/upgrading/topics/changes/changes-26_2_0.adoc
+@@ -23,6 +23,10 @@ Instead of providing `ojdbc11` JAR, use `ojdbc17` JAR as stated in the https://w
+ 
+ Notable changes where an internal behavior changed to prevent common misconfigurations, fix bugs or simplify running {project_name}.
+ 
++=== `proxy-trusted-addresses` enforced for built-in X509 client certificate lookup providers
++
++Built-in X.509 client certificate lookup providers now reflect the `proxy-trusted-addresses` config option. A certificate provided through the HTTP headers will now be processed only if the proxy is trusted, or `proxy-trusted-addresses` is unset.
++
+ === Zero-configuration secure cluster communication
+ 
+ For clustering multiple nodes, {project_name} uses distributed caches.
+diff --git a/docs/guides/server/reverseproxy.adoc b/docs/guides/server/reverseproxy.adoc
+index fd546d35190b..8437fb549b7a 100644
+--- a/docs/guides/server/reverseproxy.adoc
++++ b/docs/guides/server/reverseproxy.adoc
+@@ -170,7 +170,6 @@ Client certificate lookup via a proxy header for X.509 authentication is conside
+ * If passthrough is not an option, implement the following security measures:
+ ** Configure your network so that {project_name} is isolated and can accept connections only from the proxy.
+ ** Make sure that the proxy overwrites the header that is configured in `spi-x509cert-lookup-<provider>-ssl-client-cert` option.
+-** Keep in mind that any of the `spi-x509cert-*` options don't reflect the `proxy-trusted-addresses` option.
+ ** Pay extra attention to the `spi-x509cert-lookup-<provider>-trust-proxy-verification` setting. Make sure you enable it only if you can trust your proxy to verify the client certificate.
+    Setting `spi-x509cert-lookup-<provider>-trust-proxy-verification=true` without the proxy verifying the client certificate chain will expose {project_name} to security vulnerability
+    when a forged client certificate can be used for authentication.
+diff --git a/quarkus/config-api/src/main/java/org/keycloak/config/ProxyOptions.java b/quarkus/config-api/src/main/java/org/keycloak/config/ProxyOptions.java
+index 419dfef4b2d8..c4b49cc49ba7 100644
+--- a/quarkus/config-api/src/main/java/org/keycloak/config/ProxyOptions.java
++++ b/quarkus/config-api/src/main/java/org/keycloak/config/ProxyOptions.java
+@@ -35,6 +35,12 @@ public enum Headers {
+             .defaultValue(Boolean.FALSE)
+             .build();
+ 
++    public static final Option<Boolean> PROXY_TRUSTED_HEADER_ENABLED = new OptionBuilder<>("proxy-trusted-header-enabled", Boolean.class)
++            .category(OptionCategory.PROXY)
++            .defaultValue(Boolean.FALSE)
++            .hidden()
++            .build();
++
+     public static final Option<List<String>> PROXY_TRUSTED_ADDRESSES = OptionBuilder.listOptionBuilder("proxy-trusted-addresses", String.class)
+             .category(OptionCategory.PROXY)
+             .description("A comma separated list of trusted proxy addresses. If set, then proxy headers from other addresses will be ignored. By default all addresses are trusted. A trusted proxy address is specified as an IP address (IPv4 or IPv6) or Classless Inter-Domain Routing (CIDR) notation.")
+diff --git a/quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/configuration/mappers/ProxyPropertyMappers.java b/quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/configuration/mappers/ProxyPropertyMappers.java
+index 6886aa17a240..15fc59fca2ea 100644
+--- a/quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/configuration/mappers/ProxyPropertyMappers.java
++++ b/quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/configuration/mappers/ProxyPropertyMappers.java
+@@ -39,6 +39,10 @@ public static PropertyMapper<?>[] getProxyPropertyMappers() {
+                         .to("quarkus.http.proxy.allow-x-forwarded")
+                         .mapFrom(ProxyOptions.PROXY_HEADERS, (v, c) -> proxyEnabled(ProxyOptions.Headers.xforwarded, v, c))
+                         .build(),
++                fromOption(ProxyOptions.PROXY_TRUSTED_HEADER_ENABLED)
++                        .to("quarkus.http.proxy.enable-trusted-proxy-header")
++                        .mapFrom(ProxyOptions.PROXY_HEADERS, (v, c) -> proxyEnabled(null, v, c))
++                        .build(),
+                 fromOption(ProxyOptions.PROXY_TRUSTED_ADDRESSES)
+                         .to("quarkus.http.proxy.trusted-proxies")
+                         .validator(ProxyPropertyMappers::validateAddress)
+diff --git a/quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/integration/resteasy/QuarkusHttpRequest.java b/quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/integration/resteasy/QuarkusHttpRequest.java
+index 80fcf9bfaac0..06feca32a248 100644
+--- a/quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/integration/resteasy/QuarkusHttpRequest.java
++++ b/quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/integration/resteasy/QuarkusHttpRequest.java
+@@ -34,8 +34,10 @@
+ import org.jboss.resteasy.reactive.server.core.ResteasyReactiveRequestContext;
+ import org.jboss.resteasy.reactive.server.core.multipart.FormData;
+ import org.jboss.resteasy.reactive.server.multipart.FormValue;
++import org.keycloak.config.ProxyOptions;
+ import org.keycloak.http.FormPartValue;
+ import org.keycloak.http.HttpRequest;
++import org.keycloak.quarkus.runtime.configuration.Configuration;
+ import org.keycloak.quarkus.runtime.integration.jaxrs.EmptyMultivaluedMap;
+ import org.keycloak.services.FormPartValueImpl;
+ 
+@@ -54,13 +56,17 @@ public <R> QuarkusHttpRequest(ResteasyReactiveRequestContext context) {
+ 
+     @Override
+     public String getHttpMethod() {
+-        if (context == null) return null;
++        if (context == null) {
++            return null;
++        }
+         return context.getMethod();
+     }
+ 
+     @Override
+     public MultivaluedMap<String, String> getDecodedFormParameters() {
+-        if (context == null) return null;
++        if (context == null) {
++            return null;
++        }
+         FormData parameters = context.getFormData();
+ 
+         if (parameters == null || !parameters.iterator().hasNext()) {
+@@ -86,7 +92,9 @@ public MultivaluedMap<String, String> getDecodedFormParameters() {
+ 
+     @Override
+     public MultivaluedMap<String, FormPartValue> getMultiPartFormParameters() {
+-        if (context == null) return null;
++        if (context == null) {
++            return null;
++        }
+         FormData formData = context.getFormData();
+ 
+         if (formData == null) {
+@@ -122,7 +130,9 @@ public MultivaluedMap<String, FormPartValue> getMultiPartFormParameters() {
+ 
+     @Override
+     public HttpHeaders getHttpHeaders() {
+-        if (context == null) return null;
++        if (context == null) {
++            return null;
++        }
+         return context.getHttpHeaders();
+     }
+ 
+@@ -151,7 +161,16 @@ public X509Certificate[] getClientCertificateChain() {
+ 
+     @Override
+     public UriInfo getUri() {
+-        if (context == null) return null;
++        if (context == null) {
++            return null;
++        }
+         return context.getUriInfo();
+     }
++
++    @Override
++    public boolean isProxyTrusted() {
++        boolean noTrustedProxies = Configuration.getOptionalKcValue(ProxyOptions.PROXY_TRUSTED_ADDRESSES).isEmpty();
++        return noTrustedProxies
++                || Boolean.parseBoolean(this.getHttpHeaders().getHeaderString("X-Forwarded-Trusted-Proxy"));
++    }
+ }
+diff --git a/quarkus/tests/integration/src/test-providers/java/org/keycloak/it/resource/realm/TestRealmResource.java b/quarkus/tests/integration/src/test-providers/java/org/keycloak/it/resource/realm/TestRealmResource.java
+index d21228ca0eb4..ecd6b0e1ba9d 100644
+--- a/quarkus/tests/integration/src/test-providers/java/org/keycloak/it/resource/realm/TestRealmResource.java
++++ b/quarkus/tests/integration/src/test-providers/java/org/keycloak/it/resource/realm/TestRealmResource.java
+@@ -40,8 +40,10 @@ public class TestRealmResource implements RealmResourceProvider {
+     protected static final Logger logger = Logger.getLogger(TestRealmResource.class);
+ 
+     final InfinispanConnectionProvider infinispanConnectionProvider;
++    final KeycloakSession session;
+ 
+     public TestRealmResource(KeycloakSession session) {
++        this.session = session;
+         this.infinispanConnectionProvider = session.getProvider(InfinispanConnectionProvider.class);
+     }
+ 
+@@ -50,6 +52,16 @@ public Object getResource() {
+         return this;
+     }
+ 
++    @Path("trusted")
++    @GET
++    @Produces(MediaType.APPLICATION_JSON)
++    public Response trustedResponse() throws Exception {
++        if (session.getContext().getHttpRequest().isProxyTrusted()) {
++            return Response.ok("{}", MediaType.APPLICATION_JSON).build();
++        }
++        return Response.noContent().build();
++    }
++
+     @Path("slow")
+     @GET
+     @Produces(MediaType.APPLICATION_JSON)
+@@ -66,8 +78,9 @@ public Response slowResource() throws Exception {
+     @Produces(MediaType.APPLICATION_JSON)
+     public Response cacheConfig(@PathParam("cache") String cacheName) {
+         Cache<?, ?> cache = infinispanConnectionProvider.getCache(cacheName, false);
+-        if (cache == null)
++        if (cache == null) {
+             return Response.status(Response.Status.NOT_FOUND).build();
++        }
+ 
+         StringBuilderWriter out = new StringBuilderWriter();
+         try (ConfigurationWriter writer = ConfigurationWriter.to(out)
+diff --git a/quarkus/tests/integration/src/test/java/org/keycloak/it/cli/dist/ProxyHostnameV2DistTest.java b/quarkus/tests/integration/src/test/java/org/keycloak/it/cli/dist/ProxyHostnameV2DistTest.java
+index 72358da24784..57a5953849d4 100644
+--- a/quarkus/tests/integration/src/test/java/org/keycloak/it/cli/dist/ProxyHostnameV2DistTest.java
++++ b/quarkus/tests/integration/src/test/java/org/keycloak/it/cli/dist/ProxyHostnameV2DistTest.java
+@@ -29,7 +29,9 @@
+ import org.keycloak.it.junit5.extension.CLIResult;
+ import org.keycloak.it.junit5.extension.DistributionTest;
+ import org.keycloak.it.junit5.extension.RawDistOnly;
++import org.keycloak.it.junit5.extension.TestProvider;
+ import org.keycloak.it.junit5.extension.WithEnvVars;
++import org.keycloak.it.resource.realm.TestRealmResourceTestProvider;
+ import org.keycloak.it.utils.KeycloakDistribution;
+ import org.keycloak.protocol.oidc.representations.OIDCConfigurationRepresentation;
+ 
+@@ -61,24 +63,33 @@ public void testSchemeAndPortFromRequestWhenNoProxySet() {
+         assertForwardedHeaderIsIgnored();
+         assertXForwardedHeadersAreIgnored();
+     }
+-    
++
+     @Test
+     void testTrustedProxiesWithoutProxyHeaders(KeycloakDistribution distribution) {
+         CLIResult result = distribution.run("start-dev", "--proxy-trusted-addresses=1.0.0.0");
+         result.assertError("proxy-trusted-addresses available only when proxy-headers is set");
+     }
+-    
++
+     @Test
+     void testTrustedProxiesWithInvalidAddress(KeycloakDistribution distribution) {
+         CLIResult result = distribution.run("start-dev", "--proxy-headers=xforwarded", "--proxy-trusted-addresses=1.0.0.0:8080");
+         result.assertError("1.0.0.0:8080 is not a valid IP address (IPv4 or IPv6) nor valid CIDR notation.");
+     }
+-    
++
+     @Test
+     @Launch({ "start-dev", "--hostname-strict=false", "--proxy-headers=xforwarded", "--proxy-trusted-addresses=1.0.0.0" })
++    @TestProvider(TestRealmResourceTestProvider.class)
+     public void testProxyNotTrusted() {
+         assertForwardedHeaderIsIgnored();
+         assertForwardedHeaderIsIgnored();
++        given().header("X-Forwarded-Host", "test:123").when().get("http://mykeycloak.org:8080/realms/master/test-resources/trusted").then().statusCode(204);
++    }
++
++    @Test
++    @Launch({ "start-dev", "--hostname-strict=false", "--proxy-headers=xforwarded", "--proxy-trusted-addresses=127.0.0.1,0:0:0:0:0:0:0:1" })
++    @TestProvider(TestRealmResourceTestProvider.class)
++    public void testProxyTrusted() {
++        given().header("X-Forwarded-Host", "test:123").when().get("http://mykeycloak.org:8080/realms/master/test-resources/trusted").then().statusCode(200);
+     }
+ 
+     @Test
+@@ -86,7 +97,7 @@ public void testProxyNotTrusted() {
+     public void testForwardedProxyHeaders(LaunchResult result) {
+         assertForwardedHeader();
+         assertXForwardedHeadersAreIgnored();
+-        
++
+         CLIResult cliResult = (CLIResult)result;
+         cliResult.assertNoMessage(NOT_ADDRESS);
+         cliResult.assertMessage(ADDRESS);
+diff --git a/server-spi/src/main/java/org/keycloak/http/HttpRequest.java b/server-spi/src/main/java/org/keycloak/http/HttpRequest.java
+index 8e48721c4f5d..548593ec1c54 100644
+--- a/server-spi/src/main/java/org/keycloak/http/HttpRequest.java
++++ b/server-spi/src/main/java/org/keycloak/http/HttpRequest.java
+@@ -74,4 +74,13 @@ public interface HttpRequest {
+      * @return the {@link UriInfo} for the current path
+      */
+     UriInfo getUri();
++
++    /**
++     * Returns false if the server is configured for trusted proxies and the
++     * request is from an untrusted source.
++     *
++     * @return false if the server is configured for trusted proxies and the
++     * request is from an untrusted source.
++     */
++    boolean isProxyTrusted();
+ }
+diff --git a/services/src/main/java/org/keycloak/services/managers/DefaultBruteForceProtector.java b/services/src/main/java/org/keycloak/services/managers/DefaultBruteForceProtector.java
+index ee2e76ea3c71..840e6dbf57e8 100644
+--- a/services/src/main/java/org/keycloak/services/managers/DefaultBruteForceProtector.java
++++ b/services/src/main/java/org/keycloak/services/managers/DefaultBruteForceProtector.java
+@@ -295,6 +295,11 @@ public X509Certificate[] getClientCertificateChain() {
+         public UriInfo getUri() {
+             return uriInfo;
+         }
++
++        @Override
++        public boolean isProxyTrusted() {
++            return true;
++        }
+     }
+ 
+     private static class BruteForceHttpResponse implements HttpResponse {
+diff --git a/services/src/main/java/org/keycloak/services/x509/AbstractClientCertificateFromHttpHeadersLookup.java b/services/src/main/java/org/keycloak/services/x509/AbstractClientCertificateFromHttpHeadersLookup.java
+index 47aa0a9290a8..a4c945ec2180 100644
+--- a/services/src/main/java/org/keycloak/services/x509/AbstractClientCertificateFromHttpHeadersLookup.java
++++ b/services/src/main/java/org/keycloak/services/x509/AbstractClientCertificateFromHttpHeadersLookup.java
+@@ -18,6 +18,7 @@
+ 
+ package org.keycloak.services.x509;
+ 
++import org.apache.http.client.methods.HttpHead;
+ import org.jboss.logging.Logger;
+ import org.keycloak.http.HttpRequest;
+ import org.keycloak.common.util.PemException;
+@@ -69,7 +70,9 @@ static String getHeaderValue(HttpRequest httpRequest, String headerName) {
+ 
+     private static String trimDoubleQuotes(String quotedString) {
+ 
+-        if (quotedString == null) return null;
++        if (quotedString == null) {
++            return null;
++        }
+ 
+         int len = quotedString.length();
+         if (len > 1 && quotedString.charAt(0) == '"' &&
+@@ -83,7 +86,6 @@ private static String trimDoubleQuotes(String quotedString) {
+     protected abstract X509Certificate decodeCertificateFromPem(String pem) throws PemException;
+ 
+     protected X509Certificate getCertificateFromHttpHeader(HttpRequest request, String httpHeader) throws GeneralSecurityException {
+-
+         String encodedCertificate = getHeaderValue(request, httpHeader);
+ 
+         // Remove double quotes
+@@ -114,27 +116,35 @@ protected X509Certificate getCertificateFromHttpHeader(HttpRequest request, Stri
+ 
+ 
+     @Override
+-    public X509Certificate[] getCertificateChain(HttpRequest httpRequest) throws GeneralSecurityException {
++    public final X509Certificate[] getCertificateChain(HttpRequest httpRequest) throws GeneralSecurityException {
++        if (!httpRequest.isProxyTrusted()) {
++            logger.warnf("HTTP header \"%s\" is not trusted", sslClientCertHttpHeader);
++            return null;
++        }
+         List<X509Certificate> chain = new ArrayList<>();
+ 
+         // Get the client certificate
+         X509Certificate cert = getCertificateFromHttpHeader(httpRequest, sslClientCertHttpHeader);
+         if (cert != null) {
+-            chain.add(cert);
+-            // Get the certificate of the client certificate chain
+-            for (int i = 0; i < certificateChainLength; i++) {
+-                try {
+-                    String s = String.format("%s_%s", sslCertChainHttpHeaderPrefix, i);
+-                    cert = getCertificateFromHttpHeader(httpRequest, s);
+-                    if (cert != null) {
+-                        chain.add(cert);
+-                    }
+-                }
+-                catch(GeneralSecurityException e) {
+-                    logger.warn(e.getMessage(), e);
++            buildChain(httpRequest, chain, cert);
++        }
++        return chain.toArray(new X509Certificate[0]);
++    }
++
++    protected void buildChain(HttpRequest httpRequest, List<X509Certificate> chain, X509Certificate cert) {
++        chain.add(cert);
++        // Get the certificate of the client certificate chain
++        for (int i = 0; i < certificateChainLength; i++) {
++            try {
++                String s = String.format("%s_%s", sslCertChainHttpHeaderPrefix, i);
++                cert = getCertificateFromHttpHeader(httpRequest, s);
++                if (cert != null) {
++                    chain.add(cert);
+                 }
+             }
++            catch(GeneralSecurityException e) {
++                logger.warn(e.getMessage(), e);
++            }
+         }
+-        return chain.toArray(new X509Certificate[0]);
+     }
+ }
+diff --git a/services/src/main/java/org/keycloak/services/x509/NginxProxySslClientCertificateLookup.java b/services/src/main/java/org/keycloak/services/x509/NginxProxySslClientCertificateLookup.java
+index 1b7c5d6fc3da..41942f278bbe 100644
+--- a/services/src/main/java/org/keycloak/services/x509/NginxProxySslClientCertificateLookup.java
++++ b/services/src/main/java/org/keycloak/services/x509/NginxProxySslClientCertificateLookup.java
+@@ -1,7 +1,6 @@
+ package org.keycloak.services.x509;
+ 
+ import java.nio.charset.StandardCharsets;
+-import java.security.GeneralSecurityException;
+ import java.security.InvalidAlgorithmParameterException;
+ import java.security.NoSuchAlgorithmException;
+ import java.security.NoSuchProviderException;
+@@ -32,7 +31,7 @@
+  * The NGINX Provider extract end user X.509 certificate send during TLS mutual authentication,
+  * and forwarded in an http header.
+  *
+- * NGINX configuration must have : 
++ * NGINX configuration must have :
+  * <code>
+  * server {
+  *    ...
+@@ -118,32 +117,24 @@ protected X509Certificate decodeCertificateFromPem(String pem) throws PemExcepti
+     }
+ 
+     @Override
+-    public X509Certificate[] getCertificateChain(HttpRequest httpRequest) throws GeneralSecurityException {
+-        List<X509Certificate> chain = new ArrayList<>();
+-
+-        // Get the client certificate
+-        X509Certificate clientCert = getCertificateFromHttpHeader(httpRequest, sslClientCertHttpHeader);
+-
+-        if (clientCert != null) {
+-            log.debugf("End user certificate found : Subject DN=[%s]  SerialNumber=[%s]", clientCert.getSubjectX500Principal(), clientCert.getSerialNumber());
+-
+-            // Rebuilding the end user certificate chain using Keycloak Truststore
+-            X509Certificate[] certChain = buildChain(clientCert);
+-            if (certChain == null || certChain.length == 0) {
+-                log.info("Impossible to rebuild end user cert chain : client certificate authentication will fail." );
+-                chain.add(clientCert);
+-            } else {
+-                for (X509Certificate caCert : certChain) {
+-                    chain.add(caCert);
+-                    log.debugf("Rebuilded user cert chain DN : %s", caCert.getSubjectX500Principal());
+-                }
++    protected void buildChain(HttpRequest httpRequest, List<X509Certificate> chain, X509Certificate clientCert) {
++        log.debugf("End user certificate found : Subject DN=[%s]  SerialNumber=[%s]", clientCert.getSubjectX500Principal(), clientCert.getSerialNumber());
++
++        // Rebuilding the end user certificate chain using Keycloak Truststore
++        X509Certificate[] certChain = buildChain(clientCert);
++        if (certChain == null || certChain.length == 0) {
++            log.info("Impossible to rebuild end user cert chain : client certificate authentication will fail." );
++            chain.add(clientCert);
++        } else {
++            for (X509Certificate caCert : certChain) {
++                chain.add(caCert);
++                log.debugf("Rebuilded user cert chain DN : %s", caCert.getSubjectX500Principal());
+             }
+         }
+-        return chain.toArray(new X509Certificate[0]);
+     }
+ 
+     /**
+-     *  As NGINX cannot actually send the CA Chain in http header(s), 
++     *  As NGINX cannot actually send the CA Chain in http header(s),
+      *  we are rebuilding here the end user certificate chain with Keycloak truststore.
+      *  <br>
+      *  Please note that Keycloak truststore must contain root and intermediate CA's certificates.
+diff --git a/services/src/test/java/org/keycloak/services/resteasy/HttpRequestImpl.java b/services/src/test/java/org/keycloak/services/resteasy/HttpRequestImpl.java
+index 04310c924f9c..b56ba499dcee 100644
+--- a/services/src/test/java/org/keycloak/services/resteasy/HttpRequestImpl.java
++++ b/services/src/test/java/org/keycloak/services/resteasy/HttpRequestImpl.java
+@@ -123,4 +123,9 @@ public UriInfo getUri() {
+         }
+         return delegate.getUri();
+     }
++
++    @Override
++    public boolean isProxyTrusted() {
++        return true;
++    }
+ }

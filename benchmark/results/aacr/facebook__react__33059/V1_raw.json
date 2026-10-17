@@ -1,0 +1,33 @@
+{
+ "results": [
+  {
+   "summary": "新增了連續提交表單的測試案例，但遺留了 `it.only`，會導致其他測試被略過。",
+   "issues": [
+    {
+     "line": 1673,
+     "severity": "bug",
+     "comment": "使用了 `it.only`，這會導致測試執行時跳過其他所有測試案例。這通常是本地除錯時暫時加入的，不應合併進程式碼庫。",
+     "suggestion": "將 `it.only` 改回 `it`。"
+    }
+   ],
+   "filename": "packages/react-dom/src/__tests__/ReactDOMForm-test.js"
+  },
+  {
+   "summary": "修改引入了邏輯錯誤，導致已升級為 stateful 的 form fiber 無法被正確識別而重複初始化。",
+   "issues": [
+    {
+     "line": 3264,
+     "severity": "bug",
+     "comment": "新增的條件 `existingStateHook.next !== null` 存在邏輯錯誤。在 `ensureFormComponentIsStateful` 建立的 hook 物件中，`next` 初始值為 `null`，且該 host component 通常只有這一個 state hook。加入此條件後，已升級的 fiber 其 `existingStateHook.next` 依然為 `null`，導致判斷條件永遠為 false。這會使該函式每次被呼叫時都重新建立新的 state hook 並覆蓋 `memoizedState`，遺失原本的 update queue 與 transition 狀態。",
+     "suggestion": "應恢復原本的 `if (existingStateHook !== null)` 檢查。若改動是為了排除其他非 Hook 結構的 memoizedState，應檢查 hook 特有的屬性（例如 `existingStateHook.queue !== null`），而非檢查 `next !== null`。"
+    }
+   ],
+   "filename": "packages/react-reconciler/src/ReactFiberHooks.js"
+  }
+ ],
+ "n_files": 2,
+ "elapsed_s": 24.4,
+ "calls": 2,
+ "input_tokens": 2783,
+ "output_tokens": 401
+}

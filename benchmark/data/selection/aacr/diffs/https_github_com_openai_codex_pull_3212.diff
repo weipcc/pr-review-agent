@@ -1,0 +1,631 @@
+diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
+index 0481767030bb..48e42ee03473 100644
+--- a/codex-rs/core/src/client.rs
++++ b/codex-rs/core/src/client.rs
+@@ -157,14 +157,6 @@ impl ModelClient {
+ 
+         let auth_manager = self.auth_manager.clone();
+ 
+-        let auth_mode = auth_manager
+-            .as_ref()
+-            .and_then(|m| m.auth())
+-            .as_ref()
+-            .map(|a| a.mode);
+-
+-        let store = prompt.store && auth_mode != Some(AuthMode::ChatGPT);
+-
+         let full_instructions = prompt.get_full_instructions(&self.config.model_family);
+         let tools_json = create_tools_json_for_responses_api(&prompt.tools)?;
+         let reasoning = create_reasoning_param_for_request(
+@@ -173,9 +165,7 @@ impl ModelClient {
+             self.summary,
+         );
+ 
+-        // Request encrypted COT if we are not storing responses,
+-        // otherwise reasoning items will be referenced by ID
+-        let include: Vec<String> = if !store && reasoning.is_some() {
++        let include: Vec<String> = if reasoning.is_some() {
+             vec!["reasoning.encrypted_content".to_string()]
+         } else {
+             vec![]
+@@ -204,7 +194,7 @@ impl ModelClient {
+             tool_choice: "auto",
+             parallel_tool_calls: false,
+             reasoning,
+-            store,
++            store: false,
+             stream: true,
+             include,
+             prompt_cache_key: Some(self.session_id.to_string()),
+diff --git a/codex-rs/core/src/client_common.rs b/codex-rs/core/src/client_common.rs
+index d561d369461b..2f849239abfd 100644
+--- a/codex-rs/core/src/client_common.rs
++++ b/codex-rs/core/src/client_common.rs
+@@ -25,9 +25,6 @@ pub struct Prompt {
+     /// Conversation context input items.
+     pub input: Vec<ResponseItem>,
+ 
+-    /// Whether to store response on server side (disable_response_storage = !store).
+-    pub store: bool,
+-
+     /// Tools available to the model, including additional tools sourced from
+     /// external MCP servers.
+     pub(crate) tools: Vec<OpenAiTool>,
+@@ -128,7 +125,6 @@ pub(crate) struct ResponsesApiRequest<'a> {
+     pub(crate) tool_choice: &'static str,
+     pub(crate) parallel_tool_calls: bool,
+     pub(crate) reasoning: Option<Reasoning>,
+-    /// true when using the Responses API.
+     pub(crate) store: bool,
+     pub(crate) stream: bool,
+     pub(crate) include: Vec<String>,
+@@ -199,7 +195,7 @@ mod tests {
+             tool_choice: "auto",
+             parallel_tool_calls: false,
+             reasoning: None,
+-            store: true,
++            store: false,
+             stream: true,
+             include: vec![],
+             prompt_cache_key: None,
+@@ -229,7 +225,7 @@ mod tests {
+             tool_choice: "auto",
+             parallel_tool_calls: false,
+             reasoning: None,
+-            store: true,
++            store: false,
+             stream: true,
+             include: vec![],
+             prompt_cache_key: None,
+diff --git a/codex-rs/core/src/codex.rs b/codex-rs/core/src/codex.rs
+index 2028c4240e63..172d4e0ff724 100644
+--- a/codex-rs/core/src/codex.rs
++++ b/codex-rs/core/src/codex.rs
+@@ -184,7 +184,6 @@ impl Codex {
+             base_instructions: config.base_instructions.clone(),
+             approval_policy: config.approval_policy,
+             sandbox_policy: config.sandbox_policy.clone(),
+-            disable_response_storage: config.disable_response_storage,
+             notify: config.notify.clone(),
+             cwd: config.cwd.clone(),
+         };
+@@ -301,7 +300,6 @@ pub(crate) struct TurnContext {
+     pub(crate) approval_policy: AskForApproval,
+     pub(crate) sandbox_policy: SandboxPolicy,
+     pub(crate) shell_environment_policy: ShellEnvironmentPolicy,
+-    pub(crate) disable_response_storage: bool,
+     pub(crate) tools_config: ToolsConfig,
+ }
+ 
+@@ -334,8 +332,6 @@ struct ConfigureSession {
+     approval_policy: AskForApproval,
+     /// How to sandbox commands executed in the system
+     sandbox_policy: SandboxPolicy,
+-    /// Disable server-side response storage (send full context each request)
+-    disable_response_storage: bool,
+ 
+     /// Optional external notifier command tokens. Present only when the
+     /// client wants the agent to spawn a program after each completed
+@@ -370,7 +366,6 @@ impl Session {
+             base_instructions,
+             approval_policy,
+             sandbox_policy,
+-            disable_response_storage,
+             notify,
+             cwd,
+         } = configure_session;
+@@ -462,7 +457,6 @@ impl Session {
+             sandbox_policy,
+             shell_environment_policy: config.shell_environment_policy.clone(),
+             cwd,
+-            disable_response_storage,
+         };
+         let sess = Arc::new(Session {
+             session_id,
+@@ -1117,7 +1111,6 @@ async fn submission_loop(
+                     sandbox_policy: new_sandbox_policy.clone(),
+                     shell_environment_policy: prev.shell_environment_policy.clone(),
+                     cwd: new_cwd.clone(),
+-                    disable_response_storage: prev.disable_response_storage,
+                 };
+ 
+                 // Install the new persistent context for subsequent tasks/turns.
+@@ -1199,7 +1192,6 @@ async fn submission_loop(
+                         sandbox_policy,
+                         shell_environment_policy: turn_context.shell_environment_policy.clone(),
+                         cwd,
+-                        disable_response_storage: turn_context.disable_response_storage,
+                     };
+                     // TODO: record the new environment context in the conversation history
+                     // no current task, spawn a new one with the per‑turn context
+@@ -1604,7 +1596,6 @@ async fn run_turn(
+ 
+     let prompt = Prompt {
+         input,
+-        store: !turn_context.disable_response_storage,
+         tools,
+         base_instructions_override: turn_context.base_instructions.clone(),
+     };
+@@ -1858,7 +1849,6 @@ async fn run_compact_task(
+ 
+     let prompt = Prompt {
+         input: turn_input,
+-        store: !turn_context.disable_response_storage,
+         tools: Vec::new(),
+         base_instructions_override: Some(compact_instructions.clone()),
+     };
+diff --git a/codex-rs/core/src/config.rs b/codex-rs/core/src/config.rs
+index e022ba018828..7fb4a0ddd982 100644
+--- a/codex-rs/core/src/config.rs
++++ b/codex-rs/core/src/config.rs
+@@ -78,11 +78,6 @@ pub struct Config {
+     /// Defaults to `false`.
+     pub show_raw_agent_reasoning: bool,
+ 
+-    /// Disable server-side response storage (sends the full conversation
+-    /// context with every request). Currently necessary for OpenAI customers
+-    /// who have opted into Zero Data Retention (ZDR).
+-    pub disable_response_storage: bool,
+-
+     /// User-provided instructions from AGENTS.md.
+     pub user_instructions: Option<String>,
+ 
+@@ -417,11 +412,6 @@ pub struct ConfigToml {
+     /// Sandbox configuration to apply if `sandbox` is `WorkspaceWrite`.
+     pub sandbox_workspace_write: Option<SandboxWorkspaceWrite>,
+ 
+-    /// Disable server-side response storage (sends the full conversation
+-    /// context with every request). Currently necessary for OpenAI customers
+-    /// who have opted into Zero Data Retention (ZDR).
+-    pub disable_response_storage: Option<bool>,
+-
+     /// Optional external command to spawn for end-user notifications.
+     #[serde(default)]
+     pub notify: Option<Vec<String>>,
+@@ -640,7 +630,6 @@ pub struct ConfigOverrides {
+     pub include_plan_tool: Option<bool>,
+     pub include_apply_patch_tool: Option<bool>,
+     pub include_view_image_tool: Option<bool>,
+-    pub disable_response_storage: Option<bool>,
+     pub show_raw_agent_reasoning: Option<bool>,
+     pub tools_web_search_request: Option<bool>,
+ }
+@@ -668,7 +657,6 @@ impl Config {
+             include_plan_tool,
+             include_apply_patch_tool,
+             include_view_image_tool,
+-            disable_response_storage,
+             show_raw_agent_reasoning,
+             tools_web_search_request: override_tools_web_search_request,
+         } = overrides;
+@@ -802,11 +790,6 @@ impl Config {
+                 .unwrap_or_else(AskForApproval::default),
+             sandbox_policy,
+             shell_environment_policy,
+-            disable_response_storage: config_profile
+-                .disable_response_storage
+-                .or(cfg.disable_response_storage)
+-                .or(disable_response_storage)
+-                .unwrap_or(false),
+             notify: cfg.notify,
+             user_instructions,
+             base_instructions,
+@@ -1071,7 +1054,6 @@ exclude_slash_tmp = true
+         let toml = r#"
+ model = "o3"
+ approval_policy = "untrusted"
+-disable_response_storage = false
+ 
+ # Can be used to determine which profile to use if not specified by
+ # `ConfigOverrides`.
+@@ -1101,7 +1083,6 @@ model_provider = "openai-chat-completions"
+ model = "o3"
+ model_provider = "openai"
+ approval_policy = "on-failure"
+-disable_response_storage = true
+ 
+ [profiles.gpt5]
+ model = "gpt-5"
+@@ -1199,7 +1180,6 @@ model_verbosity = "high"
+                 approval_policy: AskForApproval::Never,
+                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
+                 shell_environment_policy: ShellEnvironmentPolicy::default(),
+-                disable_response_storage: false,
+                 user_instructions: None,
+                 notify: None,
+                 cwd: fixture.cwd(),
+@@ -1257,7 +1237,6 @@ model_verbosity = "high"
+             approval_policy: AskForApproval::UnlessTrusted,
+             sandbox_policy: SandboxPolicy::new_read_only_policy(),
+             shell_environment_policy: ShellEnvironmentPolicy::default(),
+-            disable_response_storage: false,
+             user_instructions: None,
+             notify: None,
+             cwd: fixture.cwd(),
+@@ -1330,7 +1309,6 @@ model_verbosity = "high"
+             approval_policy: AskForApproval::OnFailure,
+             sandbox_policy: SandboxPolicy::new_read_only_policy(),
+             shell_environment_policy: ShellEnvironmentPolicy::default(),
+-            disable_response_storage: true,
+             user_instructions: None,
+             notify: None,
+             cwd: fixture.cwd(),
+@@ -1389,7 +1367,6 @@ model_verbosity = "high"
+             approval_policy: AskForApproval::OnFailure,
+             sandbox_policy: SandboxPolicy::new_read_only_policy(),
+             shell_environment_policy: ShellEnvironmentPolicy::default(),
+-            disable_response_storage: false,
+             user_instructions: None,
+             notify: None,
+             cwd: fixture.cwd(),
+diff --git a/codex-rs/core/src/config_profile.rs b/codex-rs/core/src/config_profile.rs
+index d6ab03f60fc9..b98f78d311c2 100644
+--- a/codex-rs/core/src/config_profile.rs
++++ b/codex-rs/core/src/config_profile.rs
+@@ -15,7 +15,6 @@ pub struct ConfigProfile {
+     /// [`ModelProviderInfo`] to use.
+     pub model_provider: Option<String>,
+     pub approval_policy: Option<AskForApproval>,
+-    pub disable_response_storage: Option<bool>,
+     pub model_reasoning_effort: Option<ReasoningEffort>,
+     pub model_reasoning_summary: Option<ReasoningSummary>,
+     pub model_verbosity: Option<Verbosity>,
+@@ -29,7 +28,6 @@ impl From<ConfigProfile> for codex_protocol::mcp_protocol::Profile {
+             model: config_profile.model,
+             model_provider: config_profile.model_provider,
+             approval_policy: config_profile.approval_policy,
+-            disable_response_storage: config_profile.disable_response_storage,
+             model_reasoning_effort: config_profile.model_reasoning_effort,
+             model_reasoning_summary: config_profile.model_reasoning_summary,
+             model_verbosity: config_profile.model_verbosity,
+diff --git a/codex-rs/core/tests/suite/client.rs b/codex-rs/core/tests/suite/client.rs
+index 1bf7ef0c0079..cc1369e76f39 100644
+--- a/codex-rs/core/tests/suite/client.rs
++++ b/codex-rs/core/tests/suite/client.rs
+@@ -224,19 +224,16 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
+     let expected_input = serde_json::json!([
+         {
+             "type": "message",
+-            "id": null,
+             "role": "user",
+             "content": [{ "type": "input_text", "text": "resumed user message" }]
+         },
+         {
+             "type": "message",
+-            "id": null,
+             "role": "assistant",
+             "content": [{ "type": "output_text", "text": "resumed assistant message" }]
+         },
+         {
+             "type": "message",
+-            "id": null,
+             "role": "user",
+             "content": [{ "type": "input_text", "text": "hello" }]
+         }
+@@ -496,7 +493,6 @@ async fn chatgpt_auth_sends_correct_request() {
+         "Bearer Access Token"
+     );
+     assert_eq!(request_chatgpt_account_id.to_str().unwrap(), "account_id");
+-    assert!(!request_body["store"].as_bool().unwrap());
+     assert!(request_body["stream"].as_bool().unwrap());
+     assert_eq!(
+         request_body["include"][0].as_str().unwrap(),
+@@ -578,14 +574,6 @@ async fn prefers_chatgpt_token_when_config_prefers_chatgpt() {
+         .unwrap();
+ 
+     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
+-
+-    // verify request body flags
+-    let request = &server.received_requests().await.unwrap()[0];
+-    let request_body = request.body_json::<serde_json::Value>().unwrap();
+-    assert!(
+-        !request_body["store"].as_bool().unwrap(),
+-        "store should be false for ChatGPT auth"
+-    );
+ }
+ 
+ #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+@@ -662,14 +650,6 @@ async fn prefers_apikey_when_config_prefers_apikey_even_with_chatgpt_tokens() {
+         .unwrap();
+ 
+     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
+-
+-    // verify request body flags
+-    let request = &server.received_requests().await.unwrap()[0];
+-    let request_body = request.body_json::<serde_json::Value>().unwrap();
+-    assert!(
+-        request_body["store"].as_bool().unwrap(),
+-        "store should be true for API key auth"
+-    );
+ }
+ 
+ #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+@@ -990,31 +970,26 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
+     let r3_tail_expected = serde_json::json!([
+         {
+             "type": "message",
+-            "id": null,
+             "role": "user",
+             "content": [{"type":"input_text","text":"U1"}]
+         },
+         {
+             "type": "message",
+-            "id": null,
+             "role": "assistant",
+             "content": [{"type":"output_text","text":"Hey there!\n"}]
+         },
+         {
+             "type": "message",
+-            "id": null,
+             "role": "user",
+             "content": [{"type":"input_text","text":"U2"}]
+         },
+         {
+             "type": "message",
+-            "id": null,
+             "role": "assistant",
+             "content": [{"type":"output_text","text":"Hey there!\n"}]
+         },
+         {
+             "type": "message",
+-            "id": null,
+             "role": "user",
+             "content": [{"type":"input_text","text":"U3"}]
+         }
+diff --git a/codex-rs/core/tests/suite/prompt_caching.rs b/codex-rs/core/tests/suite/prompt_caching.rs
+index 11c6ea9acfd7..4625841a64b8 100644
+--- a/codex-rs/core/tests/suite/prompt_caching.rs
++++ b/codex-rs/core/tests/suite/prompt_caching.rs
+@@ -289,20 +289,17 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
+ 
+     let expected_env_msg = serde_json::json!({
+         "type": "message",
+-        "id": serde_json::Value::Null,
+         "role": "user",
+         "content": [ { "type": "input_text", "text": expected_env_text } ]
+     });
+     let expected_ui_msg = serde_json::json!({
+         "type": "message",
+-        "id": serde_json::Value::Null,
+         "role": "user",
+         "content": [ { "type": "input_text", "text": expected_ui_text } ]
+     });
+ 
+     let expected_user_message_1 = serde_json::json!({
+         "type": "message",
+-        "id": serde_json::Value::Null,
+         "role": "user",
+         "content": [ { "type": "input_text", "text": "hello 1" } ]
+     });
+@@ -314,7 +311,6 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
+ 
+     let expected_user_message_2 = serde_json::json!({
+         "type": "message",
+-        "id": serde_json::Value::Null,
+         "role": "user",
+         "content": [ { "type": "input_text", "text": "hello 2" } ]
+     });
+@@ -424,7 +420,6 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() {
+     // as the prefix of the second request, ensuring cache hit potential.
+     let expected_user_message_2 = serde_json::json!({
+         "type": "message",
+-        "id": serde_json::Value::Null,
+         "role": "user",
+         "content": [ { "type": "input_text", "text": "hello 2" } ]
+     });
+@@ -438,7 +433,6 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() {
+ </environment_context>"#;
+     let expected_env_msg_2 = serde_json::json!({
+         "type": "message",
+-        "id": serde_json::Value::Null,
+         "role": "user",
+         "content": [ { "type": "input_text", "text": expected_env_text_2 } ]
+     });
+@@ -543,7 +537,6 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() {
+     // as the prefix of the second request.
+     let expected_user_message_2 = serde_json::json!({
+         "type": "message",
+-        "id": serde_json::Value::Null,
+         "role": "user",
+         "content": [ { "type": "input_text", "text": "hello 2" } ]
+     });
+diff --git a/codex-rs/exec/src/lib.rs b/codex-rs/exec/src/lib.rs
+index d5991efdadbe..8215d7e698ca 100644
+--- a/codex-rs/exec/src/lib.rs
++++ b/codex-rs/exec/src/lib.rs
+@@ -149,7 +149,6 @@ pub async fn run_main(cli: Cli, codex_linux_sandbox_exe: Option<PathBuf>) -> any
+         include_plan_tool: None,
+         include_apply_patch_tool: None,
+         include_view_image_tool: None,
+-        disable_response_storage: oss.then_some(true),
+         show_raw_agent_reasoning: oss.then_some(true),
+         tools_web_search_request: None,
+     };
+diff --git a/codex-rs/mcp-server/src/codex_message_processor.rs b/codex-rs/mcp-server/src/codex_message_processor.rs
+index 2309e01dcdad..828cf1f16760 100644
+--- a/codex-rs/mcp-server/src/codex_message_processor.rs
++++ b/codex-rs/mcp-server/src/codex_message_processor.rs
+@@ -994,7 +994,6 @@ fn derive_config_from_params(
+         include_plan_tool,
+         include_apply_patch_tool,
+         include_view_image_tool: None,
+-        disable_response_storage: None,
+         show_raw_agent_reasoning: None,
+         tools_web_search_request: None,
+     };
+diff --git a/codex-rs/mcp-server/src/codex_tool_config.rs b/codex-rs/mcp-server/src/codex_tool_config.rs
+index c29cb52c22a4..0ba5593fcb2f 100644
+--- a/codex-rs/mcp-server/src/codex_tool_config.rs
++++ b/codex-rs/mcp-server/src/codex_tool_config.rs
+@@ -162,7 +162,6 @@ impl CodexToolCallParam {
+             include_plan_tool,
+             include_apply_patch_tool: None,
+             include_view_image_tool: None,
+-            disable_response_storage: None,
+             show_raw_agent_reasoning: None,
+             tools_web_search_request: None,
+         };
+diff --git a/codex-rs/mcp-server/tests/suite/config.rs b/codex-rs/mcp-server/tests/suite/config.rs
+index 809d426b2442..bc8789ce78fc 100644
+--- a/codex-rs/mcp-server/tests/suite/config.rs
++++ b/codex-rs/mcp-server/tests/suite/config.rs
+@@ -51,7 +51,6 @@ model_reasoning_effort = "high"
+ model_reasoning_summary = "detailed"
+ model_verbosity = "medium"
+ model_provider = "openai"
+-disable_response_storage = false
+ chatgpt_base_url = "https://api.chatgpt.com"
+ "#,
+     )
+@@ -111,7 +110,6 @@ async fn get_config_toml_parses_all_fields() {
+                     model_reasoning_summary: Some(ReasoningSummary::Detailed),
+                     model_verbosity: Some(Verbosity::Medium),
+                     model_provider: Some("openai".into()),
+-                    disable_response_storage: Some(false),
+                     chatgpt_base_url: Some("https://api.chatgpt.com".into()),
+                 },
+             )]),
+diff --git a/codex-rs/protocol/src/mcp_protocol.rs b/codex-rs/protocol/src/mcp_protocol.rs
+index 3980de0ae1f0..26d39eb6a8db 100644
+--- a/codex-rs/protocol/src/mcp_protocol.rs
++++ b/codex-rs/protocol/src/mcp_protocol.rs
+@@ -371,7 +371,6 @@ pub struct Profile {
+     /// [`ModelProviderInfo`] to use.
+     pub model_provider: Option<String>,
+     pub approval_policy: Option<AskForApproval>,
+-    pub disable_response_storage: Option<bool>,
+     pub model_reasoning_effort: Option<ReasoningEffort>,
+     pub model_reasoning_summary: Option<ReasoningSummary>,
+     pub model_verbosity: Option<Verbosity>,
+diff --git a/codex-rs/protocol/src/models.rs b/codex-rs/protocol/src/models.rs
+index 71b517092a22..e8dbf19c981f 100644
+--- a/codex-rs/protocol/src/models.rs
++++ b/codex-rs/protocol/src/models.rs
+@@ -42,11 +42,13 @@ pub enum ContentItem {
+ #[serde(tag = "type", rename_all = "snake_case")]
+ pub enum ResponseItem {
+     Message {
++        #[serde(skip_serializing)]
+         id: Option<String>,
+         role: String,
+         content: Vec<ContentItem>,
+     },
+     Reasoning {
++        #[serde(default)]
+         id: String,
+         summary: Vec<ReasoningItemReasoningSummary>,
+         #[serde(default, skip_serializing_if = "should_serialize_reasoning_content")]
+@@ -55,6 +57,7 @@ pub enum ResponseItem {
+     },
+     LocalShellCall {
+         /// Set when using the chat completions API.
++        #[serde(skip_serializing)]
+         id: Option<String>,
+         /// Set when using the Responses API.
+         call_id: Option<String>,
+@@ -62,6 +65,7 @@ pub enum ResponseItem {
+         action: LocalShellAction,
+     },
+     FunctionCall {
++        #[serde(skip_serializing)]
+         id: Option<String>,
+         name: String,
+         // The Responses API returns the function call arguments as a *string* that contains
+@@ -82,7 +86,7 @@ pub enum ResponseItem {
+         output: FunctionCallOutputPayload,
+     },
+     CustomToolCall {
+-        #[serde(default, skip_serializing_if = "Option::is_none")]
++        #[serde(skip_serializing)]
+         id: Option<String>,
+         #[serde(default, skip_serializing_if = "Option::is_none")]
+         status: Option<String>,
+@@ -104,7 +108,7 @@ pub enum ResponseItem {
+     //   "action": {"type":"search","query":"weather: San Francisco, CA"}
+     // }
+     WebSearchCall {
+-        #[serde(default, skip_serializing_if = "Option::is_none")]
++        #[serde(skip_serializing)]
+         id: Option<String>,
+         #[serde(default, skip_serializing_if = "Option::is_none")]
+         status: Option<String>,
+diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
+index c52f48e62f4c..27e40f243629 100644
+--- a/codex-rs/tui/src/lib.rs
++++ b/codex-rs/tui/src/lib.rs
+@@ -129,7 +129,6 @@ pub async fn run_main(
+         include_plan_tool: Some(true),
+         include_apply_patch_tool: None,
+         include_view_image_tool: None,
+-        disable_response_storage: cli.oss.then_some(true),
+         show_raw_agent_reasoning: cli.oss.then_some(true),
+         tools_web_search_request: cli.web_search.then_some(true),
+     };
+diff --git a/docs/advanced.md b/docs/advanced.md
+index 26f735991f2b..42bbcc338f05 100644
+--- a/docs/advanced.md
++++ b/docs/advanced.md
+@@ -39,4 +39,4 @@ env = { "API_KEY" = "value" }
+ ```
+ 
+ > [!TIP]
+-> It is somewhat experimental, but the Codex CLI can also be run as an MCP _server_ via `codex mcp`. If you launch it with an MCP client such as `npx @modelcontextprotocol/inspector codex mcp` and send it a `tools/list` request, you will see that there is only one tool, `codex`, that accepts a grab-bag of inputs, including a catch-all `config` map for anything you might want to override. Feel free to play around with it and provide feedback via GitHub issues. 
+\ No newline at end of file
++> It is somewhat experimental, but the Codex CLI can also be run as an MCP _server_ via `codex mcp`. If you launch it with an MCP client such as `npx @modelcontextprotocol/inspector codex mcp` and send it a `tools/list` request, you will see that there is only one tool, `codex`, that accepts a grab-bag of inputs, including a catch-all `config` map for anything you might want to override. Feel free to play around with it and provide feedback via GitHub issues. 
+diff --git a/docs/config.md b/docs/config.md
+index 285c2ef84080..d17eab477d05 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -182,7 +182,6 @@ Here is an example of a `config.toml` that defines multiple profiles:
+ ```toml
+ model = "o3"
+ approval_policy = "untrusted"
+-disable_response_storage = false
+ 
+ # Setting `profile` is equivalent to specifying `--profile o3` on the command
+ # line, though the `--profile` flag can still be used to override this value.
+@@ -209,7 +208,6 @@ model_provider = "openai-chat-completions"
+ model = "o3"
+ model_provider = "openai"
+ approval_policy = "on-failure"
+-disable_response_storage = true
+ ```
+ 
+ Users can specify config values at multiple levels. Order of precedence is as follows:
+@@ -362,14 +360,6 @@ args = ["-y", "mcp-server"]
+ env = { "API_KEY" = "value" }
+ ```
+ 
+-## disable_response_storage
+-
+-Currently, customers whose accounts are set to use Zero Data Retention (ZDR) must set `disable_response_storage` to `true` so that Codex uses an alternative to the Responses API that works with ZDR:
+-
+-```toml
+-disable_response_storage = true
+-```
+-
+ ## shell_environment_policy
+ 
+ Codex spawns subprocesses (e.g. when executing a `local_shell` tool-call suggested by the assistant). By default it now passes **your full environment** to those subprocesses. You can tune this behavior via the **`shell_environment_policy`** block in `config.toml`:
+diff --git a/docs/zdr.md b/docs/zdr.md
+index 92e78a34b6dd..d030e8d07fbb 100644
+--- a/docs/zdr.md
++++ b/docs/zdr.md
+@@ -1,15 +1,3 @@
+ ## Zero data retention (ZDR) usage
+ 
+-Codex CLI **does** support OpenAI organizations with [Zero Data Retention (ZDR)](https://platform.openai.com/docs/guides/your-data#zero-data-retention) enabled. If your OpenAI organization has Zero Data Retention enabled and you still encounter errors such as:
+-
+-```
+-OpenAI rejected the request. Error details: Status: 400, Code: unsupported_parameter, Type: invalid_request_error, Message: 400 Previous response cannot be used for this organization due to Zero Data Retention.
+-```
+-
+-Ensure you are running `codex` with `--config disable_response_storage=true` or add this line to `~/.codex/config.toml` to avoid specifying the command line option each time:
+-
+-```toml
+-disable_response_storage = true
+-```
+-
+-See [the configuration documentation on `disable_response_storage`](./config.md#disable_response_storage) for details. 
+\ No newline at end of file
++Codex CLI natively supports OpenAI organizations with [Zero Data Retention (ZDR)](https://platform.openai.com/docs/guides/your-data#zero-data-retention) enabled.

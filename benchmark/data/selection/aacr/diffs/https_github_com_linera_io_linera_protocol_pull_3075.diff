@@ -1,0 +1,300 @@
+diff --git a/CLI.md b/CLI.md
+index cdac52e6f3ba..ac1df3a46adc 100644
+--- a/CLI.md
++++ b/CLI.md
+@@ -146,6 +146,9 @@ A Byzantine-fault tolerant sidechain with low-latency finality and high throughp
+     Don't include any messages in blocks, and don't make any decision whether to accept or reject
+ 
+ * `--restrict-chain-ids-to <RESTRICT_CHAIN_IDS_TO>` — A set of chains to restrict incoming messages from. By default, messages from all chains are accepted. To reject messages from all chains, specify an empty string
++* `--grace-period <GRACE_PERIOD>` — An additional delay, after reaching a quorum, to wait for additional validator signatures, as a fraction of time taken to reach quorum
++
++  Default value: `0.2`
+ 
+ 
+ 
+diff --git a/linera-client/src/client_context.rs b/linera-client/src/client_context.rs
+index 12864fbba35c..6c7f2855d325 100644
+--- a/linera-client/src/client_context.rs
++++ b/linera-client/src/client_context.rs
+@@ -174,6 +174,7 @@ where
+             chain_ids,
+             name,
+             options.max_loaded_chains,
++            options.grace_period,
+         );
+ 
+         ClientContext {
+@@ -191,6 +192,8 @@ where
+ 
+     #[cfg(with_testing)]
+     pub fn new_test_client_context(storage: S, wallet: W) -> Self {
++        use linera_core::DEFAULT_GRACE_PERIOD;
++
+         let send_recv_timeout = Duration::from_millis(4000);
+         let retry_delay = Duration::from_millis(1000);
+         let max_retries = 10;
+@@ -218,6 +221,7 @@ where
+             chain_ids,
+             name,
+             NonZeroUsize::new(20).expect("Chain worker limit should not be zero"),
++            DEFAULT_GRACE_PERIOD,
+         );
+ 
+         ClientContext {
+diff --git a/linera-client/src/client_options.rs b/linera-client/src/client_options.rs
+index ff98fbafcb1e..683d97e1dcc7 100644
+--- a/linera-client/src/client_options.rs
++++ b/linera-client/src/client_options.rs
+@@ -18,7 +18,7 @@ use linera_base::{
+     },
+     ownership::{ChainOwnership, TimeoutConfig},
+ };
+-use linera_core::client::BlanketMessagePolicy;
++use linera_core::{client::BlanketMessagePolicy, DEFAULT_GRACE_PERIOD};
+ use linera_execution::{
+     committee::ValidatorName, ResourceControlPolicy, WasmRuntime, WithWasmDefault as _,
+ };
+@@ -156,6 +156,11 @@ pub struct ClientOptions {
+     /// an empty string.
+     #[arg(long, value_parser = util::parse_chain_set)]
+     pub restrict_chain_ids_to: Option<HashSet<ChainId>>,
++
++    /// An additional delay, after reaching a quorum, to wait for additional validator signatures,
++    /// as a fraction of time taken to reach quorum.
++    #[arg(long, default_value_t = DEFAULT_GRACE_PERIOD)]
++    pub grace_period: f64,
+ }
+ 
+ impl ClientOptions {
+diff --git a/linera-client/src/unit_tests/chain_listener.rs b/linera-client/src/unit_tests/chain_listener.rs
+index 338b14c213bf..5e079e938ef7 100644
+--- a/linera-client/src/unit_tests/chain_listener.rs
++++ b/linera-client/src/unit_tests/chain_listener.rs
+@@ -17,6 +17,7 @@ use linera_core::{
+     client::{ChainClient, Client},
+     node::CrossChainMessageDelivery,
+     test_utils::{MemoryStorageBuilder, NodeProvider, StorageBuilder as _, TestBuilder},
++    DEFAULT_GRACE_PERIOD,
+ };
+ use linera_execution::system::Recipient;
+ use linera_storage::{DbStorage, TestClock};
+@@ -133,6 +134,7 @@ async fn test_chain_listener() -> anyhow::Result<()> {
+             [chain_id0],
+             format!("Client node for {:.8}", chain_id0),
+             NonZeroUsize::new(20).expect("Chain worker LRU cache size must be non-zero"),
++            DEFAULT_GRACE_PERIOD,
+         )),
+     };
+     let key_pair = KeyPair::generate_from(&mut rng);
+diff --git a/linera-core/src/client/mod.rs b/linera-core/src/client/mod.rs
+index c43bad739f96..e5ce6b8c130f 100644
+--- a/linera-core/src/client/mod.rs
++++ b/linera-core/src/client/mod.rs
+@@ -157,6 +157,9 @@ where
+     message_policy: MessagePolicy,
+     /// Whether to block on cross-chain message delivery.
+     cross_chain_message_delivery: CrossChainMessageDelivery,
++    /// An additional delay, after reaching a quorum, to wait for additional validator signatures,
++    /// as a fraction of time taken to reach quorum.
++    grace_period: f64,
+     /// Chains that should be tracked by the client.
+     // TODO(#2412): Merge with set of chains the client is receiving notifications from validators
+     tracked_chains: Arc<RwLock<HashSet<ChainId>>>,
+@@ -184,6 +187,7 @@ impl<P, S: Storage + Clone> Client<P, S> {
+         tracked_chains: impl IntoIterator<Item = ChainId>,
+         name: impl Into<String>,
+         max_loaded_chains: NonZeroUsize,
++        grace_period: f64,
+     ) -> Self {
+         let tracked_chains = Arc::new(RwLock::new(tracked_chains.into_iter().collect()));
+         let state = WorkerState::new_for_client(
+@@ -204,6 +208,7 @@ impl<P, S: Storage + Clone> Client<P, S> {
+             max_pending_message_bundles,
+             message_policy: MessagePolicy::new(BlanketMessagePolicy::Accept, None),
+             cross_chain_message_delivery,
++            grace_period,
+             tracked_chains,
+             notifier: Arc::new(ChannelNotifier::default()),
+             storage,
+@@ -267,6 +272,7 @@ impl<P, S: Storage + Clone> Client<P, S> {
+                 max_pending_message_bundles: self.max_pending_message_bundles,
+                 message_policy: self.message_policy.clone(),
+                 cross_chain_message_delivery: self.cross_chain_message_delivery,
++                grace_period: self.grace_period,
+             },
+         }
+     }
+@@ -465,6 +471,9 @@ pub struct ChainClientOptions {
+     pub message_policy: MessagePolicy,
+     /// Whether to block on cross-chain message delivery.
+     pub cross_chain_message_delivery: CrossChainMessageDelivery,
++    /// An additional delay, after reaching a quorum, to wait for additional validator signatures,
++    /// as a fraction of time taken to reach quorum.
++    pub grace_period: f64,
+ }
+ 
+ /// Client to operate a chain by interacting with validators and the given local storage
+@@ -1111,6 +1120,7 @@ where
+                         .await
+                 })
+             },
++            self.options.grace_period,
+         )
+         .await?;
+         Ok(())
+@@ -1146,6 +1156,7 @@ where
+                 let action = action.clone();
+                 Box::pin(async move { updater.send_chain_update(action).await })
+             },
++            self.options.grace_period,
+         )
+         .await?;
+         ensure!(
+@@ -1516,6 +1527,7 @@ where
+                         .await
+                 })
+             },
++            self.options.grace_period,
+         )
+         .await;
+         let received_certificate_batches = match result {
+@@ -1673,6 +1685,7 @@ where
+                         .await
+                 }
+             },
++            self.options.grace_period,
+         )
+         .await?;
+ 
+diff --git a/linera-core/src/lib.rs b/linera-core/src/lib.rs
+index b4665aba746c..8bd5b4c214d3 100644
+--- a/linera-core/src/lib.rs
++++ b/linera-core/src/lib.rs
+@@ -23,4 +23,6 @@ pub mod worker;
+ pub(crate) mod updater;
+ pub(crate) mod value_cache;
+ 
++pub use updater::DEFAULT_GRACE_PERIOD;
++
+ pub use crate::join_set_ext::{JoinSetExt, TaskHandle};
+diff --git a/linera-core/src/unit_tests/test_utils.rs b/linera-core/src/unit_tests/test_utils.rs
+index 902aba44f523..26f2f8eb792b 100644
+--- a/linera-core/src/unit_tests/test_utils.rs
++++ b/linera-core/src/unit_tests/test_utils.rs
+@@ -57,6 +57,7 @@ use crate::{
+         ValidatorNodeProvider,
+     },
+     notifier::ChannelNotifier,
++    updater::DEFAULT_GRACE_PERIOD,
+     worker::{NetworkActions, Notification, ProcessableCertificate, WorkerState},
+ };
+ 
+@@ -840,6 +841,7 @@ where
+             [chain_id],
+             format!("Client node for {:.8}", chain_id),
+             NonZeroUsize::new(20).expect("Chain worker limit should not be zero"),
++            DEFAULT_GRACE_PERIOD,
+         ));
+         Ok(builder.create_chain_client(
+             chain_id,
+diff --git a/linera-core/src/updater.rs b/linera-core/src/updater.rs
+index e3a9a4f80215..52a0ed9d6cd0 100644
+--- a/linera-core/src/updater.rs
++++ b/linera-core/src/updater.rs
+@@ -31,10 +31,10 @@ use crate::{
+     remote_node::RemoteNode,
+ };
+ 
+-/// The amount of time we wait for additional validators to contribute to the result, as a fraction
+-/// of how long it took to reach a quorum.
+-const GRACE_PERIOD: f64 = 0.2;
+-/// The maximum timeout for `communicate_with_quorum` if no quorum is reached.
++/// The default amount of time we wait for additional validators to contribute
++/// to the result, as a fraction of how long it took to reach a quorum.
++pub const DEFAULT_GRACE_PERIOD: f64 = 0.2;
++/// The maximum timeout for requests to a stake-weighted quorum if no quorum is reached.
+ const MAX_TIMEOUT: Duration = Duration::from_secs(60 * 60 * 24); // 1 day.
+ 
+ /// Used for `communicate_chain_action`
+@@ -76,7 +76,7 @@ where
+     pub local_node: LocalNodeClient<S>,
+ }
+ 
+-/// An error result for [`communicate_with_quorum`].
++/// An error result for requests to a stake-weighted quorum.
+ #[derive(Error, Debug)]
+ pub enum CommunicationError<E: fmt::Debug> {
+     /// No consensus is possible since validators returned different possibilities
+@@ -97,14 +97,16 @@ pub enum CommunicationError<E: fmt::Debug> {
+ 
+ /// Executes a sequence of actions in parallel for all validators.
+ ///
+-/// Tries to stop early when a quorum is reached. If `grace_period` is not zero, other validators
+-/// are given this much additional time to contribute to the result, as a fraction of how long it
+-/// took to reach the quorum.
++/// Tries to stop early when a quorum is reached. If `grace_period` is specified, other validators
++/// are given additional time to contribute to the result. The grace period is calculated as a fraction
++/// (defaulting to `DEFAULT_GRACE_PERIOD`) of the time taken to reach quorum.
+ pub async fn communicate_with_quorum<'a, A, V, K, F, R, G>(
+     validator_clients: &'a [RemoteNode<A>],
+     committee: &Committee,
+     group_by: G,
+     execute: F,
++    // Grace period as a fraction of time taken to reach quorum
++    grace_period: f64,
+ ) -> Result<(K, Vec<V>), CommunicationError<NodeError>>
+ where
+     A: ValidatorNode + Clone + 'static,
+@@ -135,7 +137,7 @@ where
+     let mut value_scores = HashMap::new();
+     let mut error_scores = HashMap::new();
+ 
+-    while let Ok(Some((name, result))) = timeout(
++    'vote_wait: while let Ok(Some((name, result))) = timeout(
+         end_time.map_or(MAX_TIMEOUT, |t| t.saturating_duration_since(Instant::now())),
+         responses.next(),
+     )
+@@ -167,13 +169,15 @@ where
+                 }
+             }
+         }
+-        // If a key reaches a quorum or it becomes clear that no key can, wait for the grace
+-        // period to collect more values or error information and then stop.
+-        if end_time.is_none()
+-            && (highest_key_score >= committee.quorum_threshold()
+-                || highest_key_score + remaining_votes < committee.quorum_threshold())
+-        {
+-            end_time = Some(Instant::now() + start_time.elapsed().mul_f64(GRACE_PERIOD));
++        // If it becomes clear that no key can reach a quorum, break early.
++        if highest_key_score + remaining_votes < committee.quorum_threshold() {
++            break 'vote_wait;
++        }
++
++        // If a key reaches a quorum, wait for the grace period to collect more values
++        // or error information and then stop.
++        if end_time.is_none() && highest_key_score >= committee.quorum_threshold() {
++            end_time = Some(Instant::now() + start_time.elapsed().mul_f64(grace_period));
+         }
+     }
+ 
+diff --git a/linera-service/src/linera/main.rs b/linera-service/src/linera/main.rs
+index b3fbc167ef82..a90c8832fa88 100644
+--- a/linera-service/src/linera/main.rs
++++ b/linera-service/src/linera/main.rs
+@@ -39,7 +39,7 @@ use linera_core::{
+     node::{CrossChainMessageDelivery, ValidatorNodeProvider},
+     remote_node::RemoteNode,
+     worker::Reason,
+-    JoinSetExt as _,
++    JoinSetExt as _, DEFAULT_GRACE_PERIOD,
+ };
+ use linera_execution::{
+     committee::{Committee, ValidatorName, ValidatorState},
+@@ -1247,6 +1247,7 @@ impl Job {
+             vec![message_id.chain_id, chain_id],
+             "Temporary client for fetching the parent chain",
+             NonZeroUsize::new(20).expect("Chain worker limit should not be zero"),
++            DEFAULT_GRACE_PERIOD,
+         );
+ 
+         // Take the latest committee we know of.

@@ -1,0 +1,66 @@
+{
+ "results": [
+  {
+   "change_intent": "Implement custom execution context and context state initialization for Databricks to manage the active catalog name.",
+   "summary": "The changes correctly introduce DatabricksExecutionContext to track and refresh the active catalog and initialize context state.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "plugins/org.jkiss.dbeaver.ext.databricks/src/org/jkiss/dbeaver/ext/databricks/DatabricksDataSource.java"
+  },
+  {
+   "change_intent": "Provide DatabricksExecutionContext to query and maintain the active catalog via CURRENT_CATALOG().",
+   "summary": "DatabricksExecutionContext properly queries CURRENT_CATALOG() and tracks active catalog changes.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "plugins/org.jkiss.dbeaver.ext.databricks/src/org/jkiss/dbeaver/ext/databricks/DatabricksExecutionContext.java"
+  }
+ ],
+ "n_files": 2,
+ "input_tokens": 97345,
+ "output_tokens": 1655,
+ "calls": null,
+ "tool_calls": [
+  {
+   "command": "grep -rn \"refreshDefaults\" plugins/org.jkiss.dbeaver.ext.generic/ | head -n 30",
+   "output_preview": "[exit code: 0]\nplugins/org.jkiss.dbeaver.ext.generic/src/org/jkiss/dbeaver/ext/generic/model/GenericExecutionContext.java:348:    public boolean refreshDefaults(DBRProgressMonitor monitor, boolean useBootstrapSettings) throws DBException {\nplugins/org.jkiss.dbeaver.ext.generic/src/org/jkiss/dbeaver/ext/generic/model/GenericDataSource.java:224:            ((GenericExecutionContext)context).refreshD"
+  },
+  {
+   "command": "sed -n '210,250p' plugins/org.jkiss.dbeaver.ext.generic/src/org/jkiss/dbeaver/ext/generic/model/GenericDataSource.java",
+   "output_preview": "[exit code: 0]\n        return getClass() != GenericDataSource.class;\n    }\n\n    @Override\n    protected JDBCExecutionContext createExecutionContext(JDBCRemoteInstance instance, String type) throws DBCException {\n        return new GenericExecutionContext(instance, type);\n    }\n\n    protected void initializeContextState(@NotNull DBRProgressMonitor monitor, @NotNull JDBCExecutionContext context, JDB"
+  },
+  {
+   "command": "grep -rn \"initializeContextState\" plugins/org.jkiss.dbeaver.model/ | head -n 30",
+   "output_preview": "[exit code: 0]\n(no output)"
+  },
+  {
+   "command": "grep -rn \"initializeContextState\" plugins/ | head -n 30",
+   "output_preview": "[exit code: 0]\nplugins/org.jkiss.dbeaver.model.jdbc/src/org/jkiss/dbeaver/model/impl/jdbc/JDBCExecutionContext.java:183:                this.dataSource.initializeContextState(monitor, this, initFrom);\nplugins/org.jkiss.dbeaver.model.jdbc/src/org/jkiss/dbeaver/model/impl/jdbc/JDBCDataSource.java:452:    protected void initializeContextState(@NotNull DBRProgressMonitor monitor, @NotNull JDBCExecutio"
+  },
+  {
+   "command": "sed -n '450,470p' plugins/org.jkiss.dbeaver.model.jdbc/src/org/jkiss/dbeaver/model/impl/jdbc/JDBCDataSource.java",
+   "output_preview": "[exit code: 0]\n*/\n\n    protected void initializeContextState(@NotNull DBRProgressMonitor monitor, @NotNull JDBCExecutionContext context, JDBCExecutionContext initFrom) throws DBException {\n\n    }\n\n    @NotNull\n    protected JDBCConnectionImpl createConnection(\n        @NotNull DBRProgressMonitor monitor,\n        @NotNull JDBCExecutionContext context,\n        @NotNull DBCExecutionPurpose purpose,\n "
+  },
+  {
+   "command": "grep -rn \"initDefaultsFrom\" plugins/org.jkiss.dbeaver.ext.generic/",
+   "output_preview": "[exit code: 0]\nplugins/org.jkiss.dbeaver.ext.generic/src/org/jkiss/dbeaver/ext/generic/model/GenericExecutionContext.java:139:    void initDefaultsFrom(DBRProgressMonitor monitor, GenericExecutionContext context) throws DBCException {\nplugins/org.jkiss.dbeaver.ext.generic/src/org/jkiss/dbeaver/ext/generic/model/GenericDataSource.java:222:            ((GenericExecutionContext) context).initDefaults"
+  },
+  {
+   "command": "sed -n '135,160p' plugins/org.jkiss.dbeaver.ext.generic/src/org/jkiss/dbeaver/ext/generic/model/GenericExecutionContext.java",
+   "output_preview": "[exit code: 0]\n            }\n        }\n    }\n\n    void initDefaultsFrom(DBRProgressMonitor monitor, GenericExecutionContext context) throws DBCException {\n        GenericCatalog defaultCatalog = context.getDefaultCatalog();\n        String entityName = null;\n        if (defaultCatalog != null && context.supportsCatalogChange()) {\n            entityName = defaultCatalog.getName();\n        } else if "
+  },
+  {
+   "command": "sed -n '161,200p' plugins/org.jkiss.dbeaver.ext.generic/src/org/jkiss/dbeaver/ext/generic/model/GenericExecutionContext.java",
+   "output_preview": "[exit code: 0]\n                            session.setCatalog(entityName);\n                        } else {\n                            session.setSchema(entityName);\n                        }\n                    } else {\n                        log.debug(\"Catalog/schema switch is disabled for legacy drivers\");\n                    }\n                } else {\n                    if (CommonUtils.isEm"
+  },
+  {
+   "command": "sed -n '200,270p' plugins/org.jkiss.dbeaver.ext.generic/src/org/jkiss/dbeaver/ext/generic/model/GenericExecutionContext.java",
+   "output_preview": "[exit code: 0]\n        ) {\n            return catalog;\n        }\n        return getDataSource().getDefaultCatalog();\n    }\n\n    @Override\n    public GenericSchema getDefaultSchema() {\n        if (GenericConstants.ENTITY_TYPE_SCHEMA.equals(getDataSource().getSelectedEntityType())\n            && getDefaultObject() instanceof GenericSchema schema\n        ) {\n            return schema;\n        }\n     "
+  },
+  {
+   "command": "sed -n '271,340p' plugins/org.jkiss.dbeaver.ext.generic/src/org/jkiss/dbeaver/ext/generic/model/GenericExecutionContext.java",
+   "output_preview": "[exit code: 0]\n                if (!dataSource.getContainer().getDriver().isInternalDriver()) {\n                    session.setCatalog(catalog.getName());\n                } else {\n                    log.debug(\"Catalog change is disabled for legacy drivers\");\n                }\n            } else {\n                if (CommonUtils.isEmpty(dataSource.getQuerySetActiveDB())) {\n                    thro"
+  }
+ ],
+ "elapsed_s": 41.9,
+ "model": "gemini-3.8-flash"
+}

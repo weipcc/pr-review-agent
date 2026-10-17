@@ -1,0 +1,67 @@
+{
+ "owner": "bitcoin",
+ "repo": "bitcoin",
+ "full": "bitcoin/bitcoin",
+ "pr_number": 31886,
+ "title": "cli: return local services in -netinfo",
+ "body": "Add local services info to -netinfo dashboard that already provides this info for each of the peer connections.\r\n\r\n- `bitcoin-cli -netinfo` with no args passed provides a nice easy-to-understand services list:\r\n\r\n```\r\nBitcoin Core client v28.99.0 - server 70016/Satoshi:28.99.0/\r\n\r\n         ipv4    ipv6   onion     i2p   cjdns   total   block  manual\r\nin          0       0      12       8       0      20\r\nout         6       0       4       3       2      15       3       4\r\ntotal       6       0      16      11       2      35\r\n\r\nLocal services: network, bloom, witness, compact filters, network limited, p2p v2\r\n\r\nLocal addresses\r\n```\r\n\r\n- With a details level passed, e.g. `-netinfo 3`, print the services in the versions header instead (to avoid adding a line for more static information), in the same format as the peers list (see `-netinfo help` for info on the output of the `serv` column):\r\n\r\n```\r\nBitcoin Core client v28.99.0 - server 70016/Satoshi:28.99.0/ - services nbwcl2\r\n\r\n<->   type   net   serv  v  mping   ping send recv  txn  blk  hb addrp addrl  age  asmap  id version\r\n in        onion         1    283    498   48   48    *              .         77        388 70016\r\n in        onion   nwl2  2    318    485    5  111                             79        372 70016/Satoshi:28.0.0/\r\n in        onion    nwl  1    342    344    4    1   53             96         84        344 70016/Satoshi:26.0.0/\r\n in        onion    nwl  1    411    601    4    1   35            124         85        339 70016/Satoshi:26.0.0/\r\n in        onion  nwcl2  2    436   4330    2    2    2             31         13        623 70016/Satoshi:28.0.0/\r\n in        onion    wl2  2    445    503    4    4    6            138         81        363 70016/Satoshi:28.0.0/\r\n in        onion    nwl  1    462    726    4    1   56             92         81        365 70016/Satoshi:23.0.0/\r\n in        onion    nwl  1    500    765    4    1   34             94         83        351 70016/Satoshi:25.0.0/\r\n in        onion   nwl2  2    578    684    4    0    1            134         87        327 70016/Satoshi:28.0.0/\r\n in          i2p   nwl2  2    712   1322    4    2   35            204     1   93        308 70016/Satoshi:27.2.0/\r\n in        onion   nwl2  2    727    873    5    5   56            162         85        342 70016/Satoshi:27.1.0/\r\n in          i2p   nwl2  2    749    976    4    2   25            120         72        408 70016/Satoshi:27.1.0/\r\n in          i2p   nwl2  2    776    954    4    1    0             72         68        426 70016/Satoshi:28.0.0/\r\n in          i2p   nbwl  1    883   1735    4    4                  53         34        551 70016/Satoshi:26.0.0/\r\n in          i2p  nwcl2  2    920   1044    2    0    0            131         83        350 70016/Satoshi:28.0.0/\r\n in        onion     wl  1   1021  20832   29   67                   3         49        501 70016/Satoshi:23.0.0/\r\n in          i2p  nwcl2  2   1830   1830    5    0                   3          3        668 70016/Satoshi:27.1.0/\r\n in        onion    nwl  1  41155  41155   87  204                              4        658 70016/Satoshi:25.0.0/\r\nout   full  ipv4   nwl2  2     74     93    0    0    0           1028         85   1221 338 70016/Satoshi:27.1.0/\r\nout   full  ipv4    nwl  1     82    104    0    2    0    5  .   1076         95  13536 301 70016/Satoshi:26.0.0/\r\nout   full  ipv4    nwl  1    147    178    2    2    0   28  .   1104         95 395570 300 70016/Satoshi:25.0.0/\r\nout  block  ipv4   nwl2  2    166    513    2    2    *              .         88  38001 324 70016/Satoshi:27.2.0/\r\nout   full  ipv4     wl  1    193    201    0    4    0           1035         94  31376 307 70016/Satoshi:25.99.0/\r\nout   full  ipv4   nwl2  2    199    796    1    1    0           1027         94   9723 304 70016/Satoshi:27.2.0/\r\nout manual cjdns   nwl2  2    213    235    1    9    0           1109         83        353 70016/Satoshi:28.99.0/\r\nout   full onion   nbwl  1    282    457    3    3    1           1130         73        404 70016/Satoshi:25.0.0/\r\nout  block onion   nbwl  1    324    353   23   23    *              .         85        341 70016/Satoshi:26.0.0/\r\nout manual cjdns   nwl2  2    340    445    1    1    7           1059         82        361 70016/Satoshi:27.0.0/\r\nout manual onion    wl2  2    386    386    1    1    1           1048         84        345 70016/Satoshi:28.99.0/\r\nout manual   i2p  nwcl2  2    697   1084    1    1    8           1113     3   93        310 70016/Satoshi:27.0.0/\r\nout   full   i2p  nwcl2  2    730   1254    1    9    0           1128         89        318 70016/Satoshi:28.0.0/\r\nout   full   i2p  nwcl2  2    765   1804    1    1    1           1132         72        409 70016/Satoshi:28.0.0/\r\n                               ms     ms  sec  sec  min  min                  min\r\n\r\n         ipv4    ipv6   onion     i2p   cjdns   total   block  manual\r\nin          0       0      12       6       0      18\r\nout         6       0       3       3       2      14       2       4\r\ntotal       6       0      15       9       2      32\r\n\r\nLocal addresses\r\n```",
+ "base_sha": "d1b583181dcc31613cd586d63329cb4c4a586972",
+ "review_sha": "724546e28a5778e1c3f5100406ed7237f76aab55",
+ "head_now": "721a051320f2c10d2e9c89c985f180da81d64dca",
+ "raw_diff": "diff --git a/src/bitcoin-cli.cpp b/src/bitcoin-cli.cpp\nindex 75911d00874d..e51d4a3c65fa 100644\n--- a/src/bitcoin-cli.cpp\n+++ b/src/bitcoin-cli.cpp\n@@ -481,6 +481,16 @@ class NetinfoRequestHandler : public BaseRequestHandler\n         }\n         return str;\n     }\n+    std::string ServicesList(const UniValue& services)\n+    {\n+        std::vector<std::string> v;\n+        for (size_t i = 0; i < services.size(); ++i) {\n+            std::string s{ToLower((services[i].get_str()))};\n+            std::ranges::replace(s, '_', ' ');\n+            v.push_back(s);\n+        }\n+        return Join(v, \", \");\n+    }\n \n public:\n     static constexpr int ID_PEERINFO = 0;\n@@ -572,7 +582,8 @@ class NetinfoRequestHandler : public BaseRequestHandler\n         }\n \n         // Generate report header.\n-        std::string result{strprintf(\"%s client %s%s - server %i%s\\n\\n\", CLIENT_NAME, FormatFullVersion(), ChainToString(), networkinfo[\"protocolversion\"].getInt<int>(), networkinfo[\"subversion\"].get_str())};\n+        const std::string_view services{DetailsRequested() ? strprintf(\" - services %s\", FormatServices(networkinfo[\"localservicesnames\"])) : \"\"};\n+        std::string result{strprintf(\"%s client %s%s - server %i%s%s\\n\\n\", CLIENT_NAME, FormatFullVersion(), ChainToString(), networkinfo[\"protocolversion\"].getInt<int>(), networkinfo[\"subversion\"].get_str(), services)};\n \n         // Report detailed peer connections list sorted by direction and minimum ping time.\n         if (DetailsRequested() && !m_peers.empty()) {\n@@ -654,6 +665,9 @@ class NetinfoRequestHandler : public BaseRequestHandler\n         }\n \n         // Report local addresses, ports, and scores.\n+        if (!DetailsRequested()) {\n+            result += strprintf(\"\\n\\nLocal services: %s\", ServicesList(networkinfo[\"localservicesnames\"]));\n+        }\n         result += \"\\n\\nLocal addresses\";\n         const std::vector<UniValue>& local_addrs{networkinfo[\"localaddresses\"].getValues()};\n         if (local_addrs.empty()) {\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/bitcoin-cli.cpp",
+   "body": "Potential formatting/consistency issue: you lower-case service names and replace '_' with spaces, which may diverge from how services are displayed elsewhere (e.g., FormatServices output). If the intention is to match FormatServices, consider reusing it or at least keep the same casing/separator rules. Also, `services[i].get_str()` will throw if elements aren’t strings; consider validating type (`isStr()`) or using `getValStr()`/defensive handling to avoid unexpected exceptions when RPC output changes.",
+   "from_line": 484,
+   "to_line": 493,
+   "category": "Code Defect",
+   "context": "File Level",
+   "diff_hunk": "@@ -481,6 +481,16 @@ class NetinfoRequestHandler : public BaseRequestHandler\n         }\n         return str;\n     }\n+    std::string ServicesList(const UniValue& services)\n+    {\n+        std::vector<std::string> v;\n+        for (size_t i = 0; i < services.size(); ++i) {\n+            std::string s{ToLower((services[i].get_str()))};\n+            std::ranges::replace(s, '_', ' ');\n+            v.push_back(s);\n+        }\n+        return Join(v, \", \");\n+    }\n \n public:\n     static constexpr int ID_PEERINFO = 0;",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 1,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "src/bitcoin-cli.cpp",
+   "body": "The ServicesList function outputs services in arbitrary order, which may cause inconsistent or confusing presentation; sort the vector of service names before generating the output string.",
+   "from_line": 487,
+   "to_line": 487,
+   "category": "Code Defect",
+   "context": "Repo Level",
+   "diff_hunk": "@@ -481,6 +481,16 @@ class NetinfoRequestHandler : public BaseRequestHandler\n         }\n         return str;\n     }\n+    std::string ServicesList(const UniValue& services)\n+    {\n+        std::vector<std::string> v;\n+        for (size_t i = 0; i < services.size(); ++i) {\n+            std::string s{ToLower((services[i].get_str()))};\n+            std::ranges::replace(s, '_', ' ');\n+            v.push_back(s);\n+        }\n+        return Join(v, \", \");\n+    }\n \n public:\n     static constexpr int ID_PEERINFO = 0;",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 2,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/bitcoin-cli.cpp",
+   "body": "**Compatibility Issue**: `std::ranges::replace` is a C++20 feature. If the project does not enforce C++20, this will cause a build failure. Using `std::replace` from `<algorithm>` is safer and compatible with C++17 and earlier.\n\nAlso, `ToLower` returns a new string, so modifying it in place is correct.\n",
+   "from_line": 488,
+   "to_line": 490,
+   "category": "Maintainability and Readability",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -481,6 +481,16 @@ class NetinfoRequestHandler : public BaseRequestHandler\n         }\n         return str;\n     }\n+    std::string ServicesList(const UniValue& services)\n+    {\n+        std::vector<std::string> v;\n+        for (size_t i = 0; i < services.size(); ++i) {\n+            std::string s{ToLower((services[i].get_str()))};\n+            std::ranges::replace(s, '_', ' ');\n+            v.push_back(s);\n+        }\n+        return Join(v, \", \");\n+    }\n \n public:\n     static constexpr int ID_PEERINFO = 0;",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 3,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/bitcoin-cli.cpp",
+   "body": "Dangerous use of std::string_view with temporary string. The strprintf() function returns a temporary std::string that will be destroyed immediately, leaving the string_view with a dangling reference. This will cause undefined behavior when the string_view is used later. Change std::string_view to std::string to safely store the result.\n",
+   "from_line": 585,
+   "to_line": 585,
+   "category": "Code Defect",
+   "context": "File Level",
+   "diff_hunk": "@@ -572,7 +582,8 @@ class NetinfoRequestHandler : public BaseRequestHandler\n         }\n \n         // Generate report header.\n-        std::string result{strprintf(\"%s client %s%s - server %i%s\\n\\n\", CLIENT_NAME, FormatFullVersion(), ChainToString(), networkinfo[\"protocolversion\"].getInt<int>(), networkinfo[\"subversion\"].get_str())};\n+        const std::string_view services{DetailsRequested() ? strprintf(\" - services %s\", FormatServices(networkinfo[\"localservicesnames\"])) : \"\"};\n+        std::string result{strprintf(\"%s client %s%s - server %i%s%s\\n\\n\", CLIENT_NAME, FormatFullVersion(), ChainToString(), networkinfo[\"protocolversion\"].getInt<int>(), networkinfo[\"subversion\"].get_str(), services)};\n \n         // Report detailed peer connections list sorted by direction and minimum ping time.\n         if (DetailsRequested() && !m_peers.empty()) {",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "C++"
+}

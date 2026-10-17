@@ -1,0 +1,273 @@
+diff --git a/src/misc/lv_text.c b/src/misc/lv_text.c
+index d6054954fb3f..d18aa2a2d3fd 100644
+--- a/src/misc/lv_text.c
++++ b/src/misc/lv_text.c
+@@ -429,7 +429,7 @@ int32_t lv_text_get_width_with_flags(const char * txt, uint32_t length, const lv
+     lv_text_cmd_state_t cmd_state = LV_TEXT_CMD_STATE_WAIT;
+ 
+     if(length != 0) {
+-        while(i < length) {
++        while(txt[i] != '\0' && i < length) {
+             uint32_t letter;
+             uint32_t letter_next;
+             lv_text_encoded_letter_next_2(txt, &letter, &letter_next, &i);
+@@ -649,6 +649,11 @@ static uint32_t lv_text_utf8_next(const char * txt, uint32_t * i)
+     uint32_t i_tmp = 0;
+     if(i == NULL) i = &i_tmp;
+ 
++    /* Ensure the string is not null */
++    if(txt == NULL || txt[*i] == '\0') {
++        return result;
++    }
++
+     /*Normal ASCII*/
+     if(LV_IS_ASCII(txt[*i])) {
+         result = txt[*i];
+diff --git a/tests/src/test_cases/test_txt.c b/tests/src/test_cases/test_txt.c
+index 687faa46246b..e2fb2a53f8bf 100644
+--- a/tests/src/test_cases/test_txt.c
++++ b/tests/src/test_cases/test_txt.c
+@@ -139,4 +139,69 @@ void test_txt_next_line_should_handle_empty_string(void)
+     TEST_ASSERT_EQUAL_UINT32(0, next_line);
+ }
+ 
++void test_lv_text_encoded_letter_next_2_should_handle_null_pointer(void)
++{
++    const char * txt = NULL;
++    uint32_t letter = 100, letter_next = 101, ofs = 0;
++
++    lv_text_encoded_letter_next_2(txt, &letter, &letter_next, &ofs);
++
++    /* Expect both letter and letter_next to be 0 because the input string is NULL */
++    TEST_ASSERT_EQUAL_UINT32(0, letter);
++    TEST_ASSERT_EQUAL_UINT32(0, letter_next);
++    TEST_ASSERT_EQUAL_UINT32(0, ofs);
++}
++
++void test_lv_text_encoded_letter_next_2_should_handle_empty_string(void)
++{
++    const char * txt = "";
++    uint32_t letter = 100, letter_next = 101, ofs = 0;
++
++    lv_text_encoded_letter_next_2(txt, &letter, &letter_next, &ofs);
++
++    /* Expect both letter and letter_next to be 0 because the input string is empty */
++    TEST_ASSERT_EQUAL_UINT32(0, letter);
++    TEST_ASSERT_EQUAL_UINT32(0, letter_next);
++    TEST_ASSERT_EQUAL_UINT32(0, ofs);
++}
++
++void test_lv_text_encoded_letter_next_2_should_handle_single_ascii_character(void)
++{
++    const char * txt = "A";
++    uint32_t letter = 0, letter_next = 0, ofs = 0;
++
++    lv_text_encoded_letter_next_2(txt, &letter, &letter_next, &ofs);
++
++    /* Expect letter to be 'A' (ASCII 65), letter_next to be 0 (no next character), and ofs to point to end of string */
++    TEST_ASSERT_EQUAL_UINT32('A', letter);
++    TEST_ASSERT_EQUAL_UINT32(0, letter_next);
++    TEST_ASSERT_EQUAL_UINT32(1, ofs);
++}
++
++void test_lv_text_encoded_letter_next_2_should_handle_utf8_multibyte_character(void)
++{
++    const char * txt = "é"; /* UTF-8 encoding: 0xC3 0xA9 */
++    uint32_t letter = 0, letter_next = 0, ofs = 0;
++
++    lv_text_encoded_letter_next_2(txt, &letter, &letter_next, &ofs);
++
++    /* Expect letter to decode 'é', letter_next to be 0 (no next character), and ofs to point to end of string */
++    TEST_ASSERT_EQUAL_UINT32(0xE9, letter); /* Unicode code point for 'é' */
++    TEST_ASSERT_EQUAL_UINT32(0, letter_next);
++    TEST_ASSERT_EQUAL_UINT32(2, ofs); /* 'é' is 2 bytes long in UTF-8 */
++}
++
++void test_lv_text_encoded_letter_next_2_should_handle_two_utf8_characters(void)
++{
++    const char * txt = "éA"; /* UTF-8 encoding: 0xC3 0xA9 0x41 */
++    uint32_t letter = 0, letter_next = 0, ofs = 0;
++
++    lv_text_encoded_letter_next_2(txt, &letter, &letter_next, &ofs);
++
++    /* Expect letter to decode 'é', letter_next to be 'A', and ofs to point after 'é' */
++    TEST_ASSERT_EQUAL_UINT32(0xE9, letter);      /* Unicode code point for 'é' */
++    TEST_ASSERT_EQUAL_UINT32('A', letter_next); /* ASCII value for 'A' */
++    TEST_ASSERT_EQUAL_UINT32(2, ofs);           /* Offset after 'é' */
++}
++
+ #endif
+diff --git a/tests/src/test_cases/widgets/test_label.c b/tests/src/test_cases/widgets/test_label.c
+index 25513fe8731c..4e4acdd33062 100644
+--- a/tests/src/test_cases/widgets/test_label.c
++++ b/tests/src/test_cases/widgets/test_label.c
+@@ -56,7 +56,7 @@ void test_label_set_text(void)
+ 
+ void test_label_get_letter_pos_align_left(void)
+ {
+-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+     const lv_point_t expected_first_letter_point = {
+@@ -84,7 +84,7 @@ void test_label_get_letter_pos_align_left(void)
+ 
+ void test_label_get_letter_pos_align_left_on_empty_text(void)
+ {
+-    lv_obj_set_style_text_align(empty_label, LV_TEXT_ALIGN_LEFT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(empty_label, LV_TEXT_ALIGN_LEFT, 0);
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+     const lv_point_t expected_first_letter_point = {
+@@ -112,7 +112,7 @@ void test_label_get_letter_pos_align_left_on_empty_text(void)
+ 
+ void test_label_long_text_multiline_get_letter_pos_align_left(void)
+ {
+-    lv_obj_set_style_text_align(long_label_multiline, LV_TEXT_ALIGN_LEFT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(long_label_multiline, LV_TEXT_ALIGN_LEFT, 0);
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+     lv_point_t last_letter_after_new_line_point;
+@@ -154,7 +154,7 @@ void test_label_long_text_get_letter_pos_align_left(void)
+     lv_label_set_long_mode(long_label, LV_LABEL_LONG_MODE_WRAP);
+     lv_obj_set_width(long_label, 150);
+     lv_obj_set_height(long_label, 500);
+-    lv_obj_set_style_text_align(long_label, LV_TEXT_ALIGN_LEFT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(long_label, LV_TEXT_ALIGN_LEFT, 0);
+ 
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+@@ -183,7 +183,7 @@ void test_label_long_text_get_letter_pos_align_left(void)
+ 
+ void test_label_get_letter_pos_align_right(void)
+ {
+-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, 0);
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+     const lv_point_t expected_first_letter_point = {
+@@ -211,7 +211,7 @@ void test_label_get_letter_pos_align_right(void)
+ 
+ void test_label_get_letter_pos_align_right_on_empty_text(void)
+ {
+-    lv_obj_set_style_text_align(empty_label, LV_TEXT_ALIGN_RIGHT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(empty_label, LV_TEXT_ALIGN_RIGHT, 0);
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+     const lv_point_t expected_first_letter_point = {
+@@ -239,7 +239,7 @@ void test_label_get_letter_pos_align_right_on_empty_text(void)
+ 
+ void test_label_long_text_multiline_get_letter_pos_align_right(void)
+ {
+-    lv_obj_set_style_text_align(long_label_multiline, LV_TEXT_ALIGN_RIGHT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(long_label_multiline, LV_TEXT_ALIGN_RIGHT, 0);
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+     lv_point_t last_letter_after_new_line_point;
+@@ -281,7 +281,7 @@ void test_label_long_text_get_letter_pos_align_right(void)
+     lv_label_set_long_mode(long_label, LV_LABEL_LONG_MODE_WRAP);
+     lv_obj_set_width(long_label, 150);
+     lv_obj_set_height(long_label, 500);
+-    lv_obj_set_style_text_align(long_label, LV_TEXT_ALIGN_RIGHT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(long_label, LV_TEXT_ALIGN_RIGHT, 0);
+ 
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+@@ -310,7 +310,7 @@ void test_label_long_text_get_letter_pos_align_right(void)
+ 
+ void test_label_get_letter_pos_align_center(void)
+ {
+-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+     const lv_point_t expected_first_letter_point = {
+@@ -338,7 +338,7 @@ void test_label_get_letter_pos_align_center(void)
+ 
+ void test_label_get_letter_pos_align_center_on_empty_text(void)
+ {
+-    lv_obj_set_style_text_align(empty_label, LV_TEXT_ALIGN_CENTER, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(empty_label, LV_TEXT_ALIGN_CENTER, 0);
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+     const lv_point_t expected_first_letter_point = {
+@@ -366,7 +366,7 @@ void test_label_get_letter_pos_align_center_on_empty_text(void)
+ 
+ void test_label_long_text_multiline_get_letter_pos_align_center(void)
+ {
+-    lv_obj_set_style_text_align(long_label_multiline, LV_TEXT_ALIGN_CENTER, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(long_label_multiline, LV_TEXT_ALIGN_CENTER, 0);
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+     lv_point_t last_letter_after_new_line_point;
+@@ -408,7 +408,7 @@ void test_label_long_text_get_letter_pos_align_center(void)
+     lv_label_set_long_mode(long_label, LV_LABEL_LONG_MODE_WRAP);
+     lv_obj_set_width(long_label, 150);
+     lv_obj_set_height(long_label, 500);
+-    lv_obj_set_style_text_align(long_label, LV_TEXT_ALIGN_CENTER, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(long_label, LV_TEXT_ALIGN_CENTER, 0);
+ 
+     lv_point_t first_letter_point;
+     lv_point_t last_letter_point;
+@@ -437,7 +437,7 @@ void test_label_long_text_get_letter_pos_align_center(void)
+ 
+ void test_label_is_char_under_pos_align_left(void)
+ {
+-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+     bool expected_result = true;
+     bool result = false;
+     lv_point_t last_letter_point;
+@@ -460,7 +460,7 @@ void test_label_is_char_under_pos_align_left(void)
+ 
+ void test_label_is_char_under_pos_align_right(void)
+ {
+-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, 0);
+     bool expected_result = true;
+     bool result = false;
+     lv_point_t last_letter_point;
+@@ -483,7 +483,7 @@ void test_label_is_char_under_pos_align_right(void)
+ 
+ void test_label_is_char_under_pos_align_center(void)
+ {
+-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+     bool expected_result = true;
+     bool result = false;
+     lv_point_t last_letter_point;
+@@ -515,7 +515,7 @@ void test_label_cut_text(void)
+ 
+ void test_label_get_letter_on_left(void)
+ {
+-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+     lv_point_t last_letter_point;
+ 
+     const uint32_t last_letter_idx = strlen(lv_label_get_text(label)) - 1;
+@@ -528,7 +528,7 @@ void test_label_get_letter_on_left(void)
+ 
+ void test_label_get_letter_on_center(void)
+ {
+-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+     lv_point_t last_letter_point;
+ 
+     const uint32_t last_letter_idx = strlen(lv_label_get_text(label)) - 1;
+@@ -541,7 +541,7 @@ void test_label_get_letter_on_center(void)
+ 
+ void test_label_get_letter_on_right(void)
+ {
+-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, LV_STYLE_STATE_CMP_SAME);
++    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, 0);
+     lv_point_t last_letter_point;
+ 
+     const uint32_t last_letter_idx = strlen(lv_label_get_text(label)) - 1;
+@@ -660,7 +660,6 @@ void test_label_scroll_mid_update(void)
+     for(i = 0; i < 15; i++) {
+         scroll_next_step(label1, label2, text1, text2, i);
+     }
+-
+ }
+ 
+ #endif

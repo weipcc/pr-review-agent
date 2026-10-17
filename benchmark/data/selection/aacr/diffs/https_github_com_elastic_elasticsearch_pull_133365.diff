@@ -1,0 +1,665 @@
+diff --git a/docs/changelog/133365.yaml b/docs/changelog/133365.yaml
+new file mode 100644
+index 0000000000000..60c193c67b34e
+--- /dev/null
++++ b/docs/changelog/133365.yaml
+@@ -0,0 +1,5 @@
++pr: 133365
++summary: Skip iterating DISI when reading metric values
++area: Codec
++type: enhancement
++issues: []
+diff --git a/server/src/main/java/org/elasticsearch/index/codec/tsdb/es819/ES819TSDBDocValuesProducer.java b/server/src/main/java/org/elasticsearch/index/codec/tsdb/es819/ES819TSDBDocValuesProducer.java
+index 28db095250e44..4c3477b925c5f 100644
+--- a/server/src/main/java/org/elasticsearch/index/codec/tsdb/es819/ES819TSDBDocValuesProducer.java
++++ b/server/src/main/java/org/elasticsearch/index/codec/tsdb/es819/ES819TSDBDocValuesProducer.java
+@@ -43,6 +43,7 @@
+ import org.apache.lucene.util.compress.LZ4;
+ import org.apache.lucene.util.packed.DirectMonotonicReader;
+ import org.apache.lucene.util.packed.PackedInts;
++import org.elasticsearch.core.Assertions;
+ import org.elasticsearch.core.IOUtils;
+ import org.elasticsearch.index.codec.tsdb.TSDBDocValuesEncoder;
+ import org.elasticsearch.index.mapper.BlockDocValuesReader;
+@@ -388,6 +389,7 @@ public BlockLoader.Block tryRead(
+                 BlockLoader.BlockFactory factory,
+                 BlockLoader.Docs docs,
+                 int offset,
++                boolean nullsFiltered,
+                 BlockDocValuesReader.ToDouble toDouble
+             ) throws IOException {
+                 assert toDouble == null;
+@@ -468,6 +470,7 @@ public BlockLoader.Block tryRead(
+             BlockLoader.BlockFactory factory,
+             BlockLoader.Docs docs,
+             int offset,
++            boolean nullsFiltered,
+             BlockDocValuesReader.ToDouble toDouble
+         ) throws IOException {
+             return null;
+@@ -520,6 +523,7 @@ public BlockLoader.Block tryRead(
+             BlockLoader.BlockFactory factory,
+             BlockLoader.Docs docs,
+             int offset,
++            boolean nullsFiltered,
+             BlockDocValuesReader.ToDouble toDouble
+         ) throws IOException {
+             return null;
+@@ -532,7 +536,7 @@ BlockLoader.Block tryRead(BlockLoader.SingletonLongBuilder builder, BlockLoader.
+         }
+     }
+ 
+-    abstract static class BaseSparseNumericValues extends NumericDocValues {
++    abstract static class BaseSparseNumericValues extends NumericDocValues implements BlockLoader.OptionalColumnAtATimeReader {
+         protected final IndexedDISI disi;
+ 
+         BaseSparseNumericValues(IndexedDISI disi) {
+@@ -563,6 +567,17 @@ public final int docID() {
+         public final long cost() {
+             return disi.cost();
+         }
++
++        @Override
++        public BlockLoader.Block tryRead(
++            BlockLoader.BlockFactory factory,
++            BlockLoader.Docs docs,
++            int offset,
++            boolean nullsFiltered,
++            BlockDocValuesReader.ToDouble toDouble
++        ) throws IOException {
++            return null;
++        }
+     }
+ 
+     abstract static class BaseSortedSetDocValues extends SortedSetDocValues {
+@@ -1386,16 +1401,11 @@ public BlockLoader.Block tryRead(
+                     BlockLoader.BlockFactory factory,
+                     BlockLoader.Docs docs,
+                     int offset,
++                    boolean nullsFiltered,
+                     BlockDocValuesReader.ToDouble toDouble
+                 ) throws IOException {
+-                    if (toDouble != null) {
+-                        try (BlockLoader.SingletonDoubleBuilder builder = factory.singletonDoubles(docs.count() - offset)) {
+-                            SingletonLongToDoubleDelegate delegate = new SingletonLongToDoubleDelegate(builder, toDouble);
+-                            return tryRead(delegate, docs, offset);
+-                        }
+-                    }
+-                    try (BlockLoader.SingletonLongBuilder builder = factory.singletonLongs(docs.count() - offset)) {
+-                        return tryRead(builder, docs, offset);
++                    try (var singletonLongBuilder = singletonLongBuilder(factory, toDouble, docs.count() - offset)) {
++                        return tryRead(singletonLongBuilder, docs, offset);
+                     }
+                 }
+ 
+@@ -1484,6 +1494,7 @@ static boolean isDense(int firstDocId, int lastDocId, int length) {
+             );
+             return new BaseSparseNumericValues(disi) {
+                 private final TSDBDocValuesEncoder decoder = new TSDBDocValuesEncoder(ES819TSDBDocValuesFormat.NUMERIC_BLOCK_SIZE);
++                private IndexedDISI lookAheadDISI;
+                 private long currentBlockIndex = -1;
+                 private final long[] currentBlock = new long[ES819TSDBDocValuesFormat.NUMERIC_BLOCK_SIZE];
+ 
+@@ -1507,6 +1518,74 @@ public long longValue() throws IOException {
+                     }
+                     return currentBlock[blockInIndex];
+                 }
++
++                @Override
++                public BlockLoader.Block tryRead(
++                    BlockLoader.BlockFactory factory,
++                    BlockLoader.Docs docs,
++                    int offset,
++                    boolean nullsFiltered,
++                    BlockDocValuesReader.ToDouble toDouble
++                ) throws IOException {
++                    if (nullsFiltered == false) {
++                        return null;
++                    }
++                    final int firstDoc = docs.get(offset);
++                    if (disi.advanceExact(firstDoc) == false) {
++                        assert false : "nullsFiltered is true, but doc [" + firstDoc + "] has no value";
++                        throw new IllegalStateException("nullsFiltered is true, but doc [" + firstDoc + "] has no value");
++                    }
++                    if (lookAheadDISI == null) {
++                        lookAheadDISI = new IndexedDISI(
++                            data,
++                            entry.docsWithFieldOffset,
++                            entry.docsWithFieldLength,
++                            entry.jumpTableEntryCount,
++                            entry.denseRankPower,
++                            entry.numValues
++                        );
++                    }
++                    final int lastDoc = docs.get(docs.count() - 1);
++                    if (lookAheadDISI.advanceExact(lastDoc) == false) {
++                        assert false : "nullsFiltered is true, but doc [" + lastDoc + "] has no value";
++                        throw new IllegalStateException("nullsFiltered is true, but doc [" + lastDoc + "] has no value");
++                    }
++                    // Assumes docIds are unique - if the number of value indices between the first
++                    // and last doc equals the doc count, all values can be read and converted in bulk
++                    // TODO: Pass docCount attr for enrich and lookup.
++                    final int firstIndex = disi.index();
++                    final int lastIndex = lookAheadDISI.index();
++                    final int valueCount = lastIndex - firstIndex + 1;
++                    if (valueCount != docs.count()) {
++                        return null;
++                    }
++                    if (Assertions.ENABLED) {
++                        for (int i = 0; i < docs.count(); i++) {
++                            final int doc = docs.get(i + offset);
++                            assert disi.advanceExact(doc) : "nullsFiltered is true, but doc [" + doc + "] has no value";
++                            assert disi.index() == firstIndex + i : "unexpected disi index " + (firstIndex + i) + "!=" + disi.index();
++                        }
++                    }
++                    try (var singletonLongBuilder = singletonLongBuilder(factory, toDouble, valueCount)) {
++                        for (int i = 0; i < valueCount;) {
++                            final int index = firstIndex + i;
++                            final int blockIndex = index >>> ES819TSDBDocValuesFormat.NUMERIC_BLOCK_SHIFT;
++                            final int blockStartIndex = index & ES819TSDBDocValuesFormat.NUMERIC_BLOCK_MASK;
++                            if (blockIndex != currentBlockIndex) {
++                                assert blockIndex > currentBlockIndex : blockIndex + "<=" + currentBlockIndex;
++                                if (currentBlockIndex + 1 != blockIndex) {
++                                    valuesData.seek(indexReader.get(blockIndex));
++                                }
++                                currentBlockIndex = blockIndex;
++                                decoder.decode(valuesData, currentBlock);
++                            }
++                            final int count = Math.min(ES819TSDBDocValuesFormat.NUMERIC_BLOCK_SIZE - blockStartIndex, valueCount - i);
++                            singletonLongBuilder.appendLongs(currentBlock, blockStartIndex, count);
++                            i += count;
++                        }
++                        return singletonLongBuilder.build();
++                    }
++                }
+             };
+         }
+     }
+@@ -1802,11 +1881,22 @@ public BlockLoader.Builder endPositionEntry() {
+         public void close() {}
+     }
+ 
++    static BlockLoader.SingletonLongBuilder singletonLongBuilder(
++        BlockLoader.BlockFactory factory,
++        BlockDocValuesReader.ToDouble toDouble,
++        int valueCount
++    ) {
++        if (toDouble != null) {
++            return new SingletonLongToDoubleDelegate(factory.singletonDoubles(valueCount), toDouble);
++        } else {
++            return factory.singletonLongs(valueCount);
++        }
++    }
++
+     // Block builder that consumes long values and converts them to double using the provided converter function.
+     static final class SingletonLongToDoubleDelegate implements BlockLoader.SingletonLongBuilder {
+         private final BlockLoader.SingletonDoubleBuilder doubleBuilder;
+         private final BlockDocValuesReader.ToDouble toDouble;
+-        private final double[] buffer = new double[ES819TSDBDocValuesFormat.NUMERIC_BLOCK_SIZE];
+ 
+         // The passed builder is used to store the converted double values and produce the final block containing them.
+         SingletonLongToDoubleDelegate(BlockLoader.SingletonDoubleBuilder doubleBuilder, BlockDocValuesReader.ToDouble toDouble) {
+@@ -1821,11 +1911,7 @@ public BlockLoader.SingletonLongBuilder appendLong(long value) {
+ 
+         @Override
+         public BlockLoader.SingletonLongBuilder appendLongs(long[] values, int from, int length) {
+-            assert length <= buffer.length : "length " + length + " > " + buffer.length;
+-            for (int i = 0; i < length; i++) {
+-                buffer[i] = toDouble.convert(values[from + i]);
+-            }
+-            doubleBuilder.appendDoubles(buffer, 0, length);
++            doubleBuilder.appendLongs(toDouble, values, from, length);
+             return this;
+         }
+ 
+@@ -1850,7 +1936,9 @@ public BlockLoader.Builder endPositionEntry() {
+         }
+ 
+         @Override
+-        public void close() {}
++        public void close() {
++            doubleBuilder.close();
++        }
+     }
+ 
+ }
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/BlockDocValuesReader.java b/server/src/main/java/org/elasticsearch/index/mapper/BlockDocValuesReader.java
+index 06513444737f3..f2324d70ce750 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/BlockDocValuesReader.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/BlockDocValuesReader.java
+@@ -137,7 +137,7 @@ static class SingletonLongs extends BlockDocValuesReader implements NumericDocVa
+         @Override
+         public BlockLoader.Block read(BlockFactory factory, Docs docs, int offset, boolean nullsFiltered) throws IOException {
+             if (numericDocValues instanceof BlockLoader.OptionalColumnAtATimeReader direct) {
+-                BlockLoader.Block result = direct.tryRead(factory, docs, offset, null);
++                BlockLoader.Block result = direct.tryRead(factory, docs, offset, nullsFiltered, null);
+                 if (result != null) {
+                     return result;
+                 }
+@@ -409,7 +409,7 @@ static class SingletonDoubles extends BlockDocValuesReader implements NumericDoc
+         @Override
+         public BlockLoader.Block read(BlockFactory factory, Docs docs, int offset, boolean nullsFiltered) throws IOException {
+             if (docValues instanceof BlockLoader.OptionalColumnAtATimeReader direct) {
+-                BlockLoader.Block result = direct.tryRead(factory, docs, offset, toDouble);
++                BlockLoader.Block result = direct.tryRead(factory, docs, offset, nullsFiltered, toDouble);
+                 if (result != null) {
+                     return result;
+                 }
+@@ -736,7 +736,7 @@ public BlockLoader.Block read(BlockFactory factory, Docs docs, int offset, boole
+                 return readSingleDoc(factory, docs.get(offset));
+             }
+             if (ordinals instanceof BlockLoader.OptionalColumnAtATimeReader direct) {
+-                BlockLoader.Block block = direct.tryRead(factory, docs, offset, null);
++                BlockLoader.Block block = direct.tryRead(factory, docs, offset, nullsFiltered, null);
+                 if (block != null) {
+                     return block;
+                 }
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/BlockLoader.java b/server/src/main/java/org/elasticsearch/index/mapper/BlockLoader.java
+index b4fae3fd824de..19056bf837a2e 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/BlockLoader.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/BlockLoader.java
+@@ -66,10 +66,18 @@ interface OptionalColumnAtATimeReader {
+          * Attempts to read the values of all documents in {@code docs}
+          * Returns {@code null} if unable to load the values.
+          *
++         * @param nullsFiltered if {@code true}, then target docs are guaranteed to have a value for the field.
++         *                      see {@link ColumnAtATimeReader#read(BlockFactory, Docs, int, boolean)}
+          * @param toDouble a function to convert long values to double, or null if no conversion is needed/supported
+          */
+         @Nullable
+-        BlockLoader.Block tryRead(BlockFactory factory, Docs docs, int offset, BlockDocValuesReader.ToDouble toDouble) throws IOException;
++        BlockLoader.Block tryRead(
++            BlockFactory factory,
++            Docs docs,
++            int offset,
++            boolean nullsFiltered,
++            BlockDocValuesReader.ToDouble toDouble
++        ) throws IOException;
+     }
+ 
+     interface RowStrideReader extends Reader {
+@@ -559,9 +567,7 @@ interface SingletonLongBuilder extends Builder {
+      * Specialized builder for collecting dense arrays of double values.
+      */
+     interface SingletonDoubleBuilder extends Builder {
+-        SingletonDoubleBuilder appendDouble(double value);
+-
+-        SingletonDoubleBuilder appendDoubles(double[] values, int from, int length);
++        SingletonDoubleBuilder appendLongs(BlockDocValuesReader.ToDouble toDouble, long[] values, int from, int length);
+     }
+ 
+     interface LongBuilder extends Builder {
+diff --git a/server/src/test/java/org/elasticsearch/index/codec/tsdb/es819/ES819TSDBDocValuesFormatTests.java b/server/src/test/java/org/elasticsearch/index/codec/tsdb/es819/ES819TSDBDocValuesFormatTests.java
+index 2b23d62d72803..80ea6c5187153 100644
+--- a/server/src/test/java/org/elasticsearch/index/codec/tsdb/es819/ES819TSDBDocValuesFormatTests.java
++++ b/server/src/test/java/org/elasticsearch/index/codec/tsdb/es819/ES819TSDBDocValuesFormatTests.java
+@@ -60,6 +60,7 @@
+ import java.util.stream.IntStream;
+ 
+ import static org.hamcrest.Matchers.equalTo;
++import static org.hamcrest.Matchers.instanceOf;
+ 
+ public class ES819TSDBDocValuesFormatTests extends ES87TSDBDocValuesFormatTests {
+ 
+@@ -773,7 +774,7 @@ public void testOptionalColumnAtATimeReader() throws Exception {
+ 
+                         {
+                             // bulk loading timestamp:
+-                            var block = (TestBlock) timestampDV.tryRead(factory, docs, 0, null);
++                            var block = (TestBlock) timestampDV.tryRead(factory, docs, 0, random().nextBoolean(), null);
+                             assertNotNull(block);
+                             assertEquals(size, block.size());
+                             for (int j = 0; j < block.size(); j++) {
+@@ -785,10 +786,10 @@ public void testOptionalColumnAtATimeReader() throws Exception {
+                         }
+                         {
+                             // bulk loading counter field:
+-                            var block = (TestBlock) counterDV.tryRead(factory, docs, 0, null);
++                            var block = (TestBlock) counterDV.tryRead(factory, docs, 0, random().nextBoolean(), null);
+                             assertNotNull(block);
+                             assertEquals(size, block.size());
+-                            var stringBlock = (TestBlock) stringCounterDV.tryRead(factory, docs, 0, null);
++                            var stringBlock = (TestBlock) stringCounterDV.tryRead(factory, docs, 0, random().nextBoolean(), null);
+                             assertNotNull(stringBlock);
+                             assertEquals(size, stringBlock.size());
+                             for (int j = 0; j < block.size(); j++) {
+@@ -805,7 +806,7 @@ public void testOptionalColumnAtATimeReader() throws Exception {
+                         }
+                         {
+                             // bulk loading gauge field:
+-                            var block = (TestBlock) gaugeDV.tryRead(factory, docs, 0, null);
++                            var block = (TestBlock) gaugeDV.tryRead(factory, docs, 0, random().nextBoolean(), null);
+                             assertNotNull(block);
+                             assertEquals(size, block.size());
+                             for (int j = 0; j < block.size(); j++) {
+@@ -843,7 +844,7 @@ public void testOptionalColumnAtATimeReader() throws Exception {
+ 
+                 {
+                     // bulk loading timestamp:
+-                    var block = (TestBlock) timestampDV.tryRead(blockFactory, docs, randomOffset, null);
++                    var block = (TestBlock) timestampDV.tryRead(blockFactory, docs, randomOffset, false, null);
+                     assertNotNull(block);
+                     assertEquals(size, block.size());
+                     for (int j = 0; j < block.size(); j++) {
+@@ -855,11 +856,11 @@ public void testOptionalColumnAtATimeReader() throws Exception {
+                 }
+                 {
+                     // bulk loading counter field:
+-                    var block = (TestBlock) counterDV.tryRead(factory, docs, randomOffset, null);
++                    var block = (TestBlock) counterDV.tryRead(factory, docs, randomOffset, false, null);
+                     assertNotNull(block);
+                     assertEquals(size, block.size());
+ 
+-                    var stringBlock = (TestBlock) stringCounterDV.tryRead(factory, docs, randomOffset, null);
++                    var stringBlock = (TestBlock) stringCounterDV.tryRead(factory, docs, randomOffset, false, null);
+                     assertNotNull(stringBlock);
+                     assertEquals(size, stringBlock.size());
+ 
+@@ -877,7 +878,7 @@ public void testOptionalColumnAtATimeReader() throws Exception {
+                 }
+                 {
+                     // bulk loading gauge field:
+-                    var block = (TestBlock) gaugeDV.tryRead(factory, docs, randomOffset, null);
++                    var block = (TestBlock) gaugeDV.tryRead(factory, docs, randomOffset, false, null);
+                     assertNotNull(block);
+                     assertEquals(size, block.size());
+                     for (int j = 0; j < block.size(); j++) {
+@@ -902,11 +903,11 @@ public void testOptionalColumnAtATimeReader() throws Exception {
+                 stringCounterDV = getBaseSortedDocValues(leafReader, counterFieldAsString);
+                 {
+                     // bulk loading counter field:
+-                    var block = (TestBlock) counterDV.tryRead(factory, docs, 0, null);
++                    var block = (TestBlock) counterDV.tryRead(factory, docs, 0, false, null);
+                     assertNotNull(block);
+                     assertEquals(size, block.size());
+ 
+-                    var stringBlock = (TestBlock) stringCounterDV.tryRead(factory, docs, 0, null);
++                    var stringBlock = (TestBlock) stringCounterDV.tryRead(factory, docs, 0, false, null);
+                     assertNotNull(stringBlock);
+                     assertEquals(size, stringBlock.size());
+ 
+@@ -929,6 +930,7 @@ public void testOptionalColumnAtATimeReaderWithSparseDocs() throws Exception {
+         final String counterAsStringField = "counter_as_string";
+         final String timestampField = "@timestamp";
+         String queryField = "query_field";
++        String temperatureField = "temperature_field";
+         long currentTimestamp = 1704067200000L;
+         long currentCounter = 10_000_000;
+ 
+@@ -936,6 +938,7 @@ public void testOptionalColumnAtATimeReaderWithSparseDocs() throws Exception {
+         try (var dir = newDirectory(); var iw = new IndexWriter(dir, config)) {
+             int numDocsPerQValue = 120;
+             int numDocs = numDocsPerQValue * (1 + random().nextInt(40));
++            Long[] temperatureValues = new Long[numDocs];
+ 
+             long q = 1;
+             for (int i = 1; i <= numDocs; i++) {
+@@ -949,7 +952,11 @@ public void testOptionalColumnAtATimeReaderWithSparseDocs() throws Exception {
+                 if (i % 120 == 0) {
+                     q++;
+                 }
+-
++                if (random().nextBoolean()) {
++                    long v = random().nextLong();
++                    temperatureValues[numDocs - i] = v;
++                    d.add(new NumericDocValuesField(temperatureField, v));
++                }
+                 iw.addDocument(d);
+                 if (i % 100 == 0) {
+                     iw.commit();
+@@ -1001,7 +1008,7 @@ public void testOptionalColumnAtATimeReaderWithSparseDocs() throws Exception {
+                     var docs = TestBlock.docs(docIds);
+                     {
+                         timestampDV = getBaseDenseNumericValues(leafReader, timestampField);
+-                        var block = (TestBlock) timestampDV.tryRead(factory, docs, 0, null);
++                        var block = (TestBlock) timestampDV.tryRead(factory, docs, 0, random().nextBoolean(), null);
+                         assertNotNull(block);
+                         assertEquals(numDocsPerQValue, block.size());
+                         for (int j = 0; j < block.size(); j++) {
+@@ -1012,7 +1019,7 @@ public void testOptionalColumnAtATimeReaderWithSparseDocs() throws Exception {
+                     }
+                     {
+                         counterDV = getBaseDenseNumericValues(leafReader, counterField);
+-                        var block = (TestBlock) counterDV.tryRead(factory, docs, 0, null);
++                        var block = (TestBlock) counterDV.tryRead(factory, docs, 0, random().nextBoolean(), null);
+                         assertNotNull(block);
+                         assertEquals(numDocsPerQValue, block.size());
+                         for (int j = 0; j < block.size(); j++) {
+@@ -1023,7 +1030,7 @@ public void testOptionalColumnAtATimeReaderWithSparseDocs() throws Exception {
+                     }
+                     {
+                         counterAsStringDV = getBaseSortedDocValues(leafReader, counterAsStringField);
+-                        var block = (TestBlock) counterAsStringDV.tryRead(factory, docs, 0, null);
++                        var block = (TestBlock) counterAsStringDV.tryRead(factory, docs, 0, random().nextBoolean(), null);
+                         assertNotNull(block);
+                         assertEquals(numDocsPerQValue, block.size());
+                         for (int j = 0; j < block.size(); j++) {
+@@ -1032,6 +1039,37 @@ public void testOptionalColumnAtATimeReaderWithSparseDocs() throws Exception {
+                             assertEquals(expectedCounter, actualCounter);
+                         }
+                     }
++                    {
++                        int startIndex = ESTestCase.between(0, temperatureValues.length - 1);
++                        int endIndex = ESTestCase.between(startIndex + 1, temperatureValues.length);
++                        List<Integer> testDocs = new ArrayList<>();
++                        for (int i = startIndex; i < endIndex; i++) {
++                            if (temperatureValues[i] != null) {
++                                testDocs.add(i);
++                            }
++                        }
++                        if (testDocs.isEmpty() == false) {
++                            NumericDocValues dv = leafReader.getNumericDocValues(temperatureField);
++                            assertThat(dv, instanceOf(OptionalColumnAtATimeReader.class));
++                            OptionalColumnAtATimeReader directReader = (OptionalColumnAtATimeReader) dv;
++                            docs = TestBlock.docs(testDocs.stream().mapToInt(n -> n).toArray());
++                            assertNull(directReader.tryRead(factory, docs, 0, false, null));
++                            TestBlock block = (TestBlock) directReader.tryRead(factory, docs, 0, true, null);
++                            assertNotNull(block);
++                            for (int i = 0; i < testDocs.size(); i++) {
++                                assertThat(block.get(i), equalTo(temperatureValues[testDocs.get(i)]));
++                            }
++                        }
++                        if (testDocs.size() > 2) {
++                            // currently bulk loading is disabled with gaps
++                            testDocs.remove(ESTestCase.between(1, testDocs.size() - 2));
++                            docs = TestBlock.docs(testDocs.stream().mapToInt(n -> n).toArray());
++                            NumericDocValues dv = leafReader.getNumericDocValues(temperatureField);
++                            OptionalColumnAtATimeReader directReader = (OptionalColumnAtATimeReader) dv;
++                            assertNull(directReader.tryRead(factory, docs, 0, false, null));
++                            assertNull(directReader.tryRead(factory, docs, 0, true, null));
++                        }
++                    }
+                 }
+             }
+         }
+@@ -1086,7 +1124,7 @@ public int get(int i) {
+                             }
+                         };
+                         var idReader = ESTestCase.asInstanceOf(OptionalColumnAtATimeReader.class, leaf.reader().getNumericDocValues("id"));
+-                        TestBlock idBlock = (TestBlock) idReader.tryRead(factory, docs, 0, null);
++                        TestBlock idBlock = (TestBlock) idReader.tryRead(factory, docs, 0, false, null);
+                         assertNotNull(idBlock);
+ 
+                         {
+@@ -1100,7 +1138,7 @@ public int get(int i) {
+                                 block = (TestBlock) reader2.tryReadAHead(factory, docs, randomOffset);
+                             } else {
+                                 assertNull(reader2.tryReadAHead(factory, docs, randomOffset));
+-                                block = (TestBlock) reader2.tryRead(factory, docs, randomOffset, null);
++                                block = (TestBlock) reader2.tryRead(factory, docs, randomOffset, false, null);
+                             }
+                             assertNotNull(block);
+                             assertThat(block.size(), equalTo(docs.count() - randomOffset));
+@@ -1122,7 +1160,7 @@ public int get(int i) {
+                                 block = (TestBlock) reader3.tryReadAHead(factory, docs, randomOffset);
+                             } else {
+                                 assertNull(reader3.tryReadAHead(factory, docs, randomOffset));
+-                                block = (TestBlock) reader3.tryRead(factory, docs, randomOffset, null);
++                                block = (TestBlock) reader3.tryRead(factory, docs, randomOffset, false, null);
+                             }
+                             assertNotNull(reader3);
+                             assertNotNull(block);
+diff --git a/test/framework/src/main/java/org/elasticsearch/index/mapper/MapperTestCase.java b/test/framework/src/main/java/org/elasticsearch/index/mapper/MapperTestCase.java
+index bcd45b8131392..9ea67821c181b 100644
+--- a/test/framework/src/main/java/org/elasticsearch/index/mapper/MapperTestCase.java
++++ b/test/framework/src/main/java/org/elasticsearch/index/mapper/MapperTestCase.java
+@@ -93,7 +93,6 @@
+ import static org.hamcrest.Matchers.equalTo;
+ import static org.hamcrest.Matchers.hasSize;
+ import static org.hamcrest.Matchers.instanceOf;
+-import static org.hamcrest.Matchers.not;
+ import static org.hamcrest.Matchers.nullValue;
+ import static org.mockito.Mockito.mock;
+ import static org.mockito.Mockito.when;
+@@ -1560,7 +1559,7 @@ private void testSingletonBulkBlockReading(Function<BlockLoader.ColumnAtATimeRea
+                     instanceOf(BlockLoader.OptionalColumnAtATimeReader.class)
+                 );
+                 var docBlock = TestBlock.docs(IntStream.range(0, 3).toArray());
+-                var block = (TestBlock) columnReader.read(TestBlock.factory(), docBlock, 0, false);
++                var block = (TestBlock) columnReader.read(TestBlock.factory(), docBlock, 0, randomBoolean());
+                 for (int i = 0; i < block.size(); i++) {
+                     assertThat(block.get(i), equalTo(expectedSampleValues[i]));
+                 }
+@@ -1583,15 +1582,22 @@ private void testSingletonBulkBlockReading(Function<BlockLoader.ColumnAtATimeRea
+                 LeafReaderContext context = reader.leaves().get(0);
+                 var blockLoader = mapperService.fieldType("field").blockLoader(mockBlockContext);
+                 BlockDocValuesReader columnReader = readerCast.apply(blockLoader.columnAtATimeReader(context));
+-                assertThat(
+-                    ((BlockDocValuesReader.NumericDocValuesAccessor) columnReader).numericDocValues(),
+-                    not(instanceOf(BlockLoader.OptionalColumnAtATimeReader.class))
+-                );
+                 var docBlock = TestBlock.docs(IntStream.range(0, 3).toArray());
+                 var block = (TestBlock) columnReader.read(TestBlock.factory(), docBlock, 0, false);
+                 assertThat(block.get(0), equalTo(expectedSampleValues[0]));
+                 assertThat(block.get(1), nullValue());
+                 assertThat(block.get(2), equalTo(expectedSampleValues[2]));
++
++                docBlock = TestBlock.docs(0, 2);
++                columnReader = readerCast.apply(blockLoader.columnAtATimeReader(context));
++                var numeric = ((BlockDocValuesReader.NumericDocValuesAccessor) columnReader).numericDocValues();
++                assertThat(numeric, instanceOf(BlockLoader.OptionalColumnAtATimeReader.class));
++                var directReader = (BlockLoader.OptionalColumnAtATimeReader) numeric;
++                assertNull(directReader.tryRead(TestBlock.factory(), docBlock, 0, false, null));
++                block = (TestBlock) directReader.tryRead(TestBlock.factory(), docBlock, 0, true, null);
++                assertNotNull(block);
++                assertThat(block.get(0), equalTo(expectedSampleValues[0]));
++                assertThat(block.get(1), equalTo(expectedSampleValues[2]));
+             };
+             withLuceneIndex(mapperService, builder, test);
+         }
+diff --git a/test/framework/src/main/java/org/elasticsearch/index/mapper/TestBlock.java b/test/framework/src/main/java/org/elasticsearch/index/mapper/TestBlock.java
+index 52396409a8dd6..53af8f04fe46b 100644
+--- a/test/framework/src/main/java/org/elasticsearch/index/mapper/TestBlock.java
++++ b/test/framework/src/main/java/org/elasticsearch/index/mapper/TestBlock.java
+@@ -264,15 +264,16 @@ public BlockLoader.Block build() {
+                     }
+ 
+                     @Override
+-                    public BlockLoader.SingletonDoubleBuilder appendDoubles(double[] newValues, int from, int length) {
+-                        System.arraycopy(newValues, from, values, count, length);
+-                        count += length;
+-                        return this;
+-                    }
+-
+-                    @Override
+-                    public BlockLoader.SingletonDoubleBuilder appendDouble(double value) {
+-                        values[count++] = value;
++                    public BlockLoader.SingletonDoubleBuilder appendLongs(
++                        BlockDocValuesReader.ToDouble toDouble,
++                        long[] longValues,
++                        int from,
++                        int length
++                    ) {
++                        for (int i = 0; i < length; i++) {
++                            values[count + i] = toDouble.convert(longValues[from + i]);
++                        }
++                        this.count += length;
+                         return this;
+                     }
+ 
+diff --git a/x-pack/plugin/esql/compute/src/main/java/org/elasticsearch/compute/lucene/read/SingletonDoubleBuilder.java b/x-pack/plugin/esql/compute/src/main/java/org/elasticsearch/compute/lucene/read/SingletonDoubleBuilder.java
+index 576561a11946f..204805ae87e51 100644
+--- a/x-pack/plugin/esql/compute/src/main/java/org/elasticsearch/compute/lucene/read/SingletonDoubleBuilder.java
++++ b/x-pack/plugin/esql/compute/src/main/java/org/elasticsearch/compute/lucene/read/SingletonDoubleBuilder.java
+@@ -10,6 +10,7 @@
+ import org.elasticsearch.compute.data.Block;
+ import org.elasticsearch.compute.data.BlockFactory;
+ import org.elasticsearch.core.Releasable;
++import org.elasticsearch.index.mapper.BlockDocValuesReader;
+ import org.elasticsearch.index.mapper.BlockLoader;
+ 
+ /**
+@@ -65,19 +66,18 @@ public long estimatedBytes() {
+ 
+     @Override
+     public Block build() {
++        if (values.length != count) {
++            throw new IllegalStateException("expected " + values.length + " values but got " + count);
++        }
+         return blockFactory.newDoubleArrayVector(values, count).asBlock();
+     }
+ 
+     @Override
+-    public BlockLoader.SingletonDoubleBuilder appendDouble(double value) {
+-        values[count++] = value;
+-        return this;
+-    }
+-
+-    @Override
+-    public BlockLoader.SingletonDoubleBuilder appendDoubles(double[] values, int from, int length) {
+-        System.arraycopy(values, from, this.values, count, length);
+-        count += length;
++    public BlockLoader.SingletonDoubleBuilder appendLongs(BlockDocValuesReader.ToDouble toDouble, long[] longValues, int from, int length) {
++        for (int i = 0; i < length; i++) {
++            values[count + i] = toDouble.convert(longValues[from + i]);
++        }
++        this.count += length;
+         return this;
+     }
+ 
+diff --git a/x-pack/plugin/esql/compute/src/main/java/org/elasticsearch/compute/lucene/read/SingletonLongBuilder.java b/x-pack/plugin/esql/compute/src/main/java/org/elasticsearch/compute/lucene/read/SingletonLongBuilder.java
+index 84df5feb09ff5..de076f8b5d269 100644
+--- a/x-pack/plugin/esql/compute/src/main/java/org/elasticsearch/compute/lucene/read/SingletonLongBuilder.java
++++ b/x-pack/plugin/esql/compute/src/main/java/org/elasticsearch/compute/lucene/read/SingletonLongBuilder.java
+@@ -65,6 +65,9 @@ public long estimatedBytes() {
+ 
+     @Override
+     public Block build() {
++        if (values.length != count) {
++            throw new IllegalStateException("expected [" + values.length + "] values but got [" + count + "]");
++        }
+         return blockFactory.newLongArrayVector(values, count).asBlock();
+     }
+ 
+diff --git a/x-pack/plugin/esql/compute/src/test/java/org/elasticsearch/compute/lucene/read/SingletonDoubleBuilderTests.java b/x-pack/plugin/esql/compute/src/test/java/org/elasticsearch/compute/lucene/read/SingletonDoubleBuilderTests.java
+index 9c6d376da3e8a..77fd7ae8b3391 100644
+--- a/x-pack/plugin/esql/compute/src/test/java/org/elasticsearch/compute/lucene/read/SingletonDoubleBuilderTests.java
++++ b/x-pack/plugin/esql/compute/src/test/java/org/elasticsearch/compute/lucene/read/SingletonDoubleBuilderTests.java
+@@ -69,12 +69,7 @@ private void testRead(BlockFactory factory) throws IOException {
+                     try (var builder = new SingletonDoubleBuilder(ctx.reader().numDocs(), factory)) {
+                         for (int i = 0; i < ctx.reader().maxDoc(); i++) {
+                             assertThat(docValues.advanceExact(i), equalTo(true));
+-                            double value = Double.longBitsToDouble(docValues.longValue());
+-                            if (randomBoolean()) {
+-                                builder.appendDoubles(new double[] { value }, 0, 1);
+-                            } else {
+-                                builder.appendDouble(value);
+-                            }
++                            builder.appendLongs(Double::longBitsToDouble, new long[] { docValues.longValue() }, 0, 1);
+                         }
+                         try (var build = (DoubleVector) builder.build().asVector()) {
+                             for (int i = 0; i < build.getPositionCount(); i++) {
+@@ -113,12 +108,7 @@ public void testMoreValues() throws IOException {
+                 try (var builder = new SingletonDoubleBuilder(count - offset, blockFactory())) {
+                     for (int i = offset; i < leafReader.maxDoc(); i++) {
+                         assertThat(docValues.advanceExact(i), equalTo(true));
+-                        double value = Double.longBitsToDouble(docValues.longValue());
+-                        if (randomBoolean()) {
+-                            builder.appendDoubles(new double[] { value }, 0, 1);
+-                        } else {
+-                            builder.appendDouble(value);
+-                        }
++                        builder.appendLongs(Double::longBitsToDouble, new long[] { docValues.longValue() }, 0, 1);
+                     }
+                     try (var build = (DoubleVector) builder.build().asVector()) {
+                         assertThat(build.getPositionCount(), equalTo(count - offset));

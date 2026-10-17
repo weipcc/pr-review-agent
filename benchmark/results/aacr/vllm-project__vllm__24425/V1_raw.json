@@ -1,0 +1,21 @@
+{
+ "results": [
+  {
+   "summary": "實作了 MultiConnector 的 shutdown 方法，能確保所有子 connector 都嘗試關閉並記錄例外，整體設計良好，僅有輕微型別標註風格問題。",
+   "issues": [
+    {
+     "line": 90,
+     "severity": "style",
+     "comment": "方法缺少回傳型別標註（-> None），建議補齊以符合專案的型別檢查與風格慣例。",
+     "suggestion": "建議改為 def shutdown(self) -> None:"
+    }
+   ],
+   "filename": "vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py"
+  }
+ ],
+ "n_files": 1,
+ "elapsed_s": 21.1,
+ "calls": 1,
+ "input_tokens": 4182,
+ "output_tokens": 129
+}

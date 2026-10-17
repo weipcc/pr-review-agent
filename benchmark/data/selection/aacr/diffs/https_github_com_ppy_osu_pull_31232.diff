@@ -1,0 +1,61 @@
+diff --git a/osu.Game.Rulesets.Osu.Tests/Mods/TestSceneOsuModSuddenDeath.cs b/osu.Game.Rulesets.Osu.Tests/Mods/TestSceneOsuModSuddenDeath.cs
+index 688cf70f7122..23dd2123c353 100644
+--- a/osu.Game.Rulesets.Osu.Tests/Mods/TestSceneOsuModSuddenDeath.cs
++++ b/osu.Game.Rulesets.Osu.Tests/Mods/TestSceneOsuModSuddenDeath.cs
+@@ -24,11 +24,15 @@ public TestSceneOsuModSuddenDeath()
+         {
+         }
+ 
+-        [Test]
+-        public void TestMissTail() => CreateModTest(new ModTestData
++        [TestCase(true)]
++        [TestCase(false)]
++        public void TestMissTail(bool tailMiss) => CreateModTest(new ModTestData
+         {
+-            Mod = new OsuModSuddenDeath(),
+-            PassCondition = () => ((ModFailConditionTestPlayer)Player).CheckFailed(false),
++            Mod = new OsuModSuddenDeath
++            {
++                FailOnSliderTail = { Value = tailMiss }
++            },
++            PassCondition = () => ((ModFailConditionTestPlayer)Player).CheckFailed(tailMiss),
+             Autoplay = false,
+             CreateBeatmap = () => new Beatmap
+             {
+diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs b/osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs
+index e661610fe773..d331b691d518 100644
+--- a/osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs
++++ b/osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs
+@@ -3,7 +3,12 @@
+ 
+ using System;
+ using System.Linq;
++using osu.Framework.Bindables;
++using osu.Game.Configuration;
++using osu.Game.Rulesets.Judgements;
+ using osu.Game.Rulesets.Mods;
++using osu.Game.Rulesets.Osu.Objects;
++using osu.Game.Rulesets.Scoring;
+ 
+ namespace osu.Game.Rulesets.Osu.Mods
+ {
+@@ -13,5 +18,19 @@ public class OsuModSuddenDeath : ModSuddenDeath
+         {
+             typeof(OsuModTargetPractice),
+         }).ToArray();
++
++        [SettingSource("Also fail when missing a slider tail")]
++        public BindableBool FailOnSliderTail { get; } = new BindableBool();
++
++        protected override bool FailCondition(HealthProcessor healthProcessor, JudgementResult result)
++        {
++            if (base.FailCondition(healthProcessor, result))
++                return true;
++
++            if (FailOnSliderTail.Value && result.HitObject is SliderTailCircle && !result.IsHit)
++                return true;
++
++            return false;
++        }
+     }
+ }

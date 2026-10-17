@@ -1,0 +1,107 @@
+diff --git a/src/Storages/MergeTree/KeyCondition.cpp b/src/Storages/MergeTree/KeyCondition.cpp
+index 09b99888cf72..d23c76fc3fd9 100644
+--- a/src/Storages/MergeTree/KeyCondition.cpp
++++ b/src/Storages/MergeTree/KeyCondition.cpp
+@@ -2901,9 +2901,41 @@ std::optional<Range> KeyCondition::applyMonotonicFunctionsChainToRange(
+ // This allows to use a more efficient lookup with no extra reads.
+ bool KeyCondition::matchesExactContinuousRange() const
+ {
+-    // Not implemented yet.
+-    if (hasMonotonicFunctionsChain())
+-        return false;
++    const Field field{};
++    auto is_always_monotonic_chain = [&field](const std::vector<FunctionBasePtr> & chain)
++    {
++        for (const auto & func : chain)
++        {
++            if (!func || !func->hasInformationAboutMonotonicity())
++                return false;
++
++            const auto & types = func->getArgumentTypes();
++            if (types.empty() || !types.front())
++                return false;
++
++            const auto monotonicity = func->getMonotonicityForRange(*types.front(), field, field);
++            if (!monotonicity.is_always_monotonic)
++                return false;
++        }
++
++        return true;
++    };
++
++    for (const auto & elem : rpn)
++    {
++        if (!elem.monotonic_functions_chain.empty() && !is_always_monotonic_chain(elem.monotonic_functions_chain))
++            return false;
++
++        if (elem.set_index)
++        {
++            if (elem.function != RPNElement::Function::FUNCTION_IN_SET || elem.set_index->size() != 1)
++                return false;
++
++            for (const auto & mapping : elem.set_index->getIndexesMapping())
++                if (!mapping.functions.empty() && !is_always_monotonic_chain(mapping.functions))
++                    return false;
++        }
++    }
+ 
+     enum Constraint
+     {
+@@ -2945,6 +2977,11 @@ bool KeyCondition::matchesExactContinuousRange() const
+             continue;
+         }
+ 
++        if (element.function == RPNElement::Function::ALWAYS_TRUE)
++        {
++            continue;
++        }
++
+         return false;
+     }
+ 
+diff --git a/tests/queries/0_stateless/03518_key_condition_binary_search.reference b/tests/queries/0_stateless/03518_key_condition_binary_search.reference
+new file mode 100644
+index 000000000000..f00580c40607
+--- /dev/null
++++ b/tests/queries/0_stateless/03518_key_condition_binary_search.reference
+@@ -0,0 +1,2 @@
++3
++1
+diff --git a/tests/queries/0_stateless/03518_key_condition_binary_search.sh b/tests/queries/0_stateless/03518_key_condition_binary_search.sh
+new file mode 100755
+index 000000000000..e7ab9b6ef0b7
+--- /dev/null
++++ b/tests/queries/0_stateless/03518_key_condition_binary_search.sh
+@@ -0,0 +1,31 @@
++#!/usr/bin/env bash
++
++CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
++# shellcheck source=../shell_config.sh
++. "$CUR_DIR"/../shell_config.sh
++
++$CLICKHOUSE_CLIENT -n -q "
++DROP TABLE IF EXISTS t;
++CREATE TABLE t
++(
++    c Enum8('Zero' = 0, 'One' = 1, 'Two' = 2, 'Three' = 3, 'Four' = 4, 'Five' = 5)
++)
++ENGINE = MergeTree
++ORDER BY c;
++INSERT INTO t values('One');
++SELECT * FROM t WHERE c = 1 settings send_logs_level='trace';
++SELECT * FROM t WHERE c = 'One' settings send_logs_level='trace';
++SELECT * FROM t WHERE c = 1 and 1 = 1 settings send_logs_level='trace';
++" 2>&1 | grep -c "binary search"
++
++$CLICKHOUSE_CLIENT -n -q "
++DROP TABLE IF EXISTS t1;
++CREATE TABLE t1
++(
++    timestamp DateTime64(3, 'Asia/Shanghai')
++)
++ENGINE = MergeTree
++ORDER BY timestamp;
++INSERT INTO t1 VALUES ('2025-05-21 00:00:00');
++SELECT * FROM t1 WHERE toDayOfMonth(timestamp) = 1 settings send_logs_level='trace';
++" 2>&1 | grep -c "generic exclusion search"
+\ No newline at end of file

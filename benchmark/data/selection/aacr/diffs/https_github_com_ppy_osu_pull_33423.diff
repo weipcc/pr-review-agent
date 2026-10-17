@@ -1,0 +1,54 @@
+diff --git a/osu.Game.Rulesets.Osu/Difficulty/Evaluators/RhythmEvaluator.cs b/osu.Game.Rulesets.Osu/Difficulty/Evaluators/RhythmEvaluator.cs
+index a2fcf8f11c4e..c00fa4c23e65 100644
+--- a/osu.Game.Rulesets.Osu/Difficulty/Evaluators/RhythmEvaluator.cs
++++ b/osu.Game.Rulesets.Osu/Difficulty/Evaluators/RhythmEvaluator.cs
+@@ -68,16 +68,19 @@ public static double EvaluateDifficultyOf(DifficultyHitObject current)
+ 
+                 // calculate how much current delta difference deserves a rhythm bonus
+                 // this function is meant to reduce rhythm bonus for deltas that are multiples of each other (i.e 100 and 200)
+-                double deltaDifferenceRatio = Math.Min(prevDelta, currDelta) / Math.Max(prevDelta, currDelta);
+-                double currRatio = 1.0 + rhythm_ratio_multiplier * Math.Min(0.5, Math.Pow(Math.Sin(Math.PI / deltaDifferenceRatio), 2));
++                double deltaDifference = Math.Max(prevDelta, currDelta) / Math.Min(prevDelta, currDelta);
++
++                // Take only the fractional part of the value since we're only interested in punishing multiples
++                double deltaDifferenceFraction = deltaDifference - Math.Truncate(deltaDifference);
++
++                double currRatio = 1.0 + rhythm_ratio_multiplier * Math.Min(0.5, DifficultyCalculationUtils.SmoothstepBellCurve(deltaDifferenceFraction));
+ 
+                 // reduce ratio bonus if delta difference is too big
+-                double fraction = Math.Max(prevDelta / currDelta, currDelta / prevDelta);
+-                double fractionMultiplier = Math.Clamp(2.0 - fraction / 8.0, 0.0, 1.0);
++                double differenceMultiplier = Math.Clamp(2.0 - deltaDifference / 8.0, 0.0, 1.0);
+ 
+                 double windowPenalty = Math.Min(1, Math.Max(0, Math.Abs(prevDelta - currDelta) - deltaDifferenceEpsilon) / deltaDifferenceEpsilon);
+ 
+-                double effectiveRatio = windowPenalty * currRatio * fractionMultiplier;
++                double effectiveRatio = windowPenalty * currRatio * differenceMultiplier;
+ 
+                 if (firstDeltaSwitch)
+                 {
+diff --git a/osu.Game/Rulesets/Difficulty/Utils/DifficultyCalculationUtils.cs b/osu.Game/Rulesets/Difficulty/Utils/DifficultyCalculationUtils.cs
+index 78df8a139b83..362a26ec418d 100644
+--- a/osu.Game/Rulesets/Difficulty/Utils/DifficultyCalculationUtils.cs
++++ b/osu.Game/Rulesets/Difficulty/Utils/DifficultyCalculationUtils.cs
+@@ -66,6 +66,20 @@ public static double MillisecondsToBPM(double ms, int delimiter = 4)
+         /// <returns>The output of the bell curve function of <paramref name="x"/></returns>
+         public static double BellCurve(double x, double mean, double width, double multiplier = 1.0) => multiplier * Math.Exp(Math.E * -(Math.Pow(x - mean, 2) / Math.Pow(width, 2)));
+ 
++        /// <summary>
++        /// Calculates a Smoothstep Bellcurve that returns returns 1 for x = mean, and smoothly reducing it's value to 0 over width
++        /// </summary>
++        /// <param name="x">Value to calculate the function for</param>
++        /// <param name="mean">Value of x, for which return value will be the highest (=1)</param>
++        /// <param name="width">Range [mean - width, mean + width] where function will change values</param>
++        /// <returns>The output of the smoothstep bell curve function of <paramref name="x"/></returns>
++        public static double SmoothstepBellCurve(double x, double mean = 0.5, double width = 0.5)
++        {
++            x -= mean;
++            x = x > 0 ? (width - x) : (width + x);
++            return Smoothstep(x, 0, width);
++        }
++
+         /// <summary>
+         /// Smoothstep function (https://en.wikipedia.org/wiki/Smoothstep)
+         /// </summary>

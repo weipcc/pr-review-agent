@@ -1,0 +1,223 @@
+diff --git a/Makefile b/Makefile
+index e15faa805132c8..1e7760ae68be1b 100644
+--- a/Makefile
++++ b/Makefile
+@@ -17,6 +17,9 @@ e2e:
+ prod:
+ 	docker compose -f ./docker/docker-compose.prod.yml up --build -V --remove-orphans
+ 
++prod-down:
++	docker compose -f ./docker/docker-compose.prod.yml down --remove-orphans
++
+ prod-scale:
+ 	docker compose -f ./docker/docker-compose.prod.yml up --build -V --scale immich-server=3 --scale immich-microservices=3 --remove-orphans
+ 
+diff --git a/e2e/src/web/specs/photo-viewer.e2e-spec.ts b/e2e/src/web/specs/photo-viewer.e2e-spec.ts
+index 4871e7522cefa5..c8a9b42b2a0755 100644
+--- a/e2e/src/web/specs/photo-viewer.e2e-spec.ts
++++ b/e2e/src/web/specs/photo-viewer.e2e-spec.ts
+@@ -21,23 +21,9 @@ test.describe('Photo Viewer', () => {
+   test.beforeEach(async ({ context, page }) => {
+     // before each test, login as user
+     await utils.setAuthCookies(context, admin.accessToken);
+-    await page.goto('/photos');
+     await page.waitForLoadState('networkidle');
+   });
+ 
+-  test('initially shows a loading spinner', async ({ page }) => {
+-    await page.route(`/api/assets/${asset.id}/thumbnail**`, async (route) => {
+-      // slow down the request for thumbnail, so spinner has chance to show up
+-      await new Promise((f) => setTimeout(f, 2000));
+-      await route.continue();
+-    });
+-    await page.goto(`/photos/${asset.id}`);
+-    await page.waitForLoadState('load');
+-    // this is the spinner
+-    await page.waitForSelector('svg[role=status]');
+-    await expect(page.getByTestId('loading-spinner')).toBeVisible();
+-  });
+-
+   test('loads original photo when zoomed', async ({ page }) => {
+     await page.goto(`/photos/${asset.id}`);
+     await expect.poll(async () => await imageLocator(page).getAttribute('src')).toContain('thumbnail');
+diff --git a/web/eslint.config.js b/web/eslint.config.js
+index 5c24cd1aeb5941..9ced61950444a2 100644
+--- a/web/eslint.config.js
++++ b/web/eslint.config.js
+@@ -58,6 +58,8 @@ export default typescriptEslint.config(
+       },
+     },
+ 
++    ignores: ['**/service-worker/**'],
++
+     rules: {
+       '@typescript-eslint/no-unused-vars': [
+         'warn',
+diff --git a/web/src/lib/components/asset-viewer/photo-viewer.svelte b/web/src/lib/components/asset-viewer/photo-viewer.svelte
+index fdb986786e8870..531f075b86e6d4 100644
+--- a/web/src/lib/components/asset-viewer/photo-viewer.svelte
++++ b/web/src/lib/components/asset-viewer/photo-viewer.svelte
+@@ -21,6 +21,7 @@
+   import FaceEditor from '$lib/components/asset-viewer/face-editor/face-editor.svelte';
+   import { photoViewerImgElement } from '$lib/stores/assets-store.svelte';
+   import { isFaceEditMode } from '$lib/stores/face-edit.svelte';
++  import { cancelImageUrl, preloadImageUrl } from '$lib/utils/sw-messaging';
+ 
+   interface Props {
+     asset: AssetResponseDto;
+@@ -71,8 +72,7 @@
+   const preload = (targetSize: AssetMediaSize | 'original', preloadAssets?: AssetResponseDto[]) => {
+     for (const preloadAsset of preloadAssets || []) {
+       if (preloadAsset.type === AssetTypeEnum.Image) {
+-        let img = new Image();
+-        img.src = getAssetUrl(preloadAsset.id, targetSize, preloadAsset.thumbhash);
++        preloadImageUrl(getAssetUrl(preloadAsset.id, targetSize, preloadAsset.thumbhash));
+       }
+     }
+   };
+@@ -168,6 +168,7 @@
+     return () => {
+       loader?.removeEventListener('load', onload);
+       loader?.removeEventListener('error', onerror);
++      cancelImageUrl(imageLoaderUrl);
+     };
+   });
+ 
+diff --git a/web/src/lib/components/assets/thumbnail/image-thumbnail.svelte b/web/src/lib/components/assets/thumbnail/image-thumbnail.svelte
+index 2e8ad6ca32c102..04493b273c0b6c 100644
+--- a/web/src/lib/components/assets/thumbnail/image-thumbnail.svelte
++++ b/web/src/lib/components/assets/thumbnail/image-thumbnail.svelte
+@@ -2,9 +2,11 @@
+   import { thumbhash } from '$lib/actions/thumbhash';
+   import BrokenAsset from '$lib/components/assets/broken-asset.svelte';
+   import Icon from '$lib/components/elements/icon.svelte';
++  import { cancelImageUrl } from '$lib/utils/sw-messaging';
+   import { TUNABLES } from '$lib/utils/tunables';
+   import { mdiEyeOffOutline } from '@mdi/js';
+   import type { ClassValue } from 'svelte/elements';
++  import type { ActionReturn } from 'svelte/action';
+   import { fade } from 'svelte/transition';
+ 
+   interface Props {
+@@ -59,11 +61,14 @@
+     onComplete?.(true);
+   };
+ 
+-  function mount(elem: HTMLImageElement) {
++  function mount(elem: HTMLImageElement): ActionReturn {
+     if (elem.complete) {
+       loaded = true;
+       onComplete?.(false);
+     }
++    return {
++      destroy: () => cancelImageUrl(url),
++    };
+   }
+ 
+   let optionalClasses = $derived(
+diff --git a/web/src/lib/utils/sw-messaging.ts b/web/src/lib/utils/sw-messaging.ts
+new file mode 100644
+index 00000000000000..1a19d3c134c1af
+--- /dev/null
++++ b/web/src/lib/utils/sw-messaging.ts
+@@ -0,0 +1,8 @@
++const broadcast = new BroadcastChannel('immich');
++
++export function cancelImageUrl(url: string) {
++  broadcast.postMessage({ type: 'cancel', url });
++}
++export function preloadImageUrl(url: string) {
++  broadcast.postMessage({ type: 'preload', url });
++}
+diff --git a/web/src/service-worker/index.ts b/web/src/service-worker/index.ts
+new file mode 100644
+index 00000000000000..797f4754b6dc39
+--- /dev/null
++++ b/web/src/service-worker/index.ts
+@@ -0,0 +1,86 @@
++/// <reference types="@sveltejs/kit" />
++/// <reference no-default-lib="true"/>
++/// <reference lib="esnext" />
++/// <reference lib="webworker" />
++import { version } from '$service-worker';
++
++const useCache = true;
++const sw = globalThis as unknown as ServiceWorkerGlobalScope;
++const pendingLoads = new Map<string, AbortController>();
++
++// Create a unique cache name for this deployment
++const CACHE = `cache-${version}`;
++
++sw.addEventListener('install', (event) => {
++  event.waitUntil(sw.skipWaiting());
++});
++
++sw.addEventListener('activate', (event) => {
++  event.waitUntil(sw.clients.claim());
++  // Remove previous cached data from disk
++  event.waitUntil(deleteOldCaches());
++});
++
++sw.addEventListener('fetch', (event) => {
++  if (event.request.method !== 'GET') {
++    return;
++  }
++  const url = new URL(event.request.url);
++  if (/^\/api\/assets\/[a-f0-9-]+\/(original|thumbnail)/.test(url.pathname)) {
++    event.respondWith(immichAsset(url));
++  }
++});
++
++async function deleteOldCaches() {
++  for (const key of await caches.keys()) {
++    if (key !== CACHE) {
++      await caches.delete(key);
++    }
++  }
++}
++
++async function immichAsset(url: URL) {
++  const cache = await caches.open(CACHE);
++  let response = useCache ? await cache.match(url) : undefined;
++  if (response) {
++    return response;
++  }
++  try {
++    const cancelToken = new AbortController();
++    const request = fetch(url, {
++      signal: cancelToken.signal,
++    });
++    pendingLoads.set(url.toString(), cancelToken);
++    response = await request;
++    if (!(response instanceof Response)) {
++      throw new TypeError('invalid response from fetch');
++    }
++    if (response.status === 200) {
++      cache.put(url, response.clone());
++    }
++    return response;
++  } catch {
++    return Response.error();
++  } finally {
++    pendingLoads.delete(url.toString());
++  }
++}
++
++const broadcast = new BroadcastChannel('immich');
++// eslint-disable-next-line  unicorn/prefer-add-event-listener
++broadcast.onmessage = (event) => {
++  if (!event.data) {
++    return;
++  }
++  const urlstring = event.data.url;
++  const url = new URL(urlstring, event.origin);
++  if (event.data.type === 'cancel') {
++    const pending = pendingLoads.get(url.toString());
++    if (pending) {
++      pending.abort();
++      pendingLoads.delete(url.toString());
++    }
++  } else if (event.data.type === 'preload') {
++    immichAsset(url);
++  }
++};

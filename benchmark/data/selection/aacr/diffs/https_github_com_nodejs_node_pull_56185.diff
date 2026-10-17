@@ -1,0 +1,229 @@
+diff --git a/doc/api/module.md b/doc/api/module.md
+index f26590d43b55..d6fc9e205bf4 100644
+--- a/doc/api/module.md
++++ b/doc/api/module.md
+@@ -21,6 +21,10 @@ added:
+   - v9.3.0
+   - v8.10.0
+   - v6.13.0
++changes:
++  - version: REPLACEME
++    pr-url: https://github.com/nodejs/node/pull/56185
++    description: The list now also contains prefix-only modules.
+ -->
+ 
+ * {string\[]}
+@@ -28,8 +32,6 @@ added:
+ A list of the names of all modules provided by Node.js. Can be used to verify
+ if a module is maintained by a third party or not.
+ 
+-Note: the list doesn't contain [prefix-only modules][] like `node:test`.
+-
+ `module` in this context isn't the same object that's provided
+ by the [module wrapper][]. To access it, require the `Module` module:
+ 
+@@ -1724,7 +1726,6 @@ returned object contains the following keys:
+ [load hook]: #loadurl-context-nextload
+ [module compile cache]: #module-compile-cache
+ [module wrapper]: modules.md#the-module-wrapper
+-[prefix-only modules]: modules.md#built-in-modules-with-mandatory-node-prefix
+ [realm]: https://tc39.es/ecma262/#realm
+ [resolve hook]: #resolvespecifier-context-nextresolve
+ [source map include directives]: https://sourcemaps.info/spec.html#h.lmz475t4mvbx
+diff --git a/doc/api/modules.md b/doc/api/modules.md
+index a27077c7c41b..4d89f389d7fc 100644
+--- a/doc/api/modules.md
++++ b/doc/api/modules.md
+@@ -517,7 +517,7 @@ Some built-in modules are always preferentially loaded if their identifier is
+ passed to `require()`. For instance, `require('http')` will always
+ return the built-in HTTP module, even if there is a file by that name. The list
+ of built-in modules that can be loaded without using the `node:` prefix is exposed
+-as [`module.builtinModules`][].
++in [`module.builtinModules`][], listed without the prefix.
+ 
+ ### Built-in modules with mandatory `node:` prefix
+ 
+@@ -531,6 +531,8 @@ taken the name. Currently the built-in modules that requires the `node:` prefix
+ * [`node:test`][]
+ * [`node:test/reporters`][]
+ 
++The list of these modules is exposed in [`module.builtinModules`][], including the prefix.
++
+ ## Cycles
+ 
+ <!--type=misc-->
+diff --git a/lib/internal/bootstrap/realm.js b/lib/internal/bootstrap/realm.js
+index c11f70dd6bf3..7e87f1ad1ab5 100644
+--- a/lib/internal/bootstrap/realm.js
++++ b/lib/internal/bootstrap/realm.js
+@@ -54,6 +54,7 @@ const {
+   ArrayPrototypeIncludes,
+   ArrayPrototypeMap,
+   ArrayPrototypePush,
++  ArrayPrototypePushApply,
+   ArrayPrototypeSlice,
+   Error,
+   ObjectDefineProperty,
+@@ -320,14 +321,16 @@ class BuiltinModule {
+     );
+   }
+ 
+-  static getCanBeRequiredByUsersWithoutSchemeList() {
+-    return ArrayFrom(canBeRequiredByUsersWithoutSchemeList);
+-  }
+-
+   static getSchemeOnlyModuleNames() {
+     return ArrayFrom(schemelessBlockList);
+   }
+ 
++  static getAllBuiltinModuleIds() {
++    const allBuiltins = ArrayFrom(canBeRequiredByUsersWithoutSchemeList);
++    ArrayPrototypePushApply(allBuiltins, ArrayFrom(schemelessBlockList, (x) => `node:${x}`));
++    return allBuiltins;
++  }
++
+   // Used by user-land module loaders to compile and load builtins.
+   compileForPublicLoader() {
+     if (!BuiltinModule.canBeRequiredByUsers(this.id)) {
+diff --git a/lib/internal/modules/cjs/loader.js b/lib/internal/modules/cjs/loader.js
+index dd3d205a2bd3..0779190e1c90 100644
+--- a/lib/internal/modules/cjs/loader.js
++++ b/lib/internal/modules/cjs/loader.js
+@@ -434,8 +434,8 @@ Module.isBuiltin = BuiltinModule.isBuiltin;
+  */
+ function initializeCJS() {
+   // This need to be done at runtime in case --expose-internals is set.
+-  const builtinModules = BuiltinModule.getCanBeRequiredByUsersWithoutSchemeList();
+-  Module.builtinModules = ObjectFreeze(builtinModules);
++
++  Module.builtinModules = ObjectFreeze(BuiltinModule.getAllBuiltinModuleIds());
+ 
+   initializeCjsConditions();
+ 
+diff --git a/lib/repl.js b/lib/repl.js
+index c195ba428ce6..fd8b51b9547e 100644
+--- a/lib/repl.js
++++ b/lib/repl.js
+@@ -131,7 +131,7 @@ const { shouldColorize } = require('internal/util/colors');
+ const CJSModule = require('internal/modules/cjs/loader').Module;
+ let _builtinLibs = ArrayPrototypeFilter(
+   CJSModule.builtinModules,
+-  (e) => e[0] !== '_',
++  (e) => e[0] !== '_' && !StringPrototypeStartsWith(e, 'node:'),
+ );
+ const nodeSchemeBuiltinLibs = ArrayPrototypeMap(
+   _builtinLibs, (lib) => `node:${lib}`);
+diff --git a/test/parallel/test-internal-module-require.js b/test/parallel/test-internal-module-require.js
+index c6e2057d3da1..058273c7ea43 100644
+--- a/test/parallel/test-internal-module-require.js
++++ b/test/parallel/test-internal-module-require.js
+@@ -87,6 +87,9 @@ if (process.argv[2] === 'child') {
+         });
+       } else {
+         require(id);
++        if (!id.startsWith('node:')) {
++          require(`node:${id}`);
++        }
+         publicModules.add(id);
+       }
+     }
+diff --git a/test/parallel/test-process-get-builtin.mjs b/test/parallel/test-process-get-builtin.mjs
+index 4b840585f2ad..3cf8179f7286 100644
+--- a/test/parallel/test-process-get-builtin.mjs
++++ b/test/parallel/test-process-get-builtin.mjs
+@@ -41,15 +41,19 @@ for (const id of publicBuiltins) {
+ }
+ // Check that import(id).default returns the same thing as process.getBuiltinModule(id).
+ for (const id of publicBuiltins) {
+-  const imported = await import(`node:${id}`);
+-  assert.strictEqual(process.getBuiltinModule(id), imported.default);
++  if (!id.startsWith('node:')) {
++    const imported = await import(`node:${id}`);
++    assert.strictEqual(process.getBuiltinModule(id), imported.default);
++  }
+ }
+ 
+ // publicBuiltins does not include 'test' which requires the node: prefix.
+ const ids = publicBuiltins.add('test');
+ // Check that import(id).default returns the same thing as process.getBuiltinModule(id).
+ for (const id of ids) {
+-  const prefixed = `node:${id}`;
+-  const imported = await import(prefixed);
+-  assert.strictEqual(process.getBuiltinModule(prefixed), imported.default);
++  if (!id.startsWith('node:')) {
++    const prefixed = `node:${id}`;
++    const imported = await import(prefixed);
++    assert.strictEqual(process.getBuiltinModule(prefixed), imported.default);
++  }
+ }
+diff --git a/test/parallel/test-repl-tab-complete-import.js b/test/parallel/test-repl-tab-complete-import.js
+index e328d95db598..fe9f7a3d1179 100644
+--- a/test/parallel/test-repl-tab-complete-import.js
++++ b/test/parallel/test-repl-tab-complete-import.js
+@@ -5,7 +5,7 @@ const ArrayStream = require('../common/arraystream');
+ const fixtures = require('../common/fixtures');
+ const assert = require('assert');
+ const { builtinModules } = require('module');
+-const publicModules = builtinModules.filter((lib) => !lib.startsWith('_'));
++const publicUnprefixedModules = builtinModules.filter((lib) => !lib.startsWith('_') && !lib.startsWith('node:'));
+ 
+ if (!common.isMainThread)
+   common.skip('process.chdir is not available in Workers');
+@@ -31,7 +31,7 @@ testMe._domain.on('error', assert.ifError);
+ // Tab complete provides built in libs for import()
+ testMe.complete('import(\'', common.mustCall((error, data) => {
+   assert.strictEqual(error, null);
+-  publicModules.forEach((lib) => {
++  publicUnprefixedModules.forEach((lib) => {
+     assert(
+       data[0].includes(lib) && data[0].includes(`node:${lib}`),
+       `${lib} not found`,
+@@ -55,7 +55,7 @@ testMe.complete("import\t( 'n", common.mustCall((error, data) => {
+   // import(...) completions include `node:` URL modules:
+   let lastIndex = -1;
+ 
+-  publicModules.forEach((lib, index) => {
++  publicUnprefixedModules.forEach((lib, index) => {
+     lastIndex = completions.indexOf(`node:${lib}`);
+     assert.notStrictEqual(lastIndex, -1);
+   });
+diff --git a/test/parallel/test-repl-tab-complete.js b/test/parallel/test-repl-tab-complete.js
+index 57278f52ccf2..ff1e927078dd 100644
+--- a/test/parallel/test-repl-tab-complete.js
++++ b/test/parallel/test-repl-tab-complete.js
+@@ -275,7 +275,7 @@ testMe.complete('require(\'', common.mustCall(function(error, data) {
+   assert.strictEqual(error, null);
+   publicModules.forEach((lib) => {
+     assert(
+-      data[0].includes(lib) && data[0].includes(`node:${lib}`),
++      data[0].includes(lib) && (lib.startsWith('node:') || data[0].includes(`node:${lib}`)),
+       `${lib} not found`
+     );
+   });
+@@ -295,7 +295,7 @@ testMe.complete("require\t( 'n", common.mustCall(function(error, data) {
+   // require(...) completions include `node:`-prefixed modules:
+   let lastIndex = -1;
+ 
+-  publicModules.forEach((lib, index) => {
++  publicModules.filter((lib) => !lib.startsWith('node:')).forEach((lib, index) => {
+     lastIndex = data[0].indexOf(`node:${lib}`);
+     assert.notStrictEqual(lastIndex, -1);
+   });
+diff --git a/test/parallel/test-require-resolve.js b/test/parallel/test-require-resolve.js
+index a38a8e074ab8..b69192635e6d 100644
+--- a/test/parallel/test-require-resolve.js
++++ b/test/parallel/test-require-resolve.js
+@@ -61,10 +61,9 @@ require(fixtures.path('resolve-paths', 'default', 'verify-paths.js'));
+   // builtinModules.
+   builtinModules.forEach((mod) => {
+     assert.strictEqual(require.resolve.paths(mod), null);
+-  });
+-
+-  builtinModules.forEach((mod) => {
+-    assert.strictEqual(require.resolve.paths(`node:${mod}`), null);
++    if (!mod.startsWith('node:')) {
++      assert.strictEqual(require.resolve.paths(`node:${mod}`), null);
++    }
+   });
+ 
+   // node_modules.

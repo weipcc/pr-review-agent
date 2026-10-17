@@ -1,0 +1,528 @@
+diff --git a/lib/voyager-core/src/lib.rs b/lib/voyager-core/src/lib.rs
+index f6616645488..158aac27021 100644
+--- a/lib/voyager-core/src/lib.rs
++++ b/lib/voyager-core/src/lib.rs
+@@ -276,7 +276,7 @@ pub struct ClientStateMeta {
+ pub struct ConsensusStateMeta {
+     /// The timestamp of the counterparty at the height represented by this
+     /// consensus state.
+-    pub timestamp_nanos: u64,
++    pub timestamp_nanos: Timestamp,
+ }
+ 
+ #[model]
+@@ -325,6 +325,32 @@ impl FromStr for QueryHeight {
+     }
+ }
+ 
++#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
++pub struct Timestamp(u64);
++impl Timestamp {
++    pub fn from_nanos(nanos: u64) -> Self {
++        Timestamp(nanos)
++    }
++
++    pub fn from_secs(secs: u64) -> Self {
++        Timestamp(secs * 1_000_000_000)
++    }
++
++    pub fn as_nanos(&self) -> u64 {
++        self.0
++    }
++
++    pub fn as_secs(&self) -> u64 {
++        self.0 / 1_000_000_000
++    }
++}
++
++impl fmt::Display for Timestamp {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        write!(f, "{}", self.0)
++    }
++}
++
+ macro_rules! str_newtype {
+     (
+         $(#[doc = $doc:literal])+
+diff --git a/lib/voyager-message/src/call.rs b/lib/voyager-message/src/call.rs
+index 2045be5379d..7c77ce29c51 100644
+--- a/lib/voyager-message/src/call.rs
++++ b/lib/voyager-message/src/call.rs
+@@ -3,7 +3,7 @@ use macros::model;
+ use serde::de::DeserializeOwned;
+ use tracing::{debug, error, info, instrument};
+ use unionlabs::{ibc::core::client::height::Height, traits::Member};
+-use voyager_core::{ClientType, IbcSpecId, QueryHeight};
++use voyager_core::{ClientType, IbcSpecId, QueryHeight, Timestamp};
+ use voyager_vm::{call, defer, noop, now, seq, CallT, Op, QueueError};
+ 
+ use crate::{
+@@ -120,8 +120,7 @@ pub struct WaitForHeight {
+ #[model]
+ pub struct WaitForTimestamp {
+     pub chain_id: ChainId,
+-    /// THIS IS NANOSECONDS
+-    pub timestamp: i64,
++    pub timestamp: Timestamp,
+     pub finalized: bool,
+ }
+ 
+diff --git a/lib/voyager-message/src/module.rs b/lib/voyager-message/src/module.rs
+index b406ff89f4b..020045fb04d 100644
+--- a/lib/voyager-message/src/module.rs
++++ b/lib/voyager-message/src/module.rs
+@@ -5,7 +5,7 @@ use macros::model;
+ use schemars::JsonSchema;
+ use serde_json::Value;
+ use unionlabs::{bytes::Bytes, ibc::core::client::height::Height, traits::Member};
+-use voyager_core::{ConsensusType, IbcSpecId};
++use voyager_core::{ConsensusType, IbcSpecId, Timestamp};
+ use voyager_vm::{pass::PassResult, BoxDynError, Op};
+ 
+ use crate::{
+@@ -439,8 +439,7 @@ pub trait ConsensusModule {
+ 
+     /// Query the latest finalized timestamp of this chain.
+     #[method(name = "queryLatestTimestamp", with_extensions)]
+-    // TODO: Make this return a better type than i64
+-    async fn query_latest_timestamp(&self, finalized: bool) -> RpcResult<i64>;
++    async fn query_latest_timestamp(&self, finalized: bool) -> RpcResult<Timestamp>;
+ }
+ 
+ /// Client bootstrap modules provide the initial client and consensus states for a client. This is notably separate from the [`ConsensusModule`], since it is possible for different client types (with different state types) to track the same consensus.
+diff --git a/lib/voyager-message/src/rpc.rs b/lib/voyager-message/src/rpc.rs
+index e6904ea84d4..cd27d52aa30 100644
+--- a/lib/voyager-message/src/rpc.rs
++++ b/lib/voyager-message/src/rpc.rs
+@@ -8,7 +8,7 @@ use macros::model;
+ use serde::de::DeserializeOwned;
+ use serde_json::{json, Value};
+ use unionlabs::{bytes::Bytes, ibc::core::client::height::Height, ErrorReporter};
+-use voyager_core::IbcSpecId;
++use voyager_core::{IbcSpecId, Timestamp};
+ 
+ use crate::{
+     context::LoadedModulesInfo,
+@@ -38,8 +38,11 @@ pub trait VoyagerRpc {
+     async fn query_latest_height(&self, chain_id: ChainId, finalized: bool) -> RpcResult<Height>;
+ 
+     #[method(name = "queryLatestTimestamp")]
+-    // TODO: Make this return a better type than i64
+-    async fn query_latest_timestamp(&self, chain_id: ChainId, finalized: bool) -> RpcResult<i64>;
++    async fn query_latest_timestamp(
++        &self,
++        chain_id: ChainId,
++        finalized: bool,
++    ) -> RpcResult<Timestamp>;
+ 
+     // =================
+     // IBC state queries
+diff --git a/lib/voyager-message/src/rpc/server.rs b/lib/voyager-message/src/rpc/server.rs
+index 2a31938158a..a37d5c6d15e 100644
+--- a/lib/voyager-message/src/rpc/server.rs
++++ b/lib/voyager-message/src/rpc/server.rs
+@@ -10,7 +10,7 @@ use jsonrpsee::{
+ use serde_json::Value;
+ use tracing::{debug, info_span, instrument, trace};
+ use unionlabs::{bytes::Bytes, ibc::core::client::height::Height, ErrorReporter};
+-use voyager_core::IbcSpecId;
++use voyager_core::{IbcSpecId, Timestamp};
+ use voyager_vm::ItemId;
+ 
+ // use valuable::Valuable;
+@@ -159,7 +159,7 @@ impl Server {
+         &self,
+         chain_id: &ChainId,
+         finalized: bool,
+-    ) -> RpcResult<i64> {
++    ) -> RpcResult<Timestamp> {
+         self.span()
+             .in_scope(|| async {
+                 trace!("querying latest timestamp");
+@@ -174,7 +174,10 @@ impl Server {
+                     .await
+                     .map_err(json_rpc_error_to_error_object)?;
+ 
+-                trace!(latest_timestamp, "queried latest timestamp");
++                trace!(
++                    latest_timestamp = latest_timestamp.as_nanos(),
++                    "queried latest timestamp"
++                );
+ 
+                 Ok(latest_timestamp)
+             })
+@@ -537,7 +540,11 @@ impl VoyagerRpcServer for Server {
+         self.query_latest_height(&chain_id, finalized).await
+     }
+ 
+-    async fn query_latest_timestamp(&self, chain_id: ChainId, finalized: bool) -> RpcResult<i64> {
++    async fn query_latest_timestamp(
++        &self,
++        chain_id: ChainId,
++        finalized: bool,
++    ) -> RpcResult<Timestamp> {
+         self.query_latest_timestamp(&chain_id, finalized).await
+     }
+ 
+diff --git a/voyager/modules/client/cometbls/src/main.rs b/voyager/modules/client/cometbls/src/main.rs
+index caa2424ab4c..d8375ad3412 100644
+--- a/voyager/modules/client/cometbls/src/main.rs
++++ b/voyager/modules/client/cometbls/src/main.rs
+@@ -22,7 +22,7 @@ use unionlabs::{
+ use voyager_message::{
+     core::{
+         ChainId, ClientStateMeta, ClientType, ConsensusStateMeta, ConsensusType,
+-        IbcGo08WasmClientMetadata, IbcInterface,
++        IbcGo08WasmClientMetadata, IbcInterface, Timestamp,
+     },
+     module::{ClientModuleInfo, ClientModuleServer},
+     ClientModule, FATAL_JSONRPC_ERROR_CODE,
+@@ -190,7 +190,7 @@ impl ClientModuleServer for Module {
+         let cs = self.decode_consensus_state(&consensus_state)?;
+ 
+         Ok(ConsensusStateMeta {
+-            timestamp_nanos: cs.timestamp,
++            timestamp_nanos: Timestamp::from_nanos(cs.timestamp),
+         })
+     }
+ 
+diff --git a/voyager/modules/client/ethereum/src/main.rs b/voyager/modules/client/ethereum/src/main.rs
+index d335c5f0c1b..073f526b062 100644
+--- a/voyager/modules/client/ethereum/src/main.rs
++++ b/voyager/modules/client/ethereum/src/main.rs
+@@ -16,7 +16,10 @@ use unionlabs::{
+     ErrorReporter,
+ };
+ use voyager_message::{
+-    core::{ChainId, ClientStateMeta, ClientType, ConsensusStateMeta, ConsensusType, IbcInterface},
++    core::{
++        ChainId, ClientStateMeta, ClientType, ConsensusStateMeta, ConsensusType, IbcInterface,
++        Timestamp,
++    },
+     module::{ClientModuleInfo, ClientModuleServer},
+     ClientModule, FATAL_JSONRPC_ERROR_CODE,
+ };
+@@ -105,7 +108,7 @@ impl ClientModuleServer for Module {
+         let cs = Module::decode_consensus_state(&consensus_state)?;
+ 
+         Ok(ConsensusStateMeta {
+-            timestamp_nanos: cs.timestamp,
++            timestamp_nanos: Timestamp::from_nanos(cs.timestamp),
+         })
+     }
+ 
+diff --git a/voyager/modules/client/movement/src/main.rs b/voyager/modules/client/movement/src/main.rs
+index 5fb956d8a5e..ff944fdc2d3 100644
+--- a/voyager/modules/client/movement/src/main.rs
++++ b/voyager/modules/client/movement/src/main.rs
+@@ -17,7 +17,10 @@ use unionlabs::{
+     ErrorReporter,
+ };
+ use voyager_message::{
+-    core::{ChainId, ClientStateMeta, ClientType, ConsensusStateMeta, ConsensusType, IbcInterface},
++    core::{
++        ChainId, ClientStateMeta, ClientType, ConsensusStateMeta, ConsensusType, IbcInterface,
++        Timestamp,
++    },
+     module::{ClientModuleInfo, ClientModuleServer},
+     ClientModule, FATAL_JSONRPC_ERROR_CODE,
+ };
+@@ -102,7 +105,7 @@ impl ClientModuleServer for Module {
+         let cs = Module::decode_consensus_state(&consensus_state)?;
+ 
+         Ok(ConsensusStateMeta {
+-            timestamp_nanos: cs.timestamp,
++            timestamp_nanos: Timestamp::from_nanos(cs.timestamp),
+         })
+     }
+ 
+diff --git a/voyager/modules/client/tendermint/src/main.rs b/voyager/modules/client/tendermint/src/main.rs
+index 4c7ca8cc204..c88a522282b 100644
+--- a/voyager/modules/client/tendermint/src/main.rs
++++ b/voyager/modules/client/tendermint/src/main.rs
+@@ -16,7 +16,10 @@ use unionlabs::{
+     ErrorReporter,
+ };
+ use voyager_message::{
+-    core::{ChainId, ClientStateMeta, ClientType, ConsensusStateMeta, ConsensusType, IbcInterface},
++    core::{
++        ChainId, ClientStateMeta, ClientType, ConsensusStateMeta, ConsensusType, IbcInterface,
++        Timestamp,
++    },
+     module::{ClientModuleInfo, ClientModuleServer},
+     ClientModule, FATAL_JSONRPC_ERROR_CODE,
+ };
+@@ -141,7 +144,7 @@ impl ClientModuleServer for Module {
+         let cs = self.decode_consensus_state(&consensus_state)?;
+ 
+         Ok(ConsensusStateMeta {
+-            timestamp_nanos: cs.timestamp.as_unix_nanos(),
++            timestamp_nanos: Timestamp::from_nanos(cs.timestamp.as_unix_nanos()),
+         })
+     }
+ 
+diff --git a/voyager/modules/consensus/cometbls/src/main.rs b/voyager/modules/consensus/cometbls/src/main.rs
+index 20c49db76c3..6c9adb1e4d7 100644
+--- a/voyager/modules/consensus/cometbls/src/main.rs
++++ b/voyager/modules/consensus/cometbls/src/main.rs
+@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
+ use tracing::{debug, error, instrument};
+ use unionlabs::{bech32::Bech32, hash::H256, ibc::core::client::height::Height, traits::Member};
+ use voyager_message::{
+-    core::{ChainId, ConsensusType},
++    core::{ChainId, ConsensusType, Timestamp},
+     module::{ConsensusModuleInfo, ConsensusModuleServer},
+     rpc::json_rpc_error_to_error_object,
+     ConsensusModule,
+@@ -129,7 +129,11 @@ impl ConsensusModuleServer for Module {
+     /// Query the latest finalized timestamp of this chain.
+     // TODO: Use a better timestamp type here
+     #[instrument(skip_all, fields(chain_id = %self.chain_id))]
+-    async fn query_latest_timestamp(&self, _: &Extensions, finalized: bool) -> RpcResult<i64> {
++    async fn query_latest_timestamp(
++        &self,
++        _: &Extensions,
++        finalized: bool,
++    ) -> RpcResult<Timestamp> {
+         let mut commit_response = self
+             .tm_client
+             .commit(None)
+@@ -161,12 +165,10 @@ impl ConsensusModuleServer for Module {
+             }
+         }
+ 
+-        Ok(commit_response
+-            .signed_header
+-            .header
+-            .time
+-            .as_unix_nanos()
+-            .try_into()
+-            .expect("should be fine"))
++        Ok(
++            Timestamp::from_nanos(commit_response.signed_header.header.time.as_unix_nanos())
++                .try_into()
++                .expect("should be fine"),
++        )
+     }
+ }
+diff --git a/voyager/modules/consensus/ethereum/src/main.rs b/voyager/modules/consensus/ethereum/src/main.rs
+index c7791380c40..dc0c32d9e90 100644
+--- a/voyager/modules/consensus/ethereum/src/main.rs
++++ b/voyager/modules/consensus/ethereum/src/main.rs
+@@ -19,7 +19,7 @@ use unionlabs::{
+     ErrorReporter,
+ };
+ use voyager_message::{
+-    core::{ChainId, ConsensusType},
++    core::{ChainId, ConsensusType, Timestamp},
+     module::{ConsensusModuleInfo, ConsensusModuleServer},
+     ConsensusModule,
+ };
+@@ -158,33 +158,41 @@ impl ConsensusModuleServer for Module {
+     /// Query the latest finalized timestamp of this chain.
+     // TODO: Use a better timestamp type here
+     #[instrument(skip_all, fields(chain_id = %self.chain_id, finalized))]
+-    async fn query_latest_timestamp(&self, _: &Extensions, finalized: bool) -> RpcResult<i64> {
++    async fn query_latest_timestamp(
++        &self,
++        _: &Extensions,
++        finalized: bool,
++    ) -> RpcResult<Timestamp> {
+         if finalized {
+-            Ok(self
+-                .beacon_api_client
+-                .finality_update()
+-                .await
+-                .map_err(|err| ErrorObject::owned(-1, ErrorReporter(err).to_string(), None::<()>))?
+-                .data
+-                .finalized_header
+-                .execution
+-                .timestamp
+-                .try_into()
+-                .unwrap())
++            Ok(Timestamp::from_nanos(
++                self.beacon_api_client
++                    .finality_update()
++                    .await
++                    .map_err(|err| {
++                        ErrorObject::owned(-1, ErrorReporter(err).to_string(), None::<()>)
++                    })?
++                    .data
++                    .finalized_header
++                    .execution
++                    .timestamp,
++            )
++            .try_into()
++            .unwrap())
+         } else {
+-            Ok(self
+-                .provider
+-                .get_block(
+-                    BlockNumberOrTag::Latest.into(),
+-                    BlockTransactionsKind::Hashes,
+-                )
+-                .await
+-                .unwrap()
+-                .unwrap()
+-                .header
+-                .timestamp
+-                .try_into()
+-                .unwrap())
++            Ok(Timestamp::from_nanos(
++                self.provider
++                    .get_block(
++                        BlockNumberOrTag::Latest.into(),
++                        BlockTransactionsKind::Hashes,
++                    )
++                    .await
++                    .unwrap()
++                    .unwrap()
++                    .header
++                    .timestamp
++                    .try_into()
++                    .unwrap(),
++            ))
+         }
+     }
+ }
+diff --git a/voyager/modules/consensus/movement/src/main.rs b/voyager/modules/consensus/movement/src/main.rs
+index e3c9082eb63..e29438dd47d 100644
+--- a/voyager/modules/consensus/movement/src/main.rs
++++ b/voyager/modules/consensus/movement/src/main.rs
+@@ -16,7 +16,7 @@ use unionlabs::{
+     ErrorReporter,
+ };
+ use voyager_message::{
+-    core::{ChainId, ConsensusType},
++    core::{ChainId, ConsensusType, Timestamp},
+     module::{ConsensusModuleInfo, ConsensusModuleServer},
+     ConsensusModule,
+ };
+@@ -144,8 +144,11 @@ impl ConsensusModuleServer for Module {
+     }
+ 
+     /// Query the latest finalized timestamp of this chain.
+-    // TODO: Make this return a better type than i64
+-    async fn query_latest_timestamp(&self, ext: &Extensions, finalized: bool) -> RpcResult<i64> {
++    async fn query_latest_timestamp(
++        &self,
++        ext: &Extensions,
++        finalized: bool,
++    ) -> RpcResult<Timestamp> {
+         let latest_height = self.query_latest_height(ext, finalized).await?;
+ 
+         match self
+@@ -158,7 +161,7 @@ impl ConsensusModuleServer for Module {
+ 
+                 debug!(%timestamp, %latest_height, "latest timestamp");
+ 
+-                Ok(timestamp.try_into().unwrap())
++                Ok(Timestamp::from_nanos(timestamp).try_into().unwrap())
+             }
+             Err(err) => Err(ErrorObject::owned(
+                 -1,
+diff --git a/voyager/modules/consensus/tendermint/src/main.rs b/voyager/modules/consensus/tendermint/src/main.rs
+index 9e9d03fdcdc..67e54c215c1 100644
+--- a/voyager/modules/consensus/tendermint/src/main.rs
++++ b/voyager/modules/consensus/tendermint/src/main.rs
+@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
+ use tracing::{debug, error, instrument};
+ use unionlabs::{ibc::core::client::height::Height, ErrorReporter};
+ use voyager_message::{
+-    core::{ChainId, ConsensusType},
++    core::{ChainId, ConsensusType, Timestamp},
+     module::{ConsensusModuleInfo, ConsensusModuleServer},
+     rpc::json_rpc_error_to_error_object,
+     ConsensusModule,
+@@ -120,9 +120,12 @@ impl ConsensusModuleServer for Module {
+     }
+ 
+     /// Query the latest finalized timestamp of this chain.
+-    // TODO: Use a better timestamp type here
+     #[instrument(skip_all, fields(chain_id = %self.chain_id))]
+-    async fn query_latest_timestamp(&self, _: &Extensions, finalized: bool) -> RpcResult<i64> {
++    async fn query_latest_timestamp(
++        &self,
++        _: &Extensions,
++        finalized: bool,
++    ) -> RpcResult<Timestamp> {
+         let mut commit_response = self
+             .tm_client
+             .commit(None)
+@@ -154,12 +157,10 @@ impl ConsensusModuleServer for Module {
+             }
+         }
+ 
+-        Ok(commit_response
+-            .signed_header
+-            .header
+-            .time
+-            .as_unix_nanos()
+-            .try_into()
+-            .expect("should be fine"))
++        Ok(
++            Timestamp::from_nanos(commit_response.signed_header.header.time.as_unix_nanos())
++                .try_into()
++                .expect("should be fine"),
++        )
+     }
+ }
+diff --git a/voyager/modules/state/movement/src/main.rs b/voyager/modules/state/movement/src/main.rs
+index eed50cb5382..c85ce706e47 100644
+--- a/voyager/modules/state/movement/src/main.rs
++++ b/voyager/modules/state/movement/src/main.rs
+@@ -23,7 +23,7 @@ use unionlabs::{
+     ErrorReporter,
+ };
+ use voyager_message::{
+-    core::{ChainId, ClientInfo, ClientType, IbcInterface},
++    core::{ChainId, ClientInfo, ClientType, IbcInterface, Timestamp},
+     into_value,
+     module::{StateModuleInfo, StateModuleServer},
+     StateModule,
+@@ -132,7 +132,7 @@ impl Module {
+     /// Query the latest finalized timestamp of this chain.
+     // TODO: Use a better timestamp type here
+     #[instrument(skip_all, fields(chain_id = %self.chain_id))]
+-    pub async fn query_latest_timestamp(&self, e: &Extensions) -> RpcResult<i64> {
++    pub async fn query_latest_timestamp(&self, e: &Extensions) -> RpcResult<Timestamp> {
+         let latest_height = self.query_latest_height(e).await?;
+ 
+         match self
+@@ -145,7 +145,7 @@ impl Module {
+ 
+                 debug!(%timestamp, %latest_height, "latest timestamp");
+ 
+-                Ok(timestamp.try_into().unwrap())
++                Ok(Timestamp::from_nanos(timestamp).try_into().unwrap())
+             }
+             Err(err) => Err(ErrorObject::owned(
+                 -1,
+diff --git a/voyager/plugins/client-update/ethereum/src/main.rs b/voyager/plugins/client-update/ethereum/src/main.rs
+index 470fec559c6..c242fcb7dfc 100644
+--- a/voyager/plugins/client-update/ethereum/src/main.rs
++++ b/voyager/plugins/client-update/ethereum/src/main.rs
+@@ -32,7 +32,7 @@ use unionlabs::{
+ };
+ use voyager_message::{
+     call::{Call, FetchUpdateHeaders, WaitForTimestamp},
+-    core::{ChainId, ClientType},
++    core::{ChainId, ClientType, Timestamp},
+     data::{Data, DecodedHeaderMeta, OrderedHeaders},
+     hook::UpdateHook,
+     into_value,
+@@ -536,12 +536,10 @@ impl Module {
+             call(WaitForTimestamp {
+                 chain_id: counterparty_chain_id.clone(),
+                 // we wait for one more block just to be sure the counterparty's block time has caught up
+-                timestamp: i64::try_from(
++                timestamp: Timestamp::from_secs(
+                     (genesis.genesis_time + (last_update_signature_slot * spec.seconds_per_slot))
+                         + spec.seconds_per_slot,
+-                )
+-                .expect("if this fails good luck")
+-                    * NANOS_PER_SECOND as i64,
++                ),
+                 finalized: false,
+             }),
+             voyager_vm::data(OrderedHeaders {

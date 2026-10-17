@@ -1,0 +1,78 @@
+diff --git a/src/networking.c b/src/networking.c
+index a049936fa90..0723b903b1f 100644
+--- a/src/networking.c
++++ b/src/networking.c
+@@ -2764,24 +2764,27 @@ static void setProtocolError(const char *errstr, client *c) {
+         /* Sample some protocol to given an idea about what was inside. */
+         char buf[256];
+         buf[0] = '\0';
+-        if (c->querybuf && sdslen(c->querybuf) - c->qb_pos < PROTO_DUMP_LEN) {
+-            snprintf(buf, sizeof(buf), "Query buffer during protocol error: '%s'", c->querybuf + c->qb_pos);
+-        } else if (c->querybuf) {
+-            snprintf(buf, sizeof(buf), "Query buffer during protocol error: '%.*s' (... more %zu bytes ...) '%.*s'",
+-                     PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,
+-                     PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2);
+-        }
++        if (server.hide_user_data_from_log) {
++            snprintf(buf, sizeof(buf), "*redacted*");
++        } else {
++            if (c->querybuf && sdslen(c->querybuf) - c->qb_pos < PROTO_DUMP_LEN) {
++                snprintf(buf, sizeof(buf), "'%s'", c->querybuf + c->qb_pos);
++            } else if (c->querybuf) {
++                snprintf(buf, sizeof(buf), "'%.*s' (... more %zu bytes ...) '%.*s'",
++                         PROTO_DUMP_LEN / 2, c->querybuf + c->qb_pos, sdslen(c->querybuf) - c->qb_pos - PROTO_DUMP_LEN,
++                         PROTO_DUMP_LEN / 2, c->querybuf + sdslen(c->querybuf) - PROTO_DUMP_LEN / 2);
++            }
+ 
+-        /* Remove non printable chars. */
+-        char *p = buf;
+-        while (*p != '\0') {
+-            if (!isprint(*p)) *p = '.';
+-            p++;
++            /* Remove non printable chars. */
++            char *p = buf;
++            while (*p != '\0') {
++                if (!isprint(*p)) *p = '.';
++                p++;
++            }
+         }
+-
+         /* Log all the client and protocol info. */
+         int loglevel = (c->flag.primary) ? LL_WARNING : LL_VERBOSE;
+-        serverLog(loglevel, "Protocol error (%s) from client: %s. %s", errstr, client, buf);
++        serverLog(loglevel, "Protocol error (%s) from client: %s. Query buffer: %s", errstr, client, buf);
+         sdsfree(client);
+     }
+     c->flag.close_after_reply = 1;
+diff --git a/tests/integration/logging.tcl b/tests/integration/logging.tcl
+index 06b2e24e586..72636963c83 100644
+--- a/tests/integration/logging.tcl
++++ b/tests/integration/logging.tcl
+@@ -109,6 +109,27 @@ if {!$::valgrind} {
+             assert_equal "PONG" [r ping]
+         }
+     }
++
++    # test hide-user-data-from-log
++    set server_path [tmpdir server5.log]
++    start_server [list overrides [list dir $server_path crash-memcheck-enabled no hide-user-data-from-log no]] {
++        test "Config hide-user-data-from-log is off" {
++            r write "*3\r\n\$3\r\nSET\r\n\$1\r\nx\r\n\$blabla\r\n"
++            r flush
++            catch {r debug segfault}
++            wait_for_log_messages 0 {"*Query buffer: *\$blabla*"} 0 10 1000
++        }
++    }
++
++    set server_path [tmpdir server6.log]
++    start_server [list overrides [list dir $server_path crash-memcheck-enabled no hide-user-data-from-log yes]] {
++        test "Config hide-user-data-from-log is on" {
++            r write "*3\r\n\$3\r\nSET\r\n\$1\r\nx\r\n\$blabla\r\n"
++            r flush
++            catch {r debug segfault}
++            wait_for_log_messages 0 {"*Query buffer: *redacted*"} 0 10 1000
++        }
++    }
+ }
+ 
+ # test DEBUG ASSERT

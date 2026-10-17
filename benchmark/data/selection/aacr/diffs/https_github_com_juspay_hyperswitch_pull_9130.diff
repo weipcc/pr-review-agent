@@ -1,0 +1,265 @@
+diff --git a/config/config.example.toml b/config/config.example.toml
+index b69f959fbe3..cc3468029e4 100644
+--- a/config/config.example.toml
++++ b/config/config.example.toml
+@@ -475,7 +475,7 @@ force_cookies = true                 # Whether to use only cookies for JWT extra
+ #tokenization configuration which describe token lifetime and payment method for specific connector
+ [tokenization]
+ stripe = { long_lived_token = false, payment_method = "wallet", payment_method_type = { type = "disable_only", list = "google_pay" } }
+-checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization" }
++checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization",google_pay_pre_decrypt_flow = "network_tokenization" }
+ mollie = { long_lived_token = false, payment_method = "card" }
+ stax = { long_lived_token = true, payment_method = "card,bank_debit" }
+ square = { long_lived_token = false, payment_method = "card" }
+diff --git a/config/deployments/integration_test.toml b/config/deployments/integration_test.toml
+index fdcb7891f30..2d88a1b2739 100644
+--- a/config/deployments/integration_test.toml
++++ b/config/deployments/integration_test.toml
+@@ -853,7 +853,7 @@ redsys = { payment_method = "card" }
+ #tokenization configuration which describe token lifetime and payment method for specific connector
+ [tokenization]
+ braintree = { long_lived_token = false, payment_method = "card" }
+-checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization" }
++checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization", google_pay_pre_decrypt_flow = "network_tokenization" }
+ gocardless = { long_lived_token = true, payment_method = "bank_debit" }
+ hipay = { long_lived_token = false, payment_method = "card" }
+ mollie = { long_lived_token = false, payment_method = "card" }
+diff --git a/config/deployments/production.toml b/config/deployments/production.toml
+index 552a6ebb0ed..d3cbd02cc20 100644
+--- a/config/deployments/production.toml
++++ b/config/deployments/production.toml
+@@ -862,7 +862,7 @@ redsys = { payment_method = "card" }
+ #tokenization configuration which describe token lifetime and payment method for specific connector
+ [tokenization]
+ braintree = { long_lived_token = false, payment_method = "card" }
+-checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization" }
++checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization", google_pay_pre_decrypt_flow = "network_tokenization" }
+ gocardless = { long_lived_token = true, payment_method = "bank_debit" }
+ hipay = { long_lived_token = false, payment_method = "card" }
+ mollie = { long_lived_token = false, payment_method = "card" }
+diff --git a/config/deployments/sandbox.toml b/config/deployments/sandbox.toml
+index 520883d5558..7a006dd704b 100644
+--- a/config/deployments/sandbox.toml
++++ b/config/deployments/sandbox.toml
+@@ -868,7 +868,7 @@ redsys = { payment_method = "card" }
+ #tokenization configuration which describe token lifetime and payment method for specific connector
+ [tokenization]
+ braintree = { long_lived_token = false, payment_method = "card" }
+-checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization" }
++checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization", google_pay_pre_decrypt_flow = "network_tokenization" }
+ gocardless = { long_lived_token = true, payment_method = "bank_debit" }
+ hipay = { long_lived_token = false, payment_method = "card" }
+ mollie = { long_lived_token = false, payment_method = "card" }
+diff --git a/config/development.toml b/config/development.toml
+index 3bab0fc27bb..3d8aff0fc8c 100644
+--- a/config/development.toml
++++ b/config/development.toml
+@@ -996,7 +996,7 @@ apple_pay = {country = "AF,AX,AL,DZ,AS,AD,AO,AI,AQ,AG,AR,AM,AW,AU,AT,AZ,BS,BH,BD
+ 
+ [tokenization]
+ stripe = { long_lived_token = false, payment_method = "wallet", payment_method_type = { type = "disable_only", list = "google_pay" } }
+-checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization" }
++checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization", google_pay_pre_decrypt_flow = "network_tokenization"  }
+ stax = { long_lived_token = true, payment_method = "card,bank_debit" }
+ mollie = { long_lived_token = false, payment_method = "card" }
+ square = { long_lived_token = false, payment_method = "card" }
+diff --git a/config/docker_compose.toml b/config/docker_compose.toml
+index fa082b35522..75d67f4eb91 100644
+--- a/config/docker_compose.toml
++++ b/config/docker_compose.toml
+@@ -396,7 +396,7 @@ workers = 1
+ #tokenization configuration which describe token lifetime and payment method for specific connector
+ [tokenization]
+ stripe = { long_lived_token = false, payment_method = "wallet", payment_method_type = { type = "disable_only", list = "google_pay" } }
+-checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization" }
++checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization", google_pay_pre_decrypt_flow = "network_tokenization" }
+ mollie = { long_lived_token = false, payment_method = "card" }
+ stax = { long_lived_token = true, payment_method = "card,bank_debit" }
+ square = { long_lived_token = false, payment_method = "card" }
+diff --git a/crates/hyperswitch_connectors/src/connectors/checkout/transformers.rs b/crates/hyperswitch_connectors/src/connectors/checkout/transformers.rs
+index 42ff1d537d9..6754778539c 100644
+--- a/crates/hyperswitch_connectors/src/connectors/checkout/transformers.rs
++++ b/crates/hyperswitch_connectors/src/connectors/checkout/transformers.rs
+@@ -231,6 +231,19 @@ pub enum PaymentSource {
+     Wallets(WalletSource),
+     ApplePayPredecrypt(Box<ApplePayPredecrypt>),
+     MandatePayment(MandateSource),
++    GooglePayPredecrypt(Box<GooglePayPredecrypt>),
++}
++
++#[derive(Debug, Serialize)]
++pub struct GooglePayPredecrypt {
++    #[serde(rename = "type")]
++    _type: String,
++    token: cards::CardNumber,
++    token_type: String,
++    expiry_month: Secret<String>,
++    expiry_year: Secret<String>,
++    eci: String,
++    cryptogram: Option<Secret<String>>,
+ }
+ 
+ #[derive(Debug, Serialize)]
+@@ -453,25 +466,47 @@ impl TryFrom<&CheckoutRouterData<&PaymentsAuthorizeRouterData>> for PaymentsRequ
+             }
+             PaymentMethodData::Wallet(wallet_data) => match wallet_data {
+                 WalletData::GooglePay(_) => {
+-                    let p_source = PaymentSource::Wallets(WalletSource {
+-                        source_type: CheckoutSourceTypes::Token,
+-                        token: match item.router_data.get_payment_method_token()? {
+-                            PaymentMethodToken::Token(token) => token,
+-                            PaymentMethodToken::ApplePayDecrypt(_) => {
+-                                Err(unimplemented_payment_method!(
+-                                    "Apple Pay",
+-                                    "Simplified",
+-                                    "Checkout"
+-                                ))?
+-                            }
+-                            PaymentMethodToken::PazeDecrypt(_) => {
+-                                Err(unimplemented_payment_method!("Paze", "Checkout"))?
+-                            }
+-                            PaymentMethodToken::GooglePayDecrypt(_) => {
+-                                Err(unimplemented_payment_method!("Google Pay", "Checkout"))?
+-                            }
+-                        },
+-                    });
++                    let p_source = match item.router_data.get_payment_method_token()? {
++                        PaymentMethodToken::Token(token) => PaymentSource::Wallets(WalletSource {
++                            source_type: CheckoutSourceTypes::Token,
++                            token,
++                        }),
++                        PaymentMethodToken::ApplePayDecrypt(_) => Err(
++                            unimplemented_payment_method!("Apple Pay", "Simplified", "Checkout"),
++                        )?,
++                        PaymentMethodToken::PazeDecrypt(_) => {
++                            Err(unimplemented_payment_method!("Paze", "Checkout"))?
++                        }
++                        PaymentMethodToken::GooglePayDecrypt(google_pay_decrypted_data) => {
++                            let token = google_pay_decrypted_data
++                                .application_primary_account_number
++                                .clone();
++
++                            let expiry_month = google_pay_decrypted_data
++                                .get_expiry_month()
++                                .change_context(errors::ConnectorError::InvalidDataFormat {
++                                    field_name: "payment_method_data.card.card_exp_month",
++                                })?;
++
++                            let expiry_year = google_pay_decrypted_data
++                                .get_four_digit_expiry_year()
++                                .change_context(errors::ConnectorError::InvalidDataFormat {
++                                    field_name: "payment_method_data.card.card_exp_year",
++                                })?;
++
++                            let cryptogram = google_pay_decrypted_data.cryptogram.clone();
++
++                            PaymentSource::GooglePayPredecrypt(Box::new(GooglePayPredecrypt {
++                                _type: "network_token".to_string(),
++                                token,
++                                token_type: "googlepay".to_string(),
++                                expiry_month,
++                                expiry_year,
++                                eci: "06".to_string(),
++                                cryptogram,
++                            }))
++                        }
++                    };
+                     Ok((
+                         p_source,
+                         None,
+diff --git a/crates/router/src/configs/settings.rs b/crates/router/src/configs/settings.rs
+index 1923af66b35..223b5ae4cbf 100644
+--- a/crates/router/src/configs/settings.rs
++++ b/crates/router/src/configs/settings.rs
+@@ -638,6 +638,7 @@ pub struct PaymentMethodTokenFilter {
+     pub payment_method_type: Option<PaymentMethodTypeTokenFilter>,
+     pub long_lived_token: bool,
+     pub apple_pay_pre_decrypt_flow: Option<ApplePayPreDecryptFlow>,
++    pub google_pay_pre_decrypt_flow: Option<GooglePayPreDecryptFlow>,
+     pub flow: Option<PaymentFlow>,
+ }
+ 
+@@ -655,6 +656,14 @@ pub enum ApplePayPreDecryptFlow {
+     NetworkTokenization,
+ }
+ 
++#[derive(Debug, Deserialize, Clone, Default)]
++#[serde(deny_unknown_fields, rename_all = "snake_case")]
++pub enum GooglePayPreDecryptFlow {
++    #[default]
++    ConnectorTokenization,
++    NetworkTokenization,
++}
++
+ #[derive(Debug, Deserialize, Clone, Default)]
+ pub struct TempLockerEnablePaymentMethodFilter {
+     #[serde(deserialize_with = "deserialize_hashset")]
+diff --git a/crates/router/src/core/payments.rs b/crates/router/src/core/payments.rs
+index e04b790ab12..cf6a6852dcc 100644
+--- a/crates/router/src/core/payments.rs
++++ b/crates/router/src/core/payments.rs
+@@ -108,7 +108,9 @@ use crate::core::routing::helpers as routing_helpers;
+ #[cfg(all(feature = "v1", feature = "dynamic_routing"))]
+ use crate::types::api::convert_connector_data_to_routable_connectors;
+ use crate::{
+-    configs::settings::{ApplePayPreDecryptFlow, PaymentFlow, PaymentMethodTypeTokenFilter},
++    configs::settings::{
++        ApplePayPreDecryptFlow, GooglePayPreDecryptFlow, PaymentFlow, PaymentMethodTypeTokenFilter,
++    },
+     consts,
+     core::{
+         errors::{self, CustomResult, RouterResponse, RouterResult},
+@@ -6938,6 +6940,11 @@ fn is_payment_method_tokenization_enabled_for_connector(
+                     payment_method_token,
+                     connector_filter.apple_pay_pre_decrypt_flow.clone(),
+                 )
++                && is_google_pay_pre_decrypt_type_connector_tokenization(
++                    payment_method_type,
++                    payment_method_token,
++                    connector_filter.google_pay_pre_decrypt_flow.clone(),
++                )
+                 && is_payment_flow_allowed_for_connector(
+                     mandate_flow_enabled,
+                     connector_filter.flow.clone(),
+@@ -6978,6 +6985,28 @@ fn is_apple_pay_pre_decrypt_type_connector_tokenization(
+     }
+ }
+ 
++fn is_google_pay_pre_decrypt_type_connector_tokenization(
++    payment_method_type: Option<storage::enums::PaymentMethodType>,
++    payment_method_token: Option<&PaymentMethodToken>,
++    google_pay_pre_decrypt_flow_filter: Option<GooglePayPreDecryptFlow>,
++) -> bool {
++    if let (
++        Some(storage::enums::PaymentMethodType::GooglePay),
++        Some(PaymentMethodToken::GooglePayDecrypt(..)),
++    ) = (payment_method_type, payment_method_token)
++    {
++        !matches!(
++            google_pay_pre_decrypt_flow_filter,
++            Some(GooglePayPreDecryptFlow::NetworkTokenization)
++        )
++    } else {
++        // Always return true for non–Google Pay pre-decrypt cases,
++        // because the filter is only relevant for Google Pay pre-decrypt tokenization.
++        // Returning true ensures that other payment methods or token types are not blocked.
++        true
++    }
++}
++
+ fn decide_apple_pay_flow(
+     state: &SessionState,
+     payment_method_type: Option<enums::PaymentMethodType>,
+diff --git a/loadtest/config/development.toml b/loadtest/config/development.toml
+index 5818cee9519..33b93cc2b73 100644
+--- a/loadtest/config/development.toml
++++ b/loadtest/config/development.toml
+@@ -691,7 +691,7 @@ apple_pay = {country = "AF,AX,AL,DZ,AS,AD,AO,AI,AQ,AG,AR,AM,AW,AU,AT,AZ,BS,BH,BD
+ #tokenization configuration which describe token lifetime and payment method for specific connector
+ [tokenization]
+ stripe = { long_lived_token = false, payment_method = "wallet", payment_method_type = { type = "disable_only", list = "google_pay" } }
+-checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization" }
++checkout = { long_lived_token = false, payment_method = "wallet", apple_pay_pre_decrypt_flow = "network_tokenization", google_pay_pre_decrypt_flow = "network_tokenization" }
+ mollie = { long_lived_token = false, payment_method = "card" }
+ braintree = { long_lived_token = false, payment_method = "card" }
+ gocardless = { long_lived_token = true, payment_method = "bank_debit" }

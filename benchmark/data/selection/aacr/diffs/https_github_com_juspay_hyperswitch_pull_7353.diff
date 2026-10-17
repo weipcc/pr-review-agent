@@ -1,0 +1,259 @@
+diff --git a/crates/api_models/src/admin.rs b/crates/api_models/src/admin.rs
+index ae66147b104..ffbbdeb351e 100644
+--- a/crates/api_models/src/admin.rs
++++ b/crates/api_models/src/admin.rs
+@@ -14,7 +14,6 @@ use common_utils::{crypto::OptionalEncryptableName, ext_traits::ValueExt};
+ use masking::ExposeInterface;
+ use masking::{PeekInterface, Secret};
+ use serde::{Deserialize, Serialize};
+-use url;
+ use utoipa::ToSchema;
+ 
+ use super::payments::AddressDetails;
+diff --git a/crates/api_models/src/events/payment.rs b/crates/api_models/src/events/payment.rs
+index a6b2c53d282..76d1201c2e7 100644
+--- a/crates/api_models/src/events/payment.rs
++++ b/crates/api_models/src/events/payment.rs
+@@ -5,34 +5,28 @@ use super::{
+     PaymentStartRedirectionRequest, PaymentsCreateIntentRequest, PaymentsGetIntentRequest,
+     PaymentsIntentResponse, PaymentsRequest,
+ };
+-#[cfg(all(
+-    any(feature = "v2", feature = "v1"),
+-    not(feature = "payment_methods_v2")
+-))]
+-use crate::payment_methods::CustomerPaymentMethodsListResponse;
+ #[cfg(feature = "v1")]
+-use crate::payments::{PaymentListFilterConstraints, PaymentListResponseV2};
+-#[cfg(all(feature = "v2", feature = "payment_methods_v2"))]
+-use crate::{events, payment_methods::CustomerPaymentMethodsListResponse};
++use crate::payments::{
++    ExtendedCardInfoResponse, PaymentIdType, PaymentListFilterConstraints, PaymentListResponseV2,
++    PaymentsApproveRequest, PaymentsCancelRequest, PaymentsCaptureRequest,
++    PaymentsCompleteAuthorizeRequest, PaymentsDynamicTaxCalculationRequest,
++    PaymentsDynamicTaxCalculationResponse, PaymentsExternalAuthenticationRequest,
++    PaymentsExternalAuthenticationResponse, PaymentsIncrementalAuthorizationRequest,
++    PaymentsManualUpdateRequest, PaymentsManualUpdateResponse, PaymentsPostSessionTokensRequest,
++    PaymentsPostSessionTokensResponse, PaymentsRejectRequest, PaymentsRetrieveRequest,
++    PaymentsStartRequest, PaymentsUpdateMetadataRequest, PaymentsUpdateMetadataResponse,
++};
+ use crate::{
+     payment_methods::{
+         self, ListCountriesCurrenciesRequest, ListCountriesCurrenciesResponse,
+         PaymentMethodCollectLinkRenderRequest, PaymentMethodCollectLinkRequest,
+-        PaymentMethodCollectLinkResponse, PaymentMethodDeleteResponse, PaymentMethodListRequest,
+-        PaymentMethodListResponse, PaymentMethodMigrateResponse, PaymentMethodResponse,
+-        PaymentMethodUpdate,
++        PaymentMethodCollectLinkResponse, PaymentMethodListRequest, PaymentMethodListResponse,
++        PaymentMethodMigrateResponse, PaymentMethodResponse, PaymentMethodUpdate,
+     },
+     payments::{
+-        self, ExtendedCardInfoResponse, PaymentIdType, PaymentListConstraints, PaymentListFilters,
+-        PaymentListFiltersV2, PaymentListResponse, PaymentsAggregateResponse,
+-        PaymentsApproveRequest, PaymentsCancelRequest, PaymentsCaptureRequest,
+-        PaymentsCompleteAuthorizeRequest, PaymentsDynamicTaxCalculationRequest,
+-        PaymentsDynamicTaxCalculationResponse, PaymentsExternalAuthenticationRequest,
+-        PaymentsExternalAuthenticationResponse, PaymentsIncrementalAuthorizationRequest,
+-        PaymentsManualUpdateRequest, PaymentsManualUpdateResponse,
+-        PaymentsPostSessionTokensRequest, PaymentsPostSessionTokensResponse, PaymentsRejectRequest,
+-        PaymentsRetrieveRequest, PaymentsSessionResponse, PaymentsStartRequest,
+-        PaymentsUpdateMetadataRequest, PaymentsUpdateMetadataResponse, RedirectionResponse,
++        self, PaymentListConstraints, PaymentListFilters, PaymentListFiltersV2,
++        PaymentListResponse, PaymentsAggregateResponse, PaymentsSessionResponse,
++        RedirectionResponse,
+     },
+ };
+ 
+@@ -272,7 +266,7 @@ impl ApiEventMetric for payment_methods::DefaultPaymentMethod {
+ }
+ 
+ #[cfg(feature = "v2")]
+-impl ApiEventMetric for PaymentMethodDeleteResponse {
++impl ApiEventMetric for payment_methods::PaymentMethodDeleteResponse {
+     fn get_api_event_type(&self) -> Option<ApiEventsType> {
+         Some(ApiEventsType::PaymentMethod {
+             payment_method_id: self.id.clone(),
+@@ -283,7 +277,7 @@ impl ApiEventMetric for PaymentMethodDeleteResponse {
+ }
+ 
+ #[cfg(feature = "v1")]
+-impl ApiEventMetric for PaymentMethodDeleteResponse {
++impl ApiEventMetric for payment_methods::PaymentMethodDeleteResponse {
+     fn get_api_event_type(&self) -> Option<ApiEventsType> {
+         Some(ApiEventsType::PaymentMethod {
+             payment_method_id: self.payment_method_id.clone(),
+@@ -293,7 +287,7 @@ impl ApiEventMetric for PaymentMethodDeleteResponse {
+     }
+ }
+ 
+-impl ApiEventMetric for CustomerPaymentMethodsListResponse {}
++impl ApiEventMetric for payment_methods::CustomerPaymentMethodsListResponse {}
+ 
+ impl ApiEventMetric for PaymentMethodListRequest {
+     fn get_api_event_type(&self) -> Option<ApiEventsType> {
+diff --git a/crates/api_models/src/events/refund.rs b/crates/api_models/src/events/refund.rs
+index 888918d836e..14e1984a760 100644
+--- a/crates/api_models/src/events/refund.rs
++++ b/crates/api_models/src/events/refund.rs
+@@ -1,13 +1,12 @@
+ use common_utils::events::{ApiEventMetric, ApiEventsType};
+ 
++use crate::refunds::{
++    self, RefundAggregateResponse, RefundListFilters, RefundListMetaData, RefundListRequest,
++    RefundListResponse,
++};
+ #[cfg(feature = "v1")]
+-use crate::refunds::RefundRequest;
+-#[cfg(feature = "v2")]
+-use crate::refunds::RefundsCreateRequest;
+ use crate::refunds::{
+-    RefundAggregateResponse, RefundListFilters, RefundListMetaData, RefundListRequest,
+-    RefundListResponse, RefundManualUpdateRequest, RefundResponse, RefundUpdateRequest,
+-    RefundsRetrieveRequest,
++    RefundManualUpdateRequest, RefundRequest, RefundUpdateRequest, RefundsRetrieveRequest,
+ };
+ 
+ #[cfg(feature = "v1")]
+@@ -24,14 +23,14 @@ impl ApiEventMetric for RefundRequest {
+ }
+ 
+ #[cfg(feature = "v2")]
+-impl ApiEventMetric for RefundsCreateRequest {
++impl ApiEventMetric for refunds::RefundsCreateRequest {
+     fn get_api_event_type(&self) -> Option<ApiEventsType> {
+         None
+     }
+ }
+ 
+ #[cfg(feature = "v1")]
+-impl ApiEventMetric for RefundResponse {
++impl ApiEventMetric for refunds::RefundResponse {
+     fn get_api_event_type(&self) -> Option<ApiEventsType> {
+         Some(ApiEventsType::Refund {
+             payment_id: Some(self.payment_id.clone()),
+@@ -41,7 +40,7 @@ impl ApiEventMetric for RefundResponse {
+ }
+ 
+ #[cfg(feature = "v2")]
+-impl ApiEventMetric for RefundResponse {
++impl ApiEventMetric for refunds::RefundResponse {
+     fn get_api_event_type(&self) -> Option<ApiEventsType> {
+         Some(ApiEventsType::Refund {
+             payment_id: self.payment_id.clone(),
+diff --git a/crates/api_models/src/payment_methods.rs b/crates/api_models/src/payment_methods.rs
+index 4313d224019..0f53776e644 100644
+--- a/crates/api_models/src/payment_methods.rs
++++ b/crates/api_models/src/payment_methods.rs
+@@ -3,18 +3,16 @@ use std::collections::{HashMap, HashSet};
+ use std::str::FromStr;
+ 
+ use cards::CardNumber;
++#[cfg(feature = "v1")]
++use common_utils::crypto::OptionalEncryptableName;
+ use common_utils::{
+     consts::SURCHARGE_PERCENTAGE_PRECISION_LENGTH,
+-    crypto::OptionalEncryptableName,
+     errors,
+     ext_traits::OptionExt,
+     id_type, link_utils, pii,
+     types::{MinorUnit, Percentage, Surcharge},
+ };
+-#[cfg(all(any(feature = "v1", feature = "v2"), not(feature = "customer_v2")))]
+ use masking::PeekInterface;
+-#[cfg(all(feature = "v2", feature = "payment_methods_v2"))]
+-use masking::{ExposeInterface, PeekInterface};
+ use serde::de;
+ use utoipa::{schema, ToSchema};
+ 
+@@ -2430,6 +2428,10 @@ pub enum MigrationStatus {
+     Failed,
+ }
+ 
++#[cfg(all(
++    any(feature = "v2", feature = "v1"),
++    not(feature = "payment_methods_v2")
++))]
+ type PaymentMethodMigrationResponseType = (
+     Result<PaymentMethodMigrateResponse, String>,
+     PaymentMethodRecord,
+diff --git a/crates/api_models/src/payments.rs b/crates/api_models/src/payments.rs
+index 011fd7e4431..29b0c050b67 100644
+--- a/crates/api_models/src/payments.rs
++++ b/crates/api_models/src/payments.rs
+@@ -1,6 +1,7 @@
++#[cfg(feature = "v1")]
++use std::fmt;
+ use std::{
+     collections::{HashMap, HashSet},
+-    fmt,
+     num::NonZeroI64,
+ };
+ pub mod additional_info;
+@@ -9,6 +10,7 @@ use cards::CardNumber;
+ #[cfg(feature = "v2")]
+ use common_enums::enums::PaymentConnectorTransmission;
+ use common_enums::ProductType;
++#[cfg(feature = "v1")]
+ use common_types::primitive_wrappers::{
+     ExtendedAuthorizationAppliedBool, RequestExtendedAuthorizationBool,
+ };
+@@ -25,24 +27,25 @@ use common_utils::{
+ use error_stack::ResultExt;
+ use masking::{PeekInterface, Secret, WithType};
+ use router_derive::Setter;
+-use serde::{de, ser::Serializer, Deserialize, Deserializer, Serialize};
++#[cfg(feature = "v1")]
++use serde::{de, Deserializer};
++use serde::{ser::Serializer, Deserialize, Serialize};
+ use strum::Display;
+ use time::{Date, PrimitiveDateTime};
+ use url::Url;
+ use utoipa::ToSchema;
+ 
+-#[cfg(feature = "v1")]
+-use crate::ephemeral_key::EphemeralKeyCreateResponse;
+ #[cfg(feature = "v2")]
+-use crate::mandates::ProcessorPaymentToken;
++use crate::mandates;
+ #[cfg(feature = "v2")]
+ use crate::payment_methods;
+ use crate::{
+     admin::{self, MerchantConnectorInfo},
+-    disputes, enums as api_enums,
++    enums as api_enums,
+     mandates::RecurringDetails,
+-    refunds, ValidateFieldAndGet,
+ };
++#[cfg(feature = "v1")]
++use crate::{disputes, ephemeral_key::EphemeralKeyCreateResponse, refunds, ValidateFieldAndGet};
+ 
+ #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+ pub enum PaymentOp {
+@@ -5304,7 +5307,7 @@ pub struct ProxyPaymentsRequest {
+ 
+     pub amount: AmountDetails,
+ 
+-    pub recurring_details: ProcessorPaymentToken,
++    pub recurring_details: mandates::ProcessorPaymentToken,
+ 
+     pub shipping: Option<Address>,
+ 
+@@ -7779,6 +7782,7 @@ mod payment_id_type {
+         deserializer.deserialize_any(PaymentIdVisitor)
+     }
+ 
++    #[allow(dead_code)]
+     pub(crate) fn deserialize_option<'a, D>(
+         deserializer: D,
+     ) -> Result<Option<PaymentIdType>, D::Error>
+@@ -8576,8 +8580,8 @@ impl PaymentRevenueRecoveryMetadata {
+     ) {
+         self.payment_connector_transmission = Some(payment_connector_transmission);
+     }
+-    pub fn get_payment_token_for_api_request(&self) -> ProcessorPaymentToken {
+-        ProcessorPaymentToken {
++    pub fn get_payment_token_for_api_request(&self) -> mandates::ProcessorPaymentToken {
++        mandates::ProcessorPaymentToken {
+             processor_payment_token: self
+                 .billing_connector_payment_details
+                 .payment_processor_token

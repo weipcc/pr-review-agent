@@ -1,0 +1,371 @@
+diff --git a/plugins/org.jkiss.dbeaver.ext.hana/OSGI-INF/l10n/bundle.properties b/plugins/org.jkiss.dbeaver.ext.hana/OSGI-INF/l10n/bundle.properties
+index 28224f4029aee..91480f1f29c8d 100644
+--- a/plugins/org.jkiss.dbeaver.ext.hana/OSGI-INF/l10n/bundle.properties
++++ b/plugins/org.jkiss.dbeaver.ext.hana/OSGI-INF/l10n/bundle.properties
+@@ -35,6 +35,19 @@ meta.org.jkiss.dbeaver.ext.hana.model.HANATrigger.createTime.name = Create Time
+ meta.org.jkiss.dbeaver.ext.hana.model.HANATrigger.enabled.name = Enabled
+ meta.org.jkiss.dbeaver.ext.hana.model.HANATrigger.valid.name = Valid
+ 
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.partId.name                 = Part ID
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.recordCount.name            = Record Count
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.rangeStart.name             = Range Start
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.rangeEnd.name               = Range End
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.totalSize.name              = Total Size
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.mainSize.name               = Main Size
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.deltaSize.name              = Delta Size
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.creationTime.name           = Create Time
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.lastDeltaMerge.name         = Last delta merge
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.lastLogReplay.name          = Last log replay
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.loaded.name                 = Loaded
++meta.org.jkiss.dbeaver.ext.hana.model.HANAPartition.loadUnit.name               = Load Unit
++
+ tree.column.node.name              = Column
+ tree.columns.node.name             = Columns
+ tree.dataType.node.name            = Data Type
+@@ -52,6 +65,7 @@ tree.index_columns.node.name       = Index columns
+ tree.indexes.node.name             = Indexes
+ tree.inplace_table_types.node.name = Inplace Table Types
+ tree.inplace_table_type.node.name  = Inplace Table Type
++tree.partitions.node.name          = Partitions
+ tree.procedure.node.name           = Procedure
+ tree.procedure_columns.node.name   = Procedure parameters
+ tree.procedures.node.name          = Procedures
+diff --git a/plugins/org.jkiss.dbeaver.ext.hana/plugin.xml b/plugins/org.jkiss.dbeaver.ext.hana/plugin.xml
+index 6b5b2fe2f4cf8..897458e5a369c 100644
+--- a/plugins/org.jkiss.dbeaver.ext.hana/plugin.xml
++++ b/plugins/org.jkiss.dbeaver.ext.hana/plugin.xml
+@@ -38,6 +38,9 @@
+                                     <items label="%tree.index.node.name" path="index" property="indexes" icon="#index">
+                                         <items label="%tree.index_columns.node.name" path="column" property="attributeReferences" icon="#column" navigable="false" inline="true"/>
+                                     </items>
++                                </folder>                                
++                                <folder type="org.jkiss.dbeaver.ext.hana.model.HANAPartition" label="%tree.partitions.node.name" icon="#partitions">
++                                    <items label="%tree.partitions.node.name" path="partition" property="partitions" icon="#partition"/>
+                                 </folder>
+                                 <folder label="%tree.references.node.name" icon="#references" virtual="true">
+                                     <items label="%tree.reference.node.name" path="reference" property="references" icon="#reference" virtual="true">
+diff --git a/plugins/org.jkiss.dbeaver.ext.hana/src/org/jkiss/dbeaver/ext/hana/model/HANANotPartitionedTable.java b/plugins/org.jkiss.dbeaver.ext.hana/src/org/jkiss/dbeaver/ext/hana/model/HANANotPartitionedTable.java
+new file mode 100644
+index 0000000000000..4f7a18fb2ae0f
+--- /dev/null
++++ b/plugins/org.jkiss.dbeaver.ext.hana/src/org/jkiss/dbeaver/ext/hana/model/HANANotPartitionedTable.java
+@@ -0,0 +1,27 @@
++/*
++ * DBeaver - Universal Database Manager
++ * Copyright (C) 2010-2024 DBeaver Corp and others
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.jkiss.dbeaver.ext.hana.model;
++
++import org.jkiss.dbeaver.model.meta.IPropertyValueValidator;
++
++public class HANANotPartitionedTable implements IPropertyValueValidator<HANATable, Object> {
++
++    @Override
++    public boolean isValidValue(HANATable object, Object value) throws IllegalArgumentException {
++        return !(object instanceof HANAPartition);
++    }
++}
+diff --git a/plugins/org.jkiss.dbeaver.ext.hana/src/org/jkiss/dbeaver/ext/hana/model/HANAPartition.java b/plugins/org.jkiss.dbeaver.ext.hana/src/org/jkiss/dbeaver/ext/hana/model/HANAPartition.java
+new file mode 100644
+index 0000000000000..473a31b95a19f
+--- /dev/null
++++ b/plugins/org.jkiss.dbeaver.ext.hana/src/org/jkiss/dbeaver/ext/hana/model/HANAPartition.java
+@@ -0,0 +1,181 @@
++/*
++ * DBeaver - Universal Database Manager
++ * Copyright (C) 2010-2024 DBeaver Corp and others
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.jkiss.dbeaver.ext.hana.model;
++
++import org.jkiss.code.NotNull;
++import org.jkiss.code.Nullable;
++import org.jkiss.dbeaver.model.exec.jdbc.JDBCResultSet;
++import org.jkiss.dbeaver.model.impl.jdbc.JDBCUtils;
++import org.jkiss.dbeaver.model.meta.Property;
++import org.jkiss.dbeaver.model.struct.rdb.DBSTable;
++import org.jkiss.dbeaver.model.struct.rdb.DBSTablePartition;
++import org.jkiss.dbeaver.model.impl.jdbc.cache.JDBCObjectCache;
++import org.jkiss.dbeaver.model.meta.IPropertyValueListProvider;
++import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
++import org.jkiss.dbeaver.model.struct.DBSObject;
++import org.jkiss.dbeaver.ext.generic.model.GenericSchema;
++import org.jkiss.dbeaver.ext.generic.model.GenericStructContainer;
++import org.jkiss.dbeaver.ext.generic.model.GenericTable;
++import org.jkiss.dbeaver.model.DBPEvaluationContext;
++import org.jkiss.dbeaver.model.DBUtils;
++import org.jkiss.dbeaver.model.exec.jdbc.JDBCPreparedStatement;
++import org.jkiss.dbeaver.model.exec.jdbc.JDBCSession;
++import org.jkiss.dbeaver.model.exec.jdbc.JDBCStatement;
++import org.jkiss.dbeaver.model.preferences.DBPPropertySource;
++import org.jkiss.utils.CommonUtils;
++import org.jkiss.utils.ByteNumberFormat;
++import java.sql.Timestamp;
++import java.math.BigDecimal;
++
++public class HANAPartition extends HANATable implements DBSTablePartition {
++
++    private final HANATable parentTable;
++    private int partId;
++    private int recordCount;
++    private String rangeStart;
++    private String rangeEnd;
++    private BigDecimal totalSize;
++    private BigDecimal mainSize;
++    private BigDecimal deltaSize;
++    private Timestamp creationTime;
++    private Timestamp lastDeltaMerge;
++    private Timestamp lastLogReplay;
++    private String loaded;
++    private String loadUnit;
++
++    public HANAPartition(
++        @NotNull HANATable table,
++        @NotNull int partId,
++        @NotNull JDBCResultSet dbResult
++    ) {
++        super(table.getContainer(), String.valueOf(partId), table.getTableType(), dbResult);
++        this.partId = partId;
++        this.parentTable = table;
++
++        this.recordCount = JDBCUtils.safeGetInt(dbResult, "RECORD_COUNT");
++        this.rangeStart = JDBCUtils.safeGetString(dbResult, "LEVEL_1_RANGE_MIN_VALUE");
++        this.rangeEnd = JDBCUtils.safeGetString(dbResult, "LEVEL_1_RANGE_MAX_VALUE");
++        if (CommonUtils.isEmpty(this.rangeStart)) {
++            this.rangeStart = JDBCUtils.safeGetString(dbResult, "LEVEL_2_RANGE_MIN_VALUE");
++            this.rangeEnd = JDBCUtils.safeGetString(dbResult, "LEVEL_2_RANGE_MAX_VALUE");
++        }
++        if (CommonUtils.isEmpty(this.rangeStart)) {
++            this.rangeStart = JDBCUtils.safeGetString(dbResult, "LEVEL_3_RANGE_MIN_VALUE");
++            this.rangeEnd = JDBCUtils.safeGetString(dbResult, "LEVEL_3_RANGE_MAX_VALUE");
++        }
++
++        this.totalSize = JDBCUtils.safeGetBigDecimal(dbResult, "MEMORY_SIZE_IN_TOTAL");
++        this.mainSize = JDBCUtils.safeGetBigDecimal(dbResult, "MEMORY_SIZE_IN_MAIN");
++        this.deltaSize = JDBCUtils.safeGetBigDecimal(dbResult, "MEMORY_SIZE_IN_DELTA");        
++        this.creationTime = JDBCUtils.safeGetTimestamp(dbResult, "CREATE_TIME");
++        this.lastDeltaMerge = JDBCUtils.safeGetTimestamp(dbResult, "LAST_MERGE_TIME");
++        this.lastLogReplay = JDBCUtils.safeGetTimestamp(dbResult, "LAST_REPLAY_LOG_TIME");
++        this.loaded = JDBCUtils.safeGetString(dbResult, "LOADED");
++        this.loadUnit = JDBCUtils.safeGetString(dbResult, "LOAD_UNIT");
++    }
++
++    @Property(viewable = true, order = 10)
++    public int getPartId() {
++        return partId;
++    }
++
++    @Property(viewable = true, order = 30)
++    public String getRangeStart() {
++        return rangeStart;
++    }
++
++    @Property(viewable = true, order = 35)
++    public String getRangeEnd() {
++        return rangeEnd;
++    }
++
++    @Property(viewable = true, order = 40)
++    public int getRecordCount() {
++        return recordCount;
++    }
++
++    @Property(viewable = true, order = 45, formatter = ByteNumberFormat.class)
++    public BigDecimal getTotalSize() {
++        return totalSize;
++    }
++
++    @Property(viewable = true, order = 50, formatter = ByteNumberFormat.class)
++    public BigDecimal getMainSize() {
++        return mainSize;
++    }
++
++    @Property(viewable = true, order = 55, formatter = ByteNumberFormat.class)
++    public BigDecimal getDeltaSize() {
++        return deltaSize;
++    }
++
++    @Property(viewable = true, order = 60)
++    public Timestamp getCreationTime() {
++        return creationTime;
++    }
++
++    @Property(viewable = true, order = 65)
++    public Timestamp getLastDeltaMerge() {
++        return lastDeltaMerge;
++    }
++
++    @Property(viewable = true, order = 70)
++    public Timestamp getLastLogReplay() {
++        return lastLogReplay;
++    }
++
++    @Property(viewable = true, order = 75)
++    public String getLoaded() {
++        return loaded;
++    }
++
++    @Property(viewable = true, order = 80)
++    public String getLoadUnit() {
++        return loadUnit;
++    }
++
++    @Override
++    public boolean hasStatistics() {
++        return false;
++    }
++
++    @Override
++    public long getStatObjectSize() {
++        return 0;
++    }    
++
++    @Nullable
++    public DBPPropertySource getStatProperties() {
++        return null;
++    }
++
++    @Override 
++    public DBSTable getParentTable() {
++        return this.parentTable;
++    }
++
++    @Override 
++    public boolean isSubPartition() {
++        return false;
++    }
++    
++    @Override 
++    public DBSTablePartition getPartitionParent() {
++        return null;
++    }
++
++}
+diff --git a/plugins/org.jkiss.dbeaver.ext.hana/src/org/jkiss/dbeaver/ext/hana/model/HANATable.java b/plugins/org.jkiss.dbeaver.ext.hana/src/org/jkiss/dbeaver/ext/hana/model/HANATable.java
+index f6945650d9061..310d3d69651aa 100644
+--- a/plugins/org.jkiss.dbeaver.ext.hana/src/org/jkiss/dbeaver/ext/hana/model/HANATable.java
++++ b/plugins/org.jkiss.dbeaver.ext.hana/src/org/jkiss/dbeaver/ext/hana/model/HANATable.java
+@@ -21,20 +21,29 @@
+ import org.jkiss.dbeaver.DBException;
+ import org.jkiss.dbeaver.ext.generic.model.GenericStructContainer;
+ import org.jkiss.dbeaver.ext.generic.model.GenericTable;
++import org.jkiss.dbeaver.ext.generic.model.GenericSchema;
+ import org.jkiss.dbeaver.model.DBConstants;
+ import org.jkiss.dbeaver.model.DBPObjectStatistics;
+-import org.jkiss.dbeaver.model.exec.jdbc.JDBCResultSet;
+ import org.jkiss.dbeaver.model.meta.Property;
+ import org.jkiss.dbeaver.model.preferences.DBPPropertySource;
+ import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
+ import org.jkiss.dbeaver.model.struct.DBSObject;
++import org.jkiss.dbeaver.model.impl.jdbc.cache.JDBCObjectCache;
++import org.jkiss.dbeaver.model.exec.jdbc.JDBCPreparedStatement;
++import org.jkiss.dbeaver.model.exec.jdbc.JDBCStatement;
++import org.jkiss.dbeaver.model.exec.jdbc.JDBCResultSet;
++import org.jkiss.dbeaver.model.exec.jdbc.JDBCSession;
++import org.jkiss.dbeaver.model.impl.jdbc.JDBCUtils;
+ import org.jkiss.utils.ByteNumberFormat;
++import org.jkiss.utils.CommonUtils;
+ 
+ import java.sql.SQLException;
++import java.util.Collection;
+ import java.util.List;
+ 
+ public class HANATable extends GenericTable implements DBPObjectStatistics {
+ 
++    private final PartitionCache partitionCache = new PartitionCache();
+     private long tableSize = -1;
+ 
+     public HANATable(
+@@ -58,6 +67,32 @@ public HANATableColumn getAttribute(@NotNull DBRProgressMonitor monitor, @NotNul
+         return (HANATableColumn) super.getAttribute(monitor, attributeName);
+     }
+ 
++    @NotNull
++    @Override
++    @Property(viewable = true, order = 1, visibleIf = HANANotPartitionedTable.class)
++    public String getName() {
++        return super.getName();
++    }
++
++    @Override
++    @Property(viewable = true, order = 2, visibleIf = HANANotPartitionedTable.class)
++    public String getTableType() {
++        return super.getTableType();
++    }
++
++    @Override
++    @NotNull
++    @Property(viewable = true, order = 3, visibleIf = HANANotPartitionedTable.class)
++    public GenericSchema getSchema() {
++        return super.getSchema();
++    }
++
++    @Override
++    @Property(viewable = true, order = 13, visibleIf = HANANotPartitionedTable.class)
++    public String getDescription() {
++        return super.getDescription();
++    }
++
+     @Override
+     public boolean hasStatistics() {
+         return tableSize != -1;
+@@ -94,4 +129,36 @@ public DBSObject refreshObject(@NotNull DBRProgressMonitor monitor) throws DBExc
+     public DBPPropertySource getStatProperties() {
+         return null;
+     }
++
++    @NotNull
++    public Collection<HANAPartition> getPartitions(@NotNull DBRProgressMonitor monitor) throws DBException {
++        return partitionCache.getAllObjects(monitor, this);
++    }
++
++    private static class PartitionCache extends JDBCObjectCache<HANATable, HANAPartition> {
++
++        @Override
++        protected JDBCStatement prepareObjectsStatement(@NotNull JDBCSession session, @NotNull HANATable table) throws SQLException {
++            final JDBCPreparedStatement dbStat = session.prepareStatement("SELECT tp.*, "
++            + "\nMEMORY_SIZE_IN_TOTAL, RECORD_COUNT, MEMORY_SIZE_IN_MAIN, MEMORY_SIZE_IN_DELTA, CREATE_TIME, LAST_MERGE_TIME, LAST_REPLAY_LOG_TIME, LOADED"
++            + "\nFROM M_CS_TABLES mcs JOIN TABLE_PARTITIONS tp ON mcs.SCHEMA_NAME=tp.SCHEMA_NAME AND mcs.TABLE_NAME=tp.TABLE_NAME AND mcs.PART_ID=tp.PART_ID"
++            + "\nWHERE tp.TABLE_NAME = ? AND tp.SCHEMA_NAME = ? ORDER BY tp.PART_ID");
++            dbStat.setString(1, table.getName());
++            dbStat.setString(2, table.getContainer().getName());
++            return dbStat;
++        }
++
++        @Override
++        protected HANAPartition fetchObject(
++            @NotNull JDBCSession session,
++            @NotNull HANATable table,
++            @NotNull JDBCResultSet dbResult
++        ) throws SQLException, DBException {
++            int partition_id = JDBCUtils.safeGetInt(dbResult, "PART_ID");
++            if (dbResult == null) {
++                return null;
++            }
++            return new HANAPartition(table, partition_id, dbResult);
++        }
++    }
+ }

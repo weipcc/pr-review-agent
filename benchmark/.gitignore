@@ -1,0 +1,11 @@
+# local-only: virtualenv, caches, logs, large or superseded data
+_final_venv/
+__pycache__/
+*.log
+data/test_split.jsonl
+data/samples_*.jsonl
+data/selection/qodo/
+results/main/
+results/smoke/
+results/pr_eval/
+results/version_compare/

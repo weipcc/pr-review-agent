@@ -1,0 +1,28 @@
+{
+ "owner": "laravel",
+ "repo": "framework",
+ "full": "laravel/framework",
+ "pr_number": 56591,
+ "title": "[12.x] Normalize file path separators in `make:migration` command on Windows",
+ "body": "This PR adds path normalization to the `make:migration` command by replacing forward slashes with backslashes on Windows.\r\n\r\n## Why?\r\nCurrently, the `make:migration` command in Laravel generates migration file paths using mixed directory separators on Windows systems.\r\nThis differs from other `make:` commands that extend the `src/Illuminate/Console/GeneratorCommand.php` class, which normalize paths by replacing forward slashes with backslashes on Windows:\r\n\r\nhttps://github.com/laravel/framework/blob/12.x/src/Illuminate/Console/GeneratorCommand.php#L189\r\n\r\n## Changes\r\nBefore:\r\n```shell\r\nINFO  Migration [C:\\path\\to\\project\\database\\migrations/2025_08_08_083902_test.php] created successfully.  \r\n```\r\n\r\nAfter:\r\n```shell\r\nINFO  Migration [C:\\path\\to\\project\\database\\migrations\\2025_08_08_083902_test.php] created successfully.  \r\n```",
+ "base_sha": "6d94b16fd5f4f72bb741f9b900b83179c8ab46c9",
+ "review_sha": "0a5238acfc4ca99c363283bf3bb16e20905f2a39",
+ "head_now": "0a5238acfc4ca99c363283bf3bb16e20905f2a39",
+ "raw_diff": "diff --git a/src/Illuminate/Database/Console/Migrations/MigrateMakeCommand.php b/src/Illuminate/Database/Console/Migrations/MigrateMakeCommand.php\nindex c9494c5d5c44..ac5077f58d79 100644\n--- a/src/Illuminate/Database/Console/Migrations/MigrateMakeCommand.php\n+++ b/src/Illuminate/Database/Console/Migrations/MigrateMakeCommand.php\n@@ -112,6 +112,10 @@ protected function writeMigration($name, $table, $create)\n             $name, $this->getMigrationPath(), $table, $create\n         );\n \n+        if (windows_os()) {\n+            $file = str_replace('/', '\\\\', $file);\n+        }\n+\n         $this->components->info(sprintf('Migration [%s] created successfully.', $file));\n     }\n \n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "src/Illuminate/Database/Console/Migrations/MigrateMakeCommand.php",
+   "body": "The current string replacement for Windows path separators is fragile and platform-dependent; refactor to use a dedicated path abstraction class that handles separators internally based on the OS.",
+   "from_line": 115,
+   "to_line": 117,
+   "category": "Maintainability and Readability",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -112,6 +112,10 @@ protected function writeMigration($name, $table, $create)\n             $name, $this->getMigrationPath(), $table, $create\n         );\n \n+        if (windows_os()) {\n+            $file = str_replace('/', '\\\\', $file);\n+        }\n+\n         $this->components->info(sprintf('Migration [%s] created successfully.', $file));\n     }",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "PHP"
+}
