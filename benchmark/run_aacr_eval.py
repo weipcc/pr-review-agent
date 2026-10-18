@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-Evaluate V1 / V2 / V3 on the 10 shortlisted AACR-Bench pull requests, judged by an LLM judge.
+Evaluate V1 / V2 / V3 on the 10 shortlisted AACR-Bench pull requests, judged with the official AACR-Bench protocol (LLM judge).
 
     V1  6ddb19c   baseline: framework only, original prompt
     V2  2ed8205   prompt rework (workflow version, no tools)
     V3  cbe4576   final system: agent + E2B sandbox
 
 Ground truth = every AACR comment the AACR experts verified (label = 1), whether a human or an
-AI wrote it (`source` records which). Each PR is reviewed at `pr_target_commit` (the commit the comments were made on),
+AI wrote it (`source` records which). Matching follows alibaba/aacr-bench evaluation/judge.py
+(file-level semantic coverage): one judge call per finding against the same file's reference comments,
+official prompt, temperature 0, greedy dedup for precision; results in judge_aacr_V?.json. Each PR is reviewed at `pr_target_commit` (the commit the comments were made on),
 diffed against `pr_source_commit` (the PR base).
 
     # 1. build inputs + ground truth only (GitHub API, no model, no sandbox)
     benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py build
     # 2. review (costs tokens); results are cached per PR and version, rerun only with --force
     benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py run --pr valkey-io/valkey#1889 --only V1,V2,V3
-    # 3. LLM judge (one call per reference comment and version), then the tables
+    # 3. LLM judge (AACR-Bench protocol: one call per finding), then the tables
     benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py judge
     benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py summary
     # optional: spot-check sheet pre-filled with the judge's verdicts (fill `agree`, rerun summary)
@@ -177,47 +179,98 @@ def cmd_run(urls: list[str], versions: list[str], model: str, force: bool) -> No
                   f"{res['input_tokens']:,} input tokens | {time.time() - t0:.0f}s")
 
 
-# ----------------------------------------------------------------------------- judging (LLM)
-JUDGE_SYSTEM = """You compare an automated code reviewer's findings with ONE reference review comment \
-on the same change (written by a reviewer and verified by experts), and decide which findings raise \
-what the reference comment raises.
+# ----------------------------------------------------------------------------- judging (AACR-Bench official protocol)
+# Mirrors alibaba/aacr-bench evaluation/judge.py (file-level semantic coverage, docs/metrics.md):
+# one judge call per generated finding against all reference comments of the SAME file, the official
+# prompt verbatim, temperature 0; findings on files without reference comments are unmatched without
+# a call; precision counts a finding only if it covers a reference not covered by an earlier finding.
+AACR_PROMPT = """
+-Role-
 
-A finding matches if it raises the same underlying concern as the reference comment: the same problem, \
-or a request for the same change, or the same doubt. A finding that is broader or narrower still counts \
-if a developer acting on it would address the reference concern.
-A finding does not match if it is about something else, or merely touches the same line or topic \
-without making the reference point, or only restates what the code does.
-The reference comment is the answer key; do not judge whether the findings are good in their own right.
-List EVERY matching finding index (empty list if none)."""
+You are an expert code reviewer comparing review comments for semantic equivalence.
+
+-Task-
+
+Given a Generated Comment and a numbered list of Reference Comments (all from the same file: {file_path}), determine which Reference Comments express the same concern or suggestion as the Generated Comment.
+
+Focus solely on semantic equivalence of the underlying issue — ignore differences in wording, tone, formatting, or exact line numbers. If the Generated Comment addresses the same core problem as a Reference Comment, include that Reference Comment's number.
+
+-Generated Comment-
+[L{gen_lines}] {gen_note}
+
+-Reference Comments-
+{numbered_refs}
+
+-Output-
+
+For each Reference Comment, briefly state whether it matches and why (one line each).
+Then return a JSON array of matched numbers on the LAST line. If none match, return [].
+
+Example:
+1. Match — both flag the uninitialized variable risk
+2. No match — ref discusses naming, generated discusses null check
+3. Match — same concern about missing error handling
+
+[1, 3]
+
+Your answer:
+"""
 
 
 def findings_of(res: dict) -> list[dict]:
+    """All findings of one review, in generation order (file order, then issue order)."""
     return [{"file": f["filename"], "start": it["start_line"], "end": it["end_line"], "category": it["category"],
              "comment": pe.norm(it["comment"])} for f in res["results"] for it in f.get("issues", [])]
 
 
-def judge_pr_version(state: dict, fs: list[dict], model: str) -> list[dict]:
-    from pydantic import BaseModel, Field
-    from run_benchmark import call_model, ensure_api_key
+def norm_path(p: str) -> str:
+    return (p or "").replace("\\/", "/").replace("\\", "/")
 
-    class Verdict(BaseModel):
-        matching_findings: list[int] = Field(description="Indices of all findings that raise the reference concern")
-        reason: str = Field(description="One short sentence")
+
+def call_judge(prompt: str, model: str, attempts: int = 6) -> str:
+    from run_benchmark import FATAL_MARKERS, RETRY_MARKERS, FatalAPIError, ensure_api_key, get_client
 
     ensure_api_key()
-    listing = "\n".join(f"[{i}] {x['file']}:{x['start']}-{x['end']} · {x['category']}: {x['comment']}" for i, x in enumerate(fs))
-    out = []
+    last = None
+    for a in range(attempts):
+        try:
+            r = get_client().models.generate_content(
+                model=model, contents=prompt, config={"temperature": 0, "top_p": 0.95, "max_output_tokens": 3000})
+            return (r.text or "").strip()
+        except Exception as e:  # noqa: BLE001
+            last = e
+            if any(m in str(e) for m in FATAL_MARKERS):
+                raise FatalAPIError(str(e)[:300]) from e
+            if not any(m in str(e) for m in RETRY_MARKERS) or a == attempts - 1:
+                break
+            time.sleep(min(2 ** a, 30))
+    raise last
+
+
+def judge_official(state: dict, fs: list[dict], model: str) -> list[dict]:
+    refs_by_path: dict[str, list] = {}
     for c in state["ground_truth"]:
-        if not fs:
-            out.append({"comment_id": c["id"], "matching_findings": [], "reason": "no findings"})
-            continue
-        prompt = (f"<reference_comment file=\"{c['path']}\" lines=\"{c['from_line']}-{c['to_line']}\">\n{c['body']}\n</reference_comment>\n\n"
-                  f"<code_the_comment_is_on>\n{c['diff_hunk'] or '(outside the diff)'}\n</code_the_comment_is_on>\n\n"
-                  f"<automated_findings>\n{listing}\n</automated_findings>")
-        v, _ = call_model(model, JUDGE_SYSTEM, prompt, Verdict, temperature=0.0)
-        out.append({"comment_id": c["id"], "matching_findings": sorted({i for i in v.matching_findings if 0 <= i < len(fs)}),
-                    "reason": v.reason})
-    return out
+        refs_by_path.setdefault(norm_path(c["path"]), []).append(c)
+    records = []
+    for k, x in enumerate(fs):
+        refs = refs_by_path.get(norm_path(x["file"]), [])
+        rec = {"finding": k, "file": x["file"], "matched_gt": [], "reason": "no reference comments in this file (no judge call)"}
+        if refs:
+            prompt = AACR_PROMPT.format(
+                file_path=norm_path(x["file"]), gen_lines=f"{x['start']}-{x['end']}", gen_note=x["comment"],
+                numbered_refs="\n".join(f"{i + 1}. [L{c['from_line']}-{c['to_line']}] {c['body']}" for i, c in enumerate(refs)))
+            text = call_judge(prompt, model)
+            arrays = re.findall(r"\[[\d,\s]*\]", text)
+            nums = json.loads(arrays[-1]) if arrays else []
+            rec["matched_gt"] = sorted({refs[n - 1]["id"] for n in nums if isinstance(n, int) and 1 <= n <= len(refs)})
+            rec["reason"] = text[:1500]
+        records.append(rec)
+    covered: set = set()
+    for rec in records:  # greedy dedup in generation order
+        new = set(rec["matched_gt"]) - covered
+        rec["hit_new_gt"] = bool(new)
+        covered |= set(rec["matched_gt"])
+    return records
 
 
 def cmd_judge(urls: list[str], versions: list[str], model: str, force: bool) -> None:
@@ -226,38 +279,49 @@ def cmd_judge(urls: list[str], versions: list[str], model: str, force: bool) -> 
         d = pr_dir(url)
         state = json.loads((d / "state.json").read_text(encoding="utf-8"))
         for v in versions:
-            rp, jp = d / f"{v}.json", d / f"judge_{v}.json"
+            rp, jp = d / f"{v}.json", d / f"judge_aacr_{v}.json"
             if not rp.exists():
                 continue
             fs = findings_of(json.loads(rp.read_text(encoding="utf-8")))
-            key = {"model": model, "n_truth": len(state["ground_truth"]), "findings": fs}
+            key = {"protocol": "aacr-bench file_semantic", "model": model, "n_truth": len(state["ground_truth"]), "findings": fs}
             if jp.exists() and not force and json.loads(jp.read_text(encoding="utf-8"))["key"] == key:
                 continue
-            verdicts = judge_pr_version(state, fs, model)
-            jp.write_text(json.dumps({"key": key, "verdicts": verdicts}, ensure_ascii=False, indent=1), encoding="utf-8")
-            hit = sum(bool(x["matching_findings"]) for x in verdicts)
-            print(f"{state['full']}#{state['pr_number']} {v}: {hit}/{len(verdicts)} reference comments matched, {len(fs)} findings")
+            recs = judge_official(state, fs, model)
+            jp.write_text(json.dumps({"key": key, "records": recs}, ensure_ascii=False, indent=1), encoding="utf-8")
+            cov = {g for r in recs for g in r["matched_gt"]}
+            print(f"{state['full']}#{state['pr_number']} {v}: covered {len(cov)}/{len(state['ground_truth'])} references, "
+                  f"{sum(r['hit_new_gt'] for r in recs)}/{len(fs)} findings effective")
+
+
+def load_judged(d: Path, v: str) -> tuple[dict, dict, dict] | None:
+    rp, jp = d / f"{v}.json", d / f"judge_aacr_{v}.json"
+    if not (rp.exists() and jp.exists()):
+        return None
+    return (json.loads((d / "state.json").read_text(encoding="utf-8")), json.loads(rp.read_text(encoding="utf-8")),
+            json.loads(jp.read_text(encoding="utf-8")))
 
 
 # ----------------------------------------------------------------------------- spot-check sheet + summary
 def cmd_sheet() -> None:
-    """spotcheck.csv: one row per (PR, version, reference comment), pre-filled with the judge's verdict;
-    a person fills `agree` (y/n) on a subset to measure judge agreement."""
+    """spotcheck.csv: one row per (PR, version, finding judged against same-file references), pre-filled with the
+    judge's verdict; a person fills `agree` (y/n) on a subset to measure judge agreement."""
     rows = []
     for d in sorted(OUT.glob("*__*__*")):
-        state = json.loads((d / "state.json").read_text(encoding="utf-8"))
         for v in rvc.VERSIONS:
-            jp = d / f"judge_{v}.json"
-            if not jp.exists():
+            got = load_judged(d, v)
+            if not got:
                 continue
-            j = json.loads(jp.read_text(encoding="utf-8"))
-            fs = j["key"]["findings"]
-            listing = "\n".join(f"[{i}] {x['file']}:{x['start']} {x['category']}: {x['comment']}" for i, x in enumerate(fs)) or "(no findings)"
-            for c, x in zip(state["ground_truth"], j["verdicts"]):
-                rows.append({"pr": f"{state['full']}#{state['pr_number']}", "version": v, "comment_id": c["id"], "source": c["source"],
-                             "reference_comment": f"{c['path']}:{c['to_line']} {pe.norm(c['body'])}", "findings": listing,
-                             "judge_matched": "y" if x["matching_findings"] else "n", "judge_findings": " ".join(map(str, x["matching_findings"])),
-                             "judge_reason": x["reason"], "agree": ""})
+            state, _, j = got
+            refs = {c["id"]: c for c in state["ground_truth"]}
+            for x, rec in zip(j["key"]["findings"], j["records"]):
+                same_file = [c for c in state["ground_truth"] if norm_path(c["path"]) == norm_path(x["file"])]
+                if not same_file:
+                    continue
+                rows.append({"pr": f"{state['full']}#{state['pr_number']}", "version": v, "finding_no": rec["finding"],
+                             "finding": f"{x['file']}:{x['start']} {x['category']}: {x['comment']}",
+                             "references": "\n".join(f"G{c['id']} L{c['from_line']}-{c['to_line']}: {pe.norm(c['body'])}" for c in same_file),
+                             "judge_matched": " ".join(f"G{g}" for g in rec["matched_gt"]) or "none",
+                             "judge_reason": rec["reason"], "agree": ""})
     p = OUT / "spotcheck.csv"
     if p.exists():
         sys.exit(f"{p} exists, not overwritten (delete it to regenerate)")
@@ -269,44 +333,48 @@ def cmd_sheet() -> None:
 
 
 def cmd_summary() -> None:
-    agg = {v: {"prs": 0, "tok": 0, "s": 0.0, "nofind": 0, "empty": 0, "cap": 0, "find": 0, "find_hit": 0,
+    agg = {v: {"prs": 0, "tok": 0, "s": 0.0, "nofind": 0, "missing": 0, "cap": 0, "find": 0, "eff": 0, "dup": 0,
                "ref": {}, "ctx": {}} for v in rvc.VERSIONS}
     per_pr = []
     for d in sorted(OUT.glob("*__*__*")):
         state = json.loads((d / "state.json").read_text(encoding="utf-8"))
         row = {"pr": f"{state['full'].split('/')[1]}#{state['pr_number']}", "lang": state["language"], "n": len(state["ground_truth"])}
         for v in rvc.VERSIONS:
-            rp, jp = d / f"{v}.json", d / f"judge_{v}.json"
-            if not (rp.exists() and jp.exists()):
+            got = load_judged(d, v)
+            if not got:
                 continue
-            r, j = json.loads(rp.read_text(encoding="utf-8")), json.loads(jp.read_text(encoding="utf-8"))
+            _, r, j = got
             a = agg[v]
-            fs = j["key"]["findings"]
+            recs = j["records"]
+            covered = {g for x in recs for g in x["matched_gt"]}
             a["prs"] += 1; a["tok"] += r["input_tokens"]; a["s"] += r["elapsed_s"]
-            a["nofind"] += not fs
-            a["empty"] += len(r["results"]) < r["n_files"]
+            a["nofind"] += not recs
+            a["missing"] += len(r["results"]) < r["n_files"]
             a["cap"] += bool(r["tool_calls"] is not None and len(r["tool_calls"]) >= 10)
-            hit_f = {i for x in j["verdicts"] for i in x["matching_findings"]}
-            a["find"] += len(fs); a["find_hit"] += len(hit_f)
-            hits = 0
-            for c, x in zip(state["ground_truth"], j["verdicts"]):
-                m = bool(x["matching_findings"])
-                hits += m
+            a["find"] += len(recs)
+            a["eff"] += sum(x["hit_new_gt"] for x in recs)
+            a["dup"] += sum(bool(x["matched_gt"]) and not x["hit_new_gt"] for x in recs)
+            for c in state["ground_truth"]:
+                m = c["id"] in covered
                 for k, key in (("ref", c["source"]), ("ref", "all"), ("ctx", c["context"])):
                     t = a[k].setdefault(key, [0, 0]); t[0] += m; t[1] += 1
-            row[v] = f"{hits} / {len(fs)}"
+            row[v] = f"{len(covered)} / {sum(x['hit_new_gt'] for x in recs)} / {len(recs)}"
         per_pr.append(row)
     vs = [v for v in rvc.VERSIONS if agg[v]["prs"]]
     pct = lambda h, n: f"{h}/{n} ({100 * h / n:.0f}%)" if n else "–"  # noqa: E731
+    print("Protocol: AACR-Bench file-level semantic coverage (official judge prompt, temperature 0, greedy dedup).\n")
     print("## Table 1: overall\n")
-    print("| version | PRs | recall (all) | recall (human-written) | recall (AI-written) | precision | findings | mean input tokens | mean time (s) | PRs with no findings | missing files in output | hit 10-step cap |")
-    print("|---|" + "---|" * 11)
+    print("| version | PRs | recall (all) | recall (human-written) | recall (AI-written) | precision | balanced score | findings | duplicate hits | mean input tokens | mean time (s) | PRs with no findings | missing files in output | hit 10-step cap |")
+    print("|---|" + "---|" * 13)
     for v in vs:
         a = agg[v]
-        print(f"| {v} | {a['prs']} | {pct(*a['ref'].get('all', [0, 0]))} | {pct(*a['ref'].get('human', [0, 0]))} | {pct(*a['ref'].get('ai', [0, 0]))} | "
-              f"{pct(a['find_hit'], a['find'])} | {a['find']} | {a['tok'] // a['prs']:,} | {a['s'] / a['prs']:.0f} | {a['nofind']} | {a['empty']} | "
-              + (str(a["cap"]) if v == "V3" else "–") + " |")
-    print("\n## Table 2: per PR (matched reference comments / findings)\n")
+        rh, rn = a["ref"].get("all", [0, 0])
+        rec, prec = (rh / rn if rn else 0), (a["eff"] / a["find"] if a["find"] else 0)
+        bal = 2 * rec * prec / (rec + prec) if rec + prec else 0
+        print(f"| {v} | {a['prs']} | {pct(rh, rn)} | {pct(*a['ref'].get('human', [0, 0]))} | {pct(*a['ref'].get('ai', [0, 0]))} | "
+              f"{pct(a['eff'], a['find'])} | {bal:.3f} | {a['find']} | {a['dup']} | {a['tok'] // a['prs']:,} | {a['s'] / a['prs']:.0f} | "
+              f"{a['nofind']} | {a['missing']} | " + (str(a["cap"]) if v == "V3" else "–") + " |")
+    print("\n## Table 2: per PR (covered references / effective findings / findings)\n")
     print("| PR | language | reference comments | " + " | ".join(vs) + " |")
     print("|---|---|---|" + "---|" * len(vs))
     for row in per_pr:

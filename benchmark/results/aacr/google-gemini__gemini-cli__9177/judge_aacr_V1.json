@@ -1,0 +1,57 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 7,
+  "findings": [
+   {
+    "file": "integration-tests/extensions-install.test.ts",
+    "start": 51,
+    "end": 51,
+    "category": "bug",
+    "comment": "資源清理動作（rig.cleanup() 與 rmSync）直接放置在測試函式末端。若前面的任何一個 expect 斷言或非預期的非同步指令拋出錯誤，後續的清理流程將不會被執行，進而導致測試目錄殘留或影響後續測試環境。"
+   },
+   {
+    "file": "integration-tests/test-helper.ts",
+    "start": 341,
+    "end": 341,
+    "category": "bug",
+    "comment": "子行程未監聽 'error' 事件。若 spawn 失敗（例如找不到 node 可執行檔或系統權限不足），子行程會觸發未捕獲的 error 事件導致測試行程崩潰，且 Promise 永遠不會 resolve 或 reject。"
+   },
+   {
+    "file": "integration-tests/test-helper.ts",
+    "start": 323,
+    "end": 323,
+    "category": "bug",
+    "comment": "以 `if (options.stdin)` 判斷在傳入空字串 `\"\"` 時會被視為 falsy，導致未呼叫 `child.stdin.end()`。若子行程正在等待 stdin 輸入與 EOF 結束，可能造成測試行程卡住（hang）。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "integration-tests/extensions-install.test.ts",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "integration-tests/test-helper.ts",
+   "matched_gt": [
+    5
+   ],
+   "reason": "1. No match — discusses missing validation that setup() was called.\n2. No match — discusses code duplication and DRY violations between methods.\n3. No match — discusses non-null assertion operators on child process streams.\n4. No match — discusses handling of `options.stdin` when it is an empty string.\n5. No match — discusses Buffer to string concatenation on stream data.\n6. Match — both identify missing `child.on('error', ...)` handling leading to unsettled promises on spawn failure.\n7. No match — discusses including stdout alongside stderr in the rejection message.\n\n[6]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "integration-tests/test-helper.ts",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. No match — discusses missing `setup()` validation in `runCommand`.\n2. No match — discusses code duplication and DRY principles between `runCommand` and `run`.\n3. No match — discusses non-null assertion operators on child process streams.\n4. Match — identical issue regarding `options.stdin` being an empty string not closing stdin and causing the child to wait for EOF.\n5. No match — discusses buffer concatenation for stdout/stderr.\n6. No match — discusses missing `child.on('error', ...)` handler.\n7. No match — discusses including stdout in process error rejection messages.\n\n[4]",
+   "hit_new_gt": true
+  }
+ ]
+}

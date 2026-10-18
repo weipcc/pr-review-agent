@@ -1,0 +1,71 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 5,
+  "findings": [
+   {
+    "file": "server/create.go",
+    "start": 161,
+    "end": 161,
+    "category": "security",
+    "comment": "validRelative 僅防範了正斜線（/）的路徑遍歷與絕對路徑特徵，未處理 Windows 路徑分隔符（\\）與磁碟機代號（如 C:）。在 Windows 環境下，惡意輸入（如 ..\\ 或 \\..\\）可以繞過檢查，造成目錄遍歷或寫入非預期路徑的安全疑慮。"
+   },
+   {
+    "file": "server/create.go",
+    "start": 277,
+    "end": 277,
+    "category": "bug",
+    "comment": "在執行 createLink 之前使用 root.OpenFile(fp, os.O_CREATE|os.O_WRONLY, 0o644) 會預先在 tmpDir 中建立空檔案。若 createLink 底層使用 os.Link 或 os.Symlink，會因為目標檔案已存在而報錯 (EEXIST)。此外，若 fp 含有巢狀子目錄（例如 sub/model.safetensors），因父目錄尚未建立，root.OpenFile 會直接回傳找不到目錄的錯誤而終止處理。"
+   },
+   {
+    "file": "server/create_test.go",
+    "start": 18,
+    "end": 18,
+    "category": "bug",
+    "comment": "註解標明應將測試資料存放在暫存目錄，但使用 cmp.Or(os.Getenv(\"OLLAMA_MODELS\"), t.TempDir()) 會在環境中已設定 OLLAMA_MODELS 時優先使用該路徑，導致測試產生的模型層資料寫入開發者本機或 CI 的真實模型目錄，破壞測試隔離性。"
+   },
+   {
+    "file": "server/create_test.go",
+    "start": 171,
+    "end": 171,
+    "category": "style",
+    "comment": "測試失敗訊息中使用 %T 僅會印出錯誤型態（如 *errors.errorString），無法看出具體錯誤內容；且 errors.Is 驗證的是錯誤值/包裝鏈而非型態，使用 %T 會導致除錯訊息不具鑑別度。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "server/create.go",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — discusses validating paths before cleaning, rejecting benign relative paths.\n2. No match — suggests replacing the function with `io/fs.ValidPath` rather than specifically addressing Windows path separators.\n3. Match — both identify that `validRelative` only checks forward slashes (`/`) and fails to handle Windows backslashes (`\\`), allowing path traversal bypasses.\n4. No match — discusses Go version compatibility for `os.OpenRoot`.\n5. No match — discusses side effects of `OpenFile` with `O_CREATE`.\n\n[3]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "server/create.go",
+   "matched_gt": [
+    4
+   ],
+   "reason": "1. No match — discusses `validRelative` path cleaning before validation.\n2. No match — discusses replacing `validRelative` with `io/fs.ValidPath`.\n3. No match — discusses handling Windows backslash separators.\n4. No match — discusses Go version compatibility of `os.OpenRoot`.\n5. Match — both identify that using `OpenFile` with `O_CREATE` creates files on the filesystem with unintended side effects.\n\n[5]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "server/create_test.go",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "server/create_test.go",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

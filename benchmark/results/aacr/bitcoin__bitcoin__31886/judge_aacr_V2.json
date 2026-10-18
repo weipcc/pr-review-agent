@@ -1,0 +1,27 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 4,
+  "findings": [
+   {
+    "file": "src/bitcoin-cli.cpp",
+    "start": 585,
+    "end": 585,
+    "category": "bug",
+    "comment": "`strprintf` returns a temporary `std::string`. Binding it to `std::string_view` causes `services` to reference destroyed storage as soon as the temporary is deallocated at the end of the statement, resulting in undefined behavior when `services` is read on the next line."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/bitcoin-cli.cpp",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. No match — discusses formatting consistency and type validation for `services[i].get_str()`.\n2. No match — discusses sorting the output of service names.\n3. No match — discusses C++20 compatibility of `std::ranges::replace`.\n4. Match — both identify undefined behavior caused by binding a temporary `std::string` from `strprintf` to `std::string_view`.\n\n[4]",
+   "hit_new_gt": true
+  }
+ ]
+}

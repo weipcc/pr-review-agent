@@ -1,0 +1,41 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 7,
+  "findings": [
+   {
+    "file": "integration-tests/extensions-install.test.ts",
+    "start": 23,
+    "end": 53,
+    "category": "bug",
+    "comment": "If any assertion or `runCommand` throws an error during the test run, `rig.cleanup()` and `rmSync` will not execute, leaving residual test files and potentially leaving the extension installed in user configuration for subsequent test runs."
+   },
+   {
+    "file": "integration-tests/test-helper.ts",
+    "start": 315,
+    "end": 326,
+    "category": "bug",
+    "comment": "The spawned child process does not register an 'error' event listener, and writing to child.stdin without error handling can throw an uncaught EPIPE error if the child process exits before stdin is written."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "integration-tests/extensions-install.test.ts",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "integration-tests/test-helper.ts",
+   "matched_gt": [
+    5
+   ],
+   "reason": "1. No match — discusses setup validation for `testDir`.\n2. No match — discusses code duplication and DRY principles.\n3. No match — discusses non-null assertions on streams rather than missing error handlers.\n4. No match — discusses handling empty strings for `options.stdin`.\n5. No match — discusses buffer-to-string concatenation on stdout/stderr streams.\n6. Match — both identify the missing `'error'` event listener on the spawned child process.\n7. No match — discusses including stdout in the rejection message.\n\n[6]",
+   "hit_new_gt": true
+  }
+ ]
+}

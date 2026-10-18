@@ -1,0 +1,27 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 2,
+  "findings": [
+   {
+    "file": "src/networking.c",
+    "start": 2771,
+    "end": 2776,
+    "category": "bug",
+    "comment": "In C, parentheses around comma-separated expressions invoke the comma operator rather than passing multiple arguments to `snprintf`. Consequently, `snprintf` only receives three arguments (`buf`, `sizeof(buf)`, and the evaluated result of the ternary expression as the format string). When `server.hide_user_data_from_log` is non-zero, the format string receives `sdslen(c->querybuf) - c->qb_pos` (a size_t integer cast to a pointer), causing an immediate segmentation fault. When `server.hide_user_data_from_log` is 0, the format string receives the end of `c->querybuf` (user-controlled data) with no further arguments, introducing a critical format string vulnerability."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/networking.c",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. No match — ref discusses moving the redaction check earlier in `setProtocolError`, whereas generated comment addresses broken `snprintf` ternary syntax/argument passing.\n2. Match — both identify the flawed `snprintf` ternary expression structure and arguments leading to crashes and improper handling of `server.hide_user_data_from_log`.\n\n[2]",
+   "hit_new_gt": true
+  }
+ ]
+}

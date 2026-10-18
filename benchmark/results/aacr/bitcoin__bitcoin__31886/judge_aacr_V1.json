@@ -1,0 +1,41 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 4,
+  "findings": [
+   {
+    "file": "src/bitcoin-cli.cpp",
+    "start": 585,
+    "end": 585,
+    "category": "bug",
+    "comment": "三元運算子中 strprintf 返回的是臨時的 std::string 物件。當賦值給 std::string_view 時，該臨時物件在該行陳述句結束時就會被解構，導致 services 變成懸空參照 (dangling string_view)。在下一行使用 services 會引發未定義行為 (Undefined Behavior) 或記憶體存取錯誤。"
+   },
+   {
+    "file": "src/bitcoin-cli.cpp",
+    "start": 484,
+    "end": 484,
+    "category": "style",
+    "comment": "ServicesList 函式並未修改成員變數，可標記為 const 成員函式；另外 ToLower 外層有多餘的括號 ((services[i].get_str()))。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/bitcoin-cli.cpp",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. No match — discusses formatting, consistency, and type validation in ServicesList.\n2. No match — discusses sorting the services vector in ServicesList.\n3. No match — discusses C++20 `std::ranges::replace` compatibility.\n4. Match — both flag the dangling `std::string_view` created by binding to a temporary `std::string` returned by `strprintf()`, causing undefined behavior.\n\n[4]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "src/bitcoin-cli.cpp",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses output formatting consistency and exception safety for `get_str()`, while generated discusses making `ServicesList` const and removing redundant parentheses.\n2. No match — ref suggests sorting the service list output, unrelated to const-correctness or parentheses syntax.\n3. No match — ref discusses C++20 `std::ranges::replace` compatibility and `ToLower` return value behavior, unrelated to making the method const or removing redundant parentheses.\n4. No match — ref discusses dangling `std::string_view` lifetime issues, unrelated to `ServicesList`.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

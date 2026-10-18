@@ -1,0 +1,41 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 1,
+  "findings": [
+   {
+    "file": "packages/react-dom/src/__tests__/ReactDOMForm-test.js",
+    "start": 1673,
+    "end": 1673,
+    "category": "bug",
+    "comment": "`it.only` focuses this single test and causes test runners (e.g. Jest) to skip all other tests in the file or suite, which can mask regressions in CI."
+   },
+   {
+    "file": "packages/react-reconciler/src/ReactFiberHooks.js",
+    "start": 3264,
+    "end": 3264,
+    "category": "bug",
+    "comment": "When `ensureFormComponentIsStateful` upgrades a form fiber, it creates a single Hook object whose `next` pointer is `null`. Requiring `existingStateHook.next !== null` prevents the function from recognizing an already-upgraded fiber, causing it to overwrite `formFiber.memoizedState` and its queue on subsequent submissions. Furthermore, this change conflicts with the PR description, which indicates the PR was only meant to add a test."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "packages/react-dom/src/__tests__/ReactDOMForm-test.js",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "packages/react-reconciler/src/ReactFiberHooks.js",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both flag that requiring `existingStateHook.next !== null` incorrectly ignores existing state for form components with a single state hook.\n\n[1]",
+   "hit_new_gt": true
+  }
+ ]
+}

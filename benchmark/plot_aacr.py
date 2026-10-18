@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Figure for the report: recall / precision and mean input tokens of V1-V3 on the 10 AACR PRs.
-Reads benchmark/results/aacr/*/{V?.json,judge_V?.json} (written by run_aacr_eval.py run + judge).
+Reads benchmark/results/aacr/*/{V?.json,judge_aacr_V?.json} (written by run_aacr_eval.py run + judge).
 
     python benchmark/plot_aacr.py <out.pdf>        # needs matplotlib
 """
@@ -22,17 +22,17 @@ LABELS = ["V1\nbaseline", "V2\nworkflow", "V3\nsandbox"]
 stats = {v: {"ref": 0, "ref_hit": 0, "find": 0, "find_hit": 0, "tok": [], "prs": 0} for v in VERSIONS}
 for d in sorted(OUT.glob("*__*__*")):
     for v in VERSIONS:
-        rp, jp = d / f"{v}.json", d / f"judge_{v}.json"
+        rp, jp = d / f"{v}.json", d / f"judge_aacr_{v}.json"
         if not (rp.exists() and jp.exists()):
             continue
         r, j = json.loads(rp.read_text(encoding="utf-8")), json.loads(jp.read_text(encoding="utf-8"))
         s = stats[v]
         s["prs"] += 1
         s["tok"].append(r["input_tokens"])
-        s["ref"] += len(j["verdicts"])
-        s["ref_hit"] += sum(bool(x["matching_findings"]) for x in j["verdicts"])
-        s["find"] += len(j["key"]["findings"])
-        s["find_hit"] += len({i for x in j["verdicts"] for i in x["matching_findings"]})
+        s["ref"] += j["key"]["n_truth"]
+        s["ref_hit"] += len({g for x in j["records"] for g in x["matched_gt"]})
+        s["find"] += len(j["records"])
+        s["find_hit"] += sum(x["hit_new_gt"] for x in j["records"])  # AACR-Bench precision: greedy dedup
 
 fig, (a, b) = plt.subplots(1, 2, figsize=(7.2, 2.6), gridspec_kw={"width_ratios": [1.5, 1]})
 x = range(len(VERSIONS))

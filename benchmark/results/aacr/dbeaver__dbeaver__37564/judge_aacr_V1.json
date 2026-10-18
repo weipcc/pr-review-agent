@@ -1,0 +1,99 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 4,
+  "findings": [
+   {
+    "file": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java",
+    "start": 428,
+    "end": 428,
+    "category": "bug",
+    "comment": "在 IAdaptable.getAdapter() 中拋出 RuntimeException 違反了 Eclipse Adaptable 機制的合約慣例。當無法適配時應回傳 null，直接拋出 unchecked exception 可能會導致外部呼叫端在查詢 adapter 時未捕捉而崩潰。"
+   },
+   {
+    "file": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java",
+    "start": 427,
+    "end": 427,
+    "category": "bug",
+    "comment": "log.error() 未傳入例外物件 e，導致錯誤 stacktrace 遺失，不利於問題排查。"
+   },
+   {
+    "file": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java",
+    "start": 38,
+    "end": 38,
+    "category": "style",
+    "comment": "不建議使用萬用字元 import (java.nio.file.*)。在該檔案中實際上只使用了 Path。"
+   },
+   {
+    "file": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+    "start": 293,
+    "end": 293,
+    "category": "bug",
+    "comment": "獲取的 `InputStream` 未進行關閉。根據 JDK 規範，`Files.copy(InputStream, Path, ...)` 讀取完畢後並不會主動關閉傳入的 InputStream，可能導致檔案鎖定或資源洩漏。"
+   },
+   {
+    "file": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+    "start": 364,
+    "end": 364,
+    "category": "security",
+    "comment": "直接使用 `node.getNodeDisplayName()` 透過 `folder.resolve(str)` 解析目標路徑，若節點名稱包含路徑遍歷字元（如 `../`），可能導致寫入預期目錄之外的路徑。"
+   },
+   {
+    "file": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+    "start": 363,
+    "end": 363,
+    "category": "style",
+    "comment": "方法參數名稱 `str` 語意不明確。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both identify that the obtained `InputStream` at line 293 is not closed, leading to a resource leak.\n2. No match — concerns a spelling error in a log message.\n3. No match — concerns parameter naming.\n4. No match — concerns a redundant conditional check before copying files.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 4,
+   "file": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+   "matched_gt": [],
+   "reason": "1. No match — Reference 1 concerns an unclosed InputStream resource leak, while the generated comment flags a path traversal security risk.\n2. No match — Reference 2 is about a spelling error in a log message, whereas the generated comment discusses path traversal.\n3. No match — Reference 3 suggests renaming the parameter `str` for readability, while the generated comment concerns path traversal vulnerability.\n4. No match — Reference 4 addresses redundant conditional checking before copying files, unrelated to path traversal.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 5,
+   "file": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — ref discusses an unclosed InputStream resource leak, while generated discusses parameter naming.\n2. No match — ref discusses a spelling error in a log message, while generated discusses parameter naming.\n3. Match — both identify that parameter name 'str' is not descriptive/semantically clear.\n4. No match — ref discusses a redundant file existence check, while generated discusses parameter naming.\n\n[3]",
+   "hit_new_gt": true
+  }
+ ]
+}

@@ -14,14 +14,18 @@ reference comments were made on:
 
 The `_v*_main/` folders are `git archive` exports of those commits, so each version runs its own real code.
 Ground truth = every comment in AACR-Bench with `label = 1` (17 human-written + 17 AI-written = 34).
-Matching is done by an LLM judge (`gemini-3.8-flash`); it has not been checked against human labels.
+Matching follows the official AACR-Bench protocol (`alibaba/aacr-bench`, `evaluation/judge.py`, file-level
+semantic coverage): one judge call per finding against the reference comments of the same file, with the official
+judge prompt verbatim (`gemini-3.8-flash`, temperature 0); precision counts a finding only if it covers a
+reference not covered by an earlier finding; balanced score = harmonic mean. The judge has not been checked
+against human labels.
 
 ```bash
 # needs GEMINI_API_KEY and E2B_KEY in <repo>/.env (GITHUB_TOKEN recommended: anonymous API = 60 requests/hour)
 # a venv with the final version's requirements (+ requests, pydantic, google-genai) -> benchmark/_final_venv
 benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py build     # inputs + ground truth, no model calls
 benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py run       # V1/V2/V3 on all 10 PRs (cached; --force reruns)
-benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py judge     # LLM judge
+benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py judge     # LLM judge, AACR-Bench protocol
 benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py summary   # tables -> results/aacr/summary.md
 python benchmark/plot_aacr.py figure.pdf                              # needs matplotlib
 ```
@@ -30,9 +34,10 @@ python benchmark/plot_aacr.py figure.pdf                              # needs ma
   comment (`aacr_ok.json`), the 10 chosen (`shortlist_aacr.json`; ClickHouse#85266 was replaced by
   bitcoin#31886 because its review commit no longer exists on GitHub) and their diffs.
 - `results/aacr/<owner>__<repo>__<n>/`: `state.json` (input + ground truth), `V?.json` (each version's
-  review, tokens, time, agent tool calls), `judge_V?.json` (verdicts). `summary.md` has the tables.
+  review, tokens, time, agent tool calls), `judge_aacr_V?.json` (official-protocol verdicts per finding; `judge_V?.json` are the earlier per-reference verdicts, kept for reference). `summary.md` has the tables.
 
-Headline (one run per version): recall V1 10/34, V2 9/34, V3 3/34; precision (lower bound) 10/22, 9/16, 3/5;
+Headline (one run per version): recall V1 10/34, V2 8/34, V3 3/34; precision (lower bound) 10/22, 8/16, 3/5;
+balanced score 0.36 / 0.32 / 0.15;
 mean input tokens 4.5k / 9.9k / 87.8k. V3 used all 10 tool steps on 8 of 10 PRs and 7 of those ended with no
 findings (3 missing files in the output), which the product would show as "Looks Good".
 
