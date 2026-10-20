@@ -1,0 +1,37 @@
+{
+ "results": [
+  {
+   "change_intent": "Prevent InvalidCastException by safely matching CommandContextItemViewModel before accessing its model in MoreCommands mapping.",
+   "summary": "Safely checks for CommandContextItemViewModel and returns null for unhandled types instead of throwing an invalid cast exception.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs"
+  },
+  {
+   "change_intent": "Safely select data templates by pattern matching CommandContextItemViewModel and providing a default fallback for unrecognized item types.",
+   "summary": "Avoids potential invalid cast crashes by verifying the item type before checking IsCritical.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs"
+  },
+  {
+   "change_intent": "Register WinUI and ViewModel types in runtime directives (rd.xml) to preserve metadata for AOT compilation.",
+   "summary": "Correctly declares required runtime metadata for context item ViewModels and UI template components.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/modules/cmdpal/Microsoft.CmdPal.UI/rd.xml"
+  }
+ ],
+ "n_files": 3,
+ "input_tokens": 10256,
+ "output_tokens": 323,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 10.8,
+ "mode": "batch",
+ "routing_tokens": 5360,
+ "call_input_tokens": [
+  10256
+ ],
+ "model": "gemini-3.8-flash"
+}

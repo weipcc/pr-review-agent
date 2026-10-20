@@ -1,0 +1,37 @@
+{
+ "results": [
+  {
+   "summary": "Changelog YAML 檔案格式正確，無任何問題。",
+   "issues": [],
+   "filename": "docs/changelog/120546.yaml"
+  },
+  {
+   "summary": "將系統類別載入器的未命名模組 (AGENTS_MODULE) 傳入 PolicyManager 以支援 Java Agent 的權限檢查，改動簡潔且無明顯問題。",
+   "issues": [],
+   "filename": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/initialization/EntitlementInitialization.java"
+  },
+  {
+   "summary": "將原先對所有未命名模組（unnamed module）授予 agent 權限的寬鬆邏輯，精確收斂為僅比對注入的 agentsModule，提升了安全性，程式碼邏輯清晰。",
+   "issues": [],
+   "filename": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java"
+  },
+  {
+   "summary": "因應 PolicyManager 建構子新增 agentsModule 參數，正確更新測試案例中的建構子呼叫與輔助方法。",
+   "issues": [],
+   "filename": "libs/entitlement/src/test/java/org/elasticsearch/entitlement/runtime/policy/PolicyManagerTests.java"
+  }
+ ],
+ "n_files": 4,
+ "elapsed_s": 29.2,
+ "calls": 4,
+ "input_tokens": 14082,
+ "output_tokens": 181,
+ "call_input_tokens": [
+  287,
+  3647,
+  3754,
+  6394
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

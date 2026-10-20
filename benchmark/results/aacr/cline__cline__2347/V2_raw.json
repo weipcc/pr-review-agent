@@ -1,0 +1,97 @@
+{
+ "results": [
+  {
+   "change_intent": "Add a changeset file for a patch release describing the fix for non-UTF-8 file handling.",
+   "summary": "Standard changeset markdown file correctly configured for a patch release.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": ".changeset/shiny-dingos-float.md"
+  },
+  {
+   "change_intent": "Add iconv-lite and jschardet dependencies to support file encoding detection and conversion.",
+   "summary": "Dependencies are correctly added and alphabetically sorted with appropriate version constraints.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "package.json"
+  },
+  {
+   "change_intent": "Add non-UTF-8 file encoding detection and preservation when opening diff views and saving file changes.",
+   "summary": "The encoding check fails to match 'UTF-8' and 'ascii' properly, causing data corruption and redundant writes, and unsupported encodings can crash file opening.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 50,
+     "end_line": 57,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "\t\t\tconst detected = chardet.detect(fileBuffer)\n\t\t\tthis.fileEncoding =\n\t\t\t\ttypeof detected === \"string\"\n\t\t\t\t\t? detected\n\t\t\t\t\t: detected && (detected as any).encoding\n\t\t\t\t\t\t? (detected as any).encoding\n\t\t\t\t\t\t: \"utf8\"\n\t\t\tthis.originalContent = iconv.decode(fileBuffer, this.fileEncoding)",
+     "comment": "chardet.detect can detect encodings that iconv-lite does not support (such as UTF-32LE, UTF-32BE, or unsupported code pages). Passing an unsupported encoding to iconv.decode will throw an unhandled 'Encoding not recognized' error and crash open().",
+     "suggestion": "Validate that iconv-lite supports the detected encoding using iconv.encodingExists() before assigning and decoding, falling back to 'utf8' if unsupported.",
+     "suggested_code": "\t\t\tconst detected = chardet.detect(fileBuffer)\n\t\t\tconst detectedEncoding = typeof detected === \"string\" ? detected : detected?.encoding\n\t\t\tthis.fileEncoding = detectedEncoding && iconv.encodingExists(detectedEncoding) ? detectedEncoding : \"utf8\"\n\t\t\tthis.originalContent = iconv.decode(fileBuffer, this.fileEncoding)"
+    },
+    {
+     "start_line": 237,
+     "end_line": 240,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "\t\tif (this.fileEncoding.toLowerCase() !== \"utf8\") {\n\t\t\tconst encodedBuffer = iconv.encode(normalizedPostSaveContent, this.fileEncoding)\n\t\t\tawait fs.writeFile(absolutePath, encodedBuffer as unknown as Uint8Array)\n\t\t}",
+     "comment": "jschardet reports UTF-8 as 'UTF-8' (with a hyphen) and plain ASCII files as 'ascii'. Checking fileEncoding.toLowerCase() !== 'utf8' evaluates to true for 'utf-8', causing redundant disk writes on all UTF-8 files. More seriously, files detected as 'ascii' will be re-encoded with iconv.encode(..., 'ascii'), which corrupts any non-ASCII characters added during editing into question marks (?). Additionally, writing directly to disk after showTextDocument has opened the document can cause editor desync or file change conflicts.",
+     "suggestion": "Check for both 'utf8', 'utf-8', and 'ascii' (or normalize by stripping non-alphanumeric characters) before deciding to re-encode, since ASCII text is fully valid UTF-8 and should not be constrained to 7-bit ASCII on save. Also ensure any file rewrite happens before calling showTextDocument.",
+     "suggested_code": "\t\tconst normalizedEncoding = this.fileEncoding.toLowerCase().replace(/[^a-z0-9]/g, \"\")\n\t\tif (normalizedEncoding !== \"utf8\" && normalizedEncoding !== \"ascii\" && iconv.encodingExists(this.fileEncoding)) {\n\t\t\tconst encodedBuffer = iconv.encode(normalizedPostSaveContent, this.fileEncoding)\n\t\t\tawait fs.writeFile(absolutePath, encodedBuffer as unknown as Uint8Array)\n\t\t}"
+    }
+   ],
+   "filename": "src/integrations/editor/DiffViewProvider.ts"
+  },
+  {
+   "change_intent": "Add encoding detection using jschardet and iconv-lite to properly decode non-UTF-8 files and prevent misclassifying them as binary.",
+   "summary": "The changes introduce a regression by reading entire files before checking file size, bypass binary file detection because jschardet detects arbitrary binary files as single-byte text, and fail to verify whether detected encodings are supported by iconv-lite.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 26,
+     "end_line": 29,
+     "category": "performance",
+     "confidence": "high",
+     "evidence": "const fileBuffer = await fs.readFile(filePath)\n\t\t\tif (fileBuffer.byteLength > 300 * 1024) {\n\t\t\t\tthrow new Error(`File is too large to read into context.`)\n\t\t\t}",
+     "comment": "Reading the entire file into a buffer before checking its size defeats the size limit check. For large files (e.g. multi-gigabyte files), this can cause significant memory pressure or crash the process with ERR_FS_FILE_TOO_LARGE. The file size should be inspected prior to reading the buffer (and getFileSizeInKB, imported on line 7, is now left unused).",
+     "suggestion": "Check the file size with getFileSizeInKB before reading the file into memory.",
+     "suggested_code": "const fileSizeInKB = await getFileSizeInKB(filePath)\n\t\t\tif (fileSizeInKB > 300) {\n\t\t\t\tthrow new Error(`File is too large to read into context.`)\n\t\t\t}\n\t\t\tconst fileBuffer = await fs.readFile(filePath)"
+    },
+    {
+     "start_line": 30,
+     "end_line": 42,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "const detected = chardet.detect(fileBuffer)\n\t\t\tlet encoding: string\n\t\t\tif (typeof detected === \"string\") {\n\t\t\t\tencoding = detected\n\t\t\t} else if (detected && (detected as any).encoding) {\n\t\t\t\tencoding = (detected as any).encoding\n\t\t\t} else {\n\t\t\t\tconst isBinary = await isBinaryFile(fileBuffer).catch(() => false)\n\t\t\t\tif (isBinary) {\n\t\t\t\t\tthrow new Error(`Cannot read text for file type: ${fileExtension}`)\n\t\t\t\t}\n\t\t\t\tencoding = \"utf8\"\n\t\t\t}",
+     "comment": "isBinaryFile is only checked inside the else branch when chardet.detect returns no encoding. However, jschardet almost always detects an encoding (such as windows-1252 or ISO-8859-2) for arbitrary binary files like images, executables, and archives. As a result, the else branch is never reached, binary detection is bypassed, and binary files will be decoded as text and returned instead of throwing the expected error.",
+     "suggestion": "Keep binary file validation active for binary files rather than only running it as a fallback when chardet fails to return an encoding.",
+     "suggested_code": null
+    },
+    {
+     "start_line": 31,
+     "end_line": 43,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "if (typeof detected === \"string\") {\n\t\t\t\tencoding = detected\n\t\t\t} else if (detected && (detected as any).encoding) {\n\t\t\t\tencoding = (detected as any).encoding\n\t\t\t} else {\n\t\t\t\tconst isBinary = await isBinaryFile(fileBuffer).catch(() => false)\n\t\t\t\tif (isBinary) {\n\t\t\t\t\tthrow new Error(`Cannot read text for file type: ${fileExtension}`)\n\t\t\t\t}\n\t\t\t\tencoding = \"utf8\"\n\t\t\t}\n\t\t\treturn iconv.decode(fileBuffer, encoding)",
+     "comment": "jschardet can detect encodings that iconv-lite does not support (e.g. UTF-32LE, UTF-32BE, ISO-2022-KR, EUC-TW). When an unsupported encoding name is passed to iconv.decode, iconv-lite throws an unhandled error ('Encoding not recognized'). Additionally, jschardet.detect returns an IDetectResult object, never a string, making typeof detected === 'string' dead code.",
+     "suggestion": "Check iconv.encodingExists(detectedEncoding) before passing the encoding to iconv.decode, and fall back to 'utf8' if it is not supported.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "src/integrations/misc/extract-text.ts"
+  }
+ ],
+ "n_files": 4,
+ "elapsed_s": 255.3,
+ "calls": 4,
+ "input_tokens": 38104,
+ "output_tokens": 2222,
+ "call_input_tokens": [
+  6592,
+  11201,
+  12784,
+  7527
+ ],
+ "mode": "per-file",
+ "routing_tokens": 13457
+}

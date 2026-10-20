@@ -1,0 +1,9 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 18,
+  "findings": []
+ },
+ "records": []
+}

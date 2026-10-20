@@ -1,0 +1,67 @@
+{
+ "owner": "mrdoob",
+ "repo": "three.js",
+ "full": "mrdoob/three.js",
+ "pr_number": 30750,
+ "title": "Automatically clean shape data passed to ExtrudeGeometry",
+ "body": "**Description**\r\n\r\nBefore triangulating a shape, ExtrudeGeometry now welds any index-adjacent points within a small hardcoded distance threshold of each other. This resolves common triangulation artifacts caused by improperly formatted shape data.\r\n\r\nAlso improved variable names and commenting in the affected files.\r\n\r\nRelated issue: #20317\r\nOriginal PR with discussion: #30698\r\n\r\n**Screenshots**\r\n\r\nBefore change (prominent triangulation errors):\r\n![corner-artifacts](https://github.com/user-attachments/assets/686fcd37-8359-419c-b1b2-a2f8d9b656dc)\r\n\r\nWith vertex welding (bevelOffset is negative, same settings, no errors):\r\n![with-fix](https://github.com/user-attachments/assets/1bd9ee81-542e-42ef-8a96-420713773d91)\r\n\r\nTriangulation still breaks if you use physically invalid parameters (bevelOffset negative and larger than the 2D thickness of the contour shape):\r\n![invalid-offsets](https://github.com/user-attachments/assets/cf4f7306-92ca-4283-82b0-0888ab4bd8d8)\r\n",
+ "base_sha": "bf4e6fcb64a1d6bdbaf975528595ac6873051641",
+ "review_sha": "96ab0720fc65368e32ee3f2389cb192f96d8adff",
+ "head_now": "61eda49188e82d5f290e01ae28dd67a7ecfbbc32",
+ "raw_diff": "diff --git a/src/geometries/ExtrudeGeometry.js b/src/geometries/ExtrudeGeometry.js\nindex 957d83599aaad0..1d66c03ab26bdf 100644\n--- a/src/geometries/ExtrudeGeometry.js\n+++ b/src/geometries/ExtrudeGeometry.js\n@@ -162,14 +162,44 @@ class ExtrudeGeometry extends BufferGeometry {\n \n \t\t\t}\n \n+\t\t\tfunction cleanPoints( points ) {\n \n-\t\t\tconst faces = ShapeUtils.triangulateShape( vertices, holes );\n+\t\t\t\tconst THRESHOLD = 0.0002;\n+\t\t\t\tconst THRESHOLD_SQ = THRESHOLD * THRESHOLD;\n+\t\t\t\tlet prevPos = points[ 0 ];\n+\t\t\t\tfor ( let i = 1; i <= points.length; i ++ ) {\n+\n+\t\t\t\t\tconst currentIndex = i % points.length;\n+\t\t\t\t\tconst currentPos = points[ currentIndex ];\n+\t\t\t\t\tconst dx = currentPos.x - prevPos.x;\n+\t\t\t\t\tconst dy = currentPos.y - prevPos.y;\n+\t\t\t\t\tconst distSq = dx * dx + dy * dy;\n+\n+\t\t\t\t\tif ( distSq <= THRESHOLD_SQ ) {\n+\n+\t\t\t\t\t\tpoints.splice( currentIndex, 1 );\n+\t\t\t\t\t\tif ( currentIndex == 0 ) break;\n+\t\t\t\t\t\ti --;\n+\t\t\t\t\t\tcontinue;\n+\n+\t\t\t\t\t}\n+\n+\t\t\t\t\tprevPos = currentPos;\n+\n+\t\t\t\t}\n+\n+\t\t\t}\n+\n+\t\t\tcleanPoints( vertices );\n+\t\t\tholes.forEach( cleanPoints );\n+\n+\t\t\tconst numHoles = holes.length;\n \n \t\t\t/* Vertices */\n \n \t\t\tconst contour = vertices; // vertices has all points but contour has only points of circumference\n \n-\t\t\tfor ( let h = 0, hl = holes.length; h < hl; h ++ ) {\n+\t\t\tfor ( let h = 0; h < numHoles; h ++ ) {\n \n \t\t\t\tconst ahole = holes[ h ];\n \n@@ -186,7 +216,7 @@ class ExtrudeGeometry extends BufferGeometry {\n \n \t\t\t}\n \n-\t\t\tconst vlen = vertices.length, flen = faces.length;\n+\t\t\tconst vlen = vertices.length;\n \n \n \t\t\t// Find directions for point movement\n@@ -333,7 +363,7 @@ class ExtrudeGeometry extends BufferGeometry {\n \t\t\tconst holesMovements = [];\n \t\t\tlet oneHoleMovements, verticesMovements = contourMovements.concat();\n \n-\t\t\tfor ( let h = 0, hl = holes.length; h < hl; h ++ ) {\n+\t\t\tfor ( let h = 0, hl = numHoles; h < hl; h ++ ) {\n \n \t\t\t\tconst ahole = holes[ h ];\n \n@@ -354,6 +384,8 @@ class ExtrudeGeometry extends BufferGeometry {\n \n \t\t\t}\n \n+\t\t\tconst contractedContourVertices = [];\n+\t\t\tconst expandedHoleVertices = [];\n \n \t\t\t// Loop bevelSegments, 1 for the front, 1 for the back\n \n@@ -372,28 +404,36 @@ class ExtrudeGeometry extends BufferGeometry {\n \t\t\t\t\tconst vert = scalePt2( contour[ i ], contourMovements[ i ], bs );\n \n \t\t\t\t\tv( vert.x, vert.y, - z );\n+\t\t\t\t\tif ( t == 0 ) contractedContourVertices.push( vert );\n \n \t\t\t\t}\n \n \t\t\t\t// expand holes\n \n-\t\t\t\tfor ( let h = 0, hl = holes.length; h < hl; h ++ ) {\n+\t\t\t\tfor ( let h = 0, hl = numHoles; h < hl; h ++ ) {\n \n \t\t\t\t\tconst ahole = holes[ h ];\n \t\t\t\t\toneHoleMovements = holesMovements[ h ];\n-\n+\t\t\t\t\tconst oneHoleVertices = [];\n \t\t\t\t\tfor ( let i = 0, il = ahole.length; i < il; i ++ ) {\n \n \t\t\t\t\t\tconst vert = scalePt2( ahole[ i ], oneHoleMovements[ i ], bs );\n \n \t\t\t\t\t\tv( vert.x, vert.y, - z );\n+\t\t\t\t\t\tif ( t == 0 ) oneHoleVertices.push( vert );\n \n \t\t\t\t\t}\n \n+\t\t\t\t\tif ( t == 0 ) expandedHoleVertices.push( oneHoleVertices );\n+\n \t\t\t\t}\n \n \t\t\t}\n \n+\t\t\tconst faces = ShapeUtils.triangulateShape( contractedContourVertices, expandedHoleVertices );\n+\n+\t\t\tconst flen = faces.length;\n+\n \t\t\tconst bs = bevelSize + bevelOffset;\n \n \t\t\t// Back facing vertices\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "src/geometries/ExtrudeGeometry.js",
+   "body": "Rename `cleanPoints` to `mergePoints` to accurately reflect the function's purpose of merging duplicate vertices, as the current name misrepresents its behavior.",
+   "from_line": 165,
+   "to_line": 165,
+   "category": "Maintainability and Readability",
+   "context": "File Level",
+   "diff_hunk": "@@ -162,14 +162,44 @@ class ExtrudeGeometry extends BufferGeometry {\n \n \t\t\t}\n \n+\t\t\tfunction cleanPoints( points ) {\n \n-\t\t\tconst faces = ShapeUtils.triangulateShape( vertices, holes );\n+\t\t\t\tconst THRESHOLD = 0.0002;\n+\t\t\t\tconst THRESHOLD_SQ = THRESHOLD * THRESHOLD;\n+\t\t\t\tlet prevPos = points[ 0 ];\n+\t\t\t\tfor ( let i = 1; i <= points.length; i ++ ) {\n+\n+\t\t\t\t\tconst currentIndex = i % points.length;\n+\t\t\t\t\tconst currentPos = points[ currentIndex ];\n+\t\t\t\t\tconst dx = currentPos.x - prevPos.x;\n+\t\t\t\t\tconst dy = currentPos.y - prevPos.y;\n+\t\t\t\t\tconst distSq = dx * dx + dy * dy;\n+\n+\t\t\t\t\tif ( distSq <= THRESHOLD_SQ ) {\n+\n+\t\t\t\t\t\tpoints.splice( currentIndex, 1 );\n+\t\t\t\t\t\tif ( currentIndex == 0 ) break;\n+\t\t\t\t\t\ti --;\n+\t\t\t\t\t\tcontinue;\n+\n+\t\t\t\t\t}\n+\n+\t\t\t\t\tprevPos = currentPos;\n+\n+\t\t\t\t}\n+\n+\t\t\t}\n+\n+\t\t\tcleanPoints( vertices );\n+\t\t\tholes.forEach( cleanPoints );\n+\n+\t\t\tconst numHoles = holes.length;\n \n \t\t\t/* Vertices */\n \n \t\t\tconst contour = vertices; // vertices has all points but contour has only points of circumference\n \n-\t\t\tfor ( let h = 0, hl = holes.length; h < hl; h ++ ) {\n+\t\t\tfor ( let h = 0; h < numHoles; h ++ ) {\n \n \t\t\t\tconst ahole = holes[ h ];",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 1,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/geometries/ExtrudeGeometry.js",
+   "body": "`cleanPoints()` assumes `points.length >= 2`. If `extractPoints()` returns an empty/1-point contour/hole (degenerate shapes, or after earlier processing), `points[0]`/`currentPos.x` will throw. Add a guard like `if ( points.length < 2 ) return;`.\n\n```suggestion\n\t\t\t\tif ( points.length < 2 ) return;\n\t\t\t\tlet prevPos = points[ 0 ];\n```",
+   "from_line": 169,
+   "to_line": 169,
+   "category": "Code Defect",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -162,14 +162,44 @@ class ExtrudeGeometry extends BufferGeometry {\n \n \t\t\t}\n \n+\t\t\tfunction cleanPoints( points ) {\n \n-\t\t\tconst faces = ShapeUtils.triangulateShape( vertices, holes );\n+\t\t\t\tconst THRESHOLD = 0.0002;\n+\t\t\t\tconst THRESHOLD_SQ = THRESHOLD * THRESHOLD;\n+\t\t\t\tlet prevPos = points[ 0 ];\n+\t\t\t\tfor ( let i = 1; i <= points.length; i ++ ) {\n+\n+\t\t\t\t\tconst currentIndex = i % points.length;\n+\t\t\t\t\tconst currentPos = points[ currentIndex ];\n+\t\t\t\t\tconst dx = currentPos.x - prevPos.x;\n+\t\t\t\t\tconst dy = currentPos.y - prevPos.y;\n+\t\t\t\t\tconst distSq = dx * dx + dy * dy;\n+\n+\t\t\t\t\tif ( distSq <= THRESHOLD_SQ ) {\n+\n+\t\t\t\t\t\tpoints.splice( currentIndex, 1 );\n+\t\t\t\t\t\tif ( currentIndex == 0 ) break;\n+\t\t\t\t\t\ti --;\n+\t\t\t\t\t\tcontinue;\n+\n+\t\t\t\t\t}\n+\n+\t\t\t\t\tprevPos = currentPos;\n+\n+\t\t\t\t}\n+\n+\t\t\t}\n+\n+\t\t\tcleanPoints( vertices );\n+\t\t\tholes.forEach( cleanPoints );\n+\n+\t\t\tconst numHoles = holes.length;\n \n \t\t\t/* Vertices */\n \n \t\t\tconst contour = vertices; // vertices has all points but contour has only points of circumference\n \n-\t\t\tfor ( let h = 0, hl = holes.length; h < hl; h ++ ) {\n+\t\t\tfor ( let h = 0; h < numHoles; h ++ ) {\n \n \t\t\t\tconst ahole = holes[ h ];",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 2,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/geometries/ExtrudeGeometry.js",
+   "body": "Use strict equality === instead of ==. The checklist requires using === and !== for all comparisons.\n",
+   "from_line": 406,
+   "to_line": 407,
+   "category": "Code Defect",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -372,28 +404,36 @@ class ExtrudeGeometry extends BufferGeometry {\n \t\t\t\t\tconst vert = scalePt2( contour[ i ], contourMovements[ i ], bs );\n \n \t\t\t\t\tv( vert.x, vert.y, - z );\n+\t\t\t\t\tif ( t == 0 ) contractedContourVertices.push( vert );\n \n \t\t\t\t}\n \n \t\t\t\t// expand holes\n \n-\t\t\t\tfor ( let h = 0, hl = holes.length; h < hl; h ++ ) {\n+\t\t\t\tfor ( let h = 0, hl = numHoles; h < hl; h ++ ) {\n \n \t\t\t\t\tconst ahole = holes[ h ];\n \t\t\t\t\toneHoleMovements = holesMovements[ h ];\n-\n+\t\t\t\t\tconst oneHoleVertices = [];\n \t\t\t\t\tfor ( let i = 0, il = ahole.length; i < il; i ++ ) {\n \n \t\t\t\t\t\tconst vert = scalePt2( ahole[ i ], oneHoleMovements[ i ], bs );\n \n \t\t\t\t\t\tv( vert.x, vert.y, - z );\n+\t\t\t\t\t\tif ( t == 0 ) oneHoleVertices.push( vert );\n \n \t\t\t\t\t}\n \n+\t\t\t\t\tif ( t == 0 ) expandedHoleVertices.push( oneHoleVertices );\n+\n \t\t\t\t}\n \n \t\t\t}\n \n+\t\t\tconst faces = ShapeUtils.triangulateShape( contractedContourVertices, expandedHoleVertices );\n+\n+\t\t\tconst flen = faces.length;\n+\n \t\t\tconst bs = bevelSize + bevelOffset;\n \n \t\t\t// Back facing vertices",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 3,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/geometries/ExtrudeGeometry.js",
+   "body": "Consider adding a comment explaining why cleaned vertices are used here instead of the original `vertices` and `holes`. This improves understanding of the geometric preprocessing impact.\n",
+   "from_line": 433,
+   "to_line": 433,
+   "category": "Maintainability and Readability",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -372,28 +404,36 @@ class ExtrudeGeometry extends BufferGeometry {\n \t\t\t\t\tconst vert = scalePt2( contour[ i ], contourMovements[ i ], bs );\n \n \t\t\t\t\tv( vert.x, vert.y, - z );\n+\t\t\t\t\tif ( t == 0 ) contractedContourVertices.push( vert );\n \n \t\t\t\t}\n \n \t\t\t\t// expand holes\n \n-\t\t\t\tfor ( let h = 0, hl = holes.length; h < hl; h ++ ) {\n+\t\t\t\tfor ( let h = 0, hl = numHoles; h < hl; h ++ ) {\n \n \t\t\t\t\tconst ahole = holes[ h ];\n \t\t\t\t\toneHoleMovements = holesMovements[ h ];\n-\n+\t\t\t\t\tconst oneHoleVertices = [];\n \t\t\t\t\tfor ( let i = 0, il = ahole.length; i < il; i ++ ) {\n \n \t\t\t\t\t\tconst vert = scalePt2( ahole[ i ], oneHoleMovements[ i ], bs );\n \n \t\t\t\t\t\tv( vert.x, vert.y, - z );\n+\t\t\t\t\t\tif ( t == 0 ) oneHoleVertices.push( vert );\n \n \t\t\t\t\t}\n \n+\t\t\t\t\tif ( t == 0 ) expandedHoleVertices.push( oneHoleVertices );\n+\n \t\t\t\t}\n \n \t\t\t}\n \n+\t\t\tconst faces = ShapeUtils.triangulateShape( contractedContourVertices, expandedHoleVertices );\n+\n+\t\t\tconst flen = faces.length;\n+\n \t\t\tconst bs = bevelSize + bevelOffset;\n \n \t\t\t// Back facing vertices",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "JavaScript"
+}

@@ -1,0 +1,111 @@
+{
+ "results": [
+  {
+   "change_intent": "Update the default workgroup size to 3D ([ 64, 1, 1 ]) and allow the compute TSL function to accept either a count or a workgroup size array.",
+   "summary": "The workgroup size is updated to 3D and compute() is overloaded to accept a workgroup array, but computeKernel() mentioned in the PR title and description is missing.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 226,
+     "end_line": 240,
+     "category": "question",
+     "confidence": "high",
+     "evidence": "export const compute = ( node, countOrWorkgroupSize, workgroupSize ) => {",
+     "comment": "The PR title is \"TSL: Introduce `computeKernel()`\" and the description explicitly shows usage via `computeUpdate().computeKernel( [ 16, 16, 1 ] )`. However, `computeKernel` is neither declared, exported, nor registered with `addMethodChaining()`. Calling `.computeKernel(...)` will throw a runtime TypeError.",
+     "suggestion": "If `computeKernel` was intended to be introduced as described, define and export `computeKernel` (and register it with `addMethodChaining`). If the decision was made to overload `compute()` instead, consider updating the PR title, description, and JSDoc type annotation (`number|Array<number>`) to reflect that.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "src/nodes/gpgpu/ComputeNode.js"
+  },
+  {
+   "change_intent": "Add an optional dispatchSize parameter to Renderer.compute() and pass it through to the backend compute call.",
+   "summary": "The new dispatchSize parameter is forwarded to backend.compute(), but it is not forwarded to computeAsync() when the renderer is uninitialized, nor is computeAsync() updated to accept it.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 2314,
+     "end_line": 2314,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "compute( computeNodes, dispatchSize = [ 0, 0, 0 ] ) {",
+     "comment": "When `compute()` is called before backend initialization, it delegates to `this.computeAsync( computeNodes )`, dropping `dispatchSize`. Furthermore, `computeAsync` has not been updated to accept `dispatchSize` and forward it back to `this.compute()`.",
+     "suggestion": "Pass `dispatchSize` to `this.computeAsync( computeNodes, dispatchSize )` when uninitialized, and update `computeAsync( computeNodes, dispatchSize )` to accept and forward `dispatchSize` to `this.compute()`.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "src/renderers/common/Renderer.js"
+  },
+  {
+   "change_intent": "Allow passing a custom 3D dispatch size to WebGPUBackend.compute() for compute kernel dispatches.",
+   "summary": "The change introduces a critical bug in the default compute path where dispatch size properties are set on computeNodeData instead of computeNodeData.dispatchSize, and it risks a TypeError if dispatchSize is undefined.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 1327,
+     "end_line": 1327,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "const isValid = dispatchSize[ 0 ] > 0 && dispatchSize[ 1 ] > 0 && dispatchSize[ 2 ] > 0;",
+     "comment": "If compute() is called without passing dispatchSize (or if it is passed as undefined/null), indexing dispatchSize[ 0 ] will throw a TypeError: Cannot read properties of undefined.",
+     "suggestion": "Provide a default parameter for dispatchSize (e.g. dispatchSize = null) and verify that dispatchSize is an array or truthy before indexing into it.",
+     "suggested_code": "const isValid = Array.isArray( dispatchSize ) && dispatchSize[ 0 ] > 0 && dispatchSize[ 1 ] > 0 && dispatchSize[ 2 ] > 0;"
+    },
+    {
+     "start_line": 1329,
+     "end_line": 1376,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "dispatchSize = isValid ? dispatchSize : computeNodeData;",
+     "comment": "When isValid is false, dispatchSize is reassigned to computeNodeData instead of computeNodeData.dispatchSize. Consequently, computeNodeData.dispatchSize initialized on line 1360 is ignored, dispatchSize.x and dispatchSize.y are set directly on computeNodeData, dispatchSize.y is never set when computeNode.dispatchCount <= maxComputeWorkgroupsPerDimension, and dispatchSize.z is undefined. This results in passEncoderGPU.dispatchWorkgroups() being called with undefined dimensions.",
+     "suggestion": "Keep the parameter dispatchSize separate from the internal dispatch size object stored in computeNodeData. In the else block, retrieve computeNodeData.dispatchSize and operate on that instead of reassigning dispatchSize to computeNodeData.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "src/renderers/webgpu/WebGPUBackend.js"
+  },
+  {
+   "change_intent": "Support 3D compute workgroup sizes in WGSL node building and update the compute shader global instanceIndex calculation accordingly.",
+   "summary": "The change updates WGSL compute generation to support 3D workgroup dimensions, but it unnecessarily throws if workgroupSize does not have exactly 3 elements (breaking existing 1D/2D workgroup configurations) and introduces mixed space indentation.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 1901,
+     "end_line": 1903,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "const workgroupSize = this.object.workgroupSize || [ 64, 1, 1 ];\n\n\t\t\tif ( workgroupSize.length !== 3 ) throw new Error( 'workgroupSize must have 3 elements' );",
+     "comment": "Strictly requiring workgroupSize to have exactly 3 elements breaks backwards compatibility for any existing code that specifies 1D or 2D workgroup sizes (such as [ 128 ] or [ 16, 16 ]). In WebGPU, workgroup dimensions for Y and Z default to 1 when omitted.",
+     "suggestion": "Allow 1D and 2D arrays by filling unspecified dimensions with 1 instead of throwing an error when length is not 3.",
+     "suggested_code": "const workgroupSize = this.object.workgroupSize || [ 64, 1, 1 ];\n\n\t\t\tif ( workgroupSize.length === 0 || workgroupSize.length > 3 ) throw new Error( 'workgroupSize must have between 1 and 3 elements' );\n\n\t\t\tconst [ x = 64, y = 1, z = 1 ] = workgroupSize;\n\n\t\t\tthis.computeShader = this._getWGSLComputeCode( shadersData.compute, [ x, y, z ] );"
+    },
+    {
+     "start_line": 2136,
+     "end_line": 2137,
+     "category": "style",
+     "confidence": "high",
+     "evidence": "    + globalId.y * (${workgroupSizeX} * numWorkgroups.x)\n    + globalId.z * (${workgroupSizeX} * numWorkgroups.x) * (${workgroupSizeY} * numWorkgroups.y);",
+     "comment": "These lines use 4-space indentation instead of tabs, which is inconsistent with the Three.js codebase style.",
+     "suggestion": "Use tabs instead of spaces for indentation.",
+     "suggested_code": "\t\t+ globalId.y * (${workgroupSizeX} * numWorkgroups.x)\n\t\t+ globalId.z * (${workgroupSizeX} * numWorkgroups.x) * (${workgroupSizeY} * numWorkgroups.y);"
+    }
+   ],
+   "filename": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js"
+  }
+ ],
+ "n_files": 4,
+ "input_tokens": 32296,
+ "output_tokens": 1913,
+ "calls": 4,
+ "tool_calls": null,
+ "elapsed_s": 162.7,
+ "mode": "per-file",
+ "routing_tokens": 10445,
+ "call_input_tokens": [
+  8470,
+  7640,
+  7840,
+  8346
+ ],
+ "model": "gemini-3.8-flash"
+}

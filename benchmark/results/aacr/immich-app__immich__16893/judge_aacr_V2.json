@@ -1,0 +1,85 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 19,
+  "findings": [
+   {
+    "file": "web/src/lib/components/assets/thumbnail/image-thumbnail.svelte",
+    "start": 70,
+    "end": 70,
+    "category": "performance",
+    "comment": "When virtual scrolling unmounts thumbnails that have already loaded successfully, this still dispatches a cancel message over BroadcastChannel to the service worker for each element. In addition to unnecessary IPC overhead during fast scrolling, if another component is currently loading the same URL, this could abort that request."
+   },
+   {
+    "file": "web/src/service-worker/index.ts",
+    "start": 78,
+    "end": 78,
+    "category": "bug",
+    "comment": "On a BroadcastChannel MessageEvent, `event.origin` is often an empty string (\"\") or undefined because BroadcastChannel is strictly same-origin. When `urlstring` is a relative path (such as `/api/assets/...`), `new URL(urlstring, \"\")` throws a `TypeError: Invalid base URL`, causing the message handler to fail. The same issue exists on line 87."
+   },
+   {
+    "file": "web/src/service-worker/index.ts",
+    "start": 51,
+    "end": 53,
+    "category": "bug",
+    "comment": "Calling `fetch(url, ...)` instead of forwarding `event.request` discards all incoming request headers, such as `Range` (crucial for video streaming or partial content under `/original`) and `Authorization` / conditional headers. Additionally, intercepting `/original` and saving the entire response to `CacheStorage` via `cache.put()` can quickly exceed storage quotas on large photos and videos."
+   },
+   {
+    "file": "web/src/service-worker/index.ts",
+    "start": 54,
+    "end": 66,
+    "category": "bug",
+    "comment": "`pendingLoads` maps `url.toString()` to a single `AbortController`. If the same URL is requested concurrently (e.g. preloading an asset while viewing it, or rendering the same image in two components), the subsequent request overwrites the controller in the map. When the earlier request finishes, the `finally` block deletes the URL from `pendingLoads` while the second request is still running, leaving it untracked and un-cancellable."
+   },
+   {
+    "file": "web/src/service-worker/index.ts",
+    "start": 59,
+    "end": 61,
+    "category": "bug",
+    "comment": "`cache.put()` returns a Promise that is not awaited and has no `.catch()` handler. If caching fails (for example, due to a `QuotaExceededError` on large assets), this results in an unhandled promise rejection in the service worker."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "web/src/lib/components/assets/thumbnail/image-thumbnail.svelte",
+   "matched_gt": [
+    7
+   ],
+   "reason": "1. No match — discusses cancelling requests when the `url` prop changes, whereas the generated comment discusses cancelling already-loaded requests on unmount.\n2. Match — both address the issue of unconditionally calling `cancelImageUrl` on unmount for already-loaded images, leading to unnecessary messaging overhead.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "web/src/service-worker/index.ts",
+   "matched_gt": [
+    16
+   ],
+   "reason": "1. No match — concerns hardcoded `useCache` configuration.\n2. No match — concerns a redundant code comment.\n3. No match — concerns hardcoded URL path regex.\n4. No match — concerns error logging in a catch block.\n5. No match — concerns general malformed `urlstring` handling via try-catch, not the missing `event.origin` on BroadcastChannel.\n6. Match — both identify that `event.origin` on BroadcastChannel `MessageEvent` is undefined/empty, causing URL construction to fail.\n7. No match — concerns unhandled Promise rejection in the preload branch.\n8. No match — concerns consolidating duplicated URL parsing logic.\n\n[6]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "web/src/service-worker/index.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses making `useCache` configurable, generated discusses request headers and storage quotas.\n2. No match — ref discusses removing a redundant comment, generated discusses fetch behavior and cache storage.\n3. No match — ref discusses extracting a URL regex constant, generated discusses request headers and storage quotas.\n4. No match — ref discusses logging in catch blocks, generated discusses request headers and storage quotas.\n5. No match — ref discusses error handling for URL construction, generated discusses request headers and storage quotas.\n6. No match — ref discusses `event.origin` on BroadcastChannel MessageEvent, generated discusses request headers and storage quotas.\n7. No match — ref discusses unhandled rejection in preload branch, generated discusses request headers and storage quotas.\n8. No match — ref discusses deduplicating URL parsing logic, generated discusses request headers and storage quotas.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "web/src/service-worker/index.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses hardcoding of `useCache`, while generated discusses concurrency issues in `pendingLoads`.\n2. No match — ref discusses a redundant code comment, while generated discusses overwriting `AbortController` in `pendingLoads`.\n3. No match — ref discusses hardcoded URL path regex, while generated discusses race conditions with concurrent requests.\n4. No match — ref discusses error swallowing in catch block, while generated discusses tracking/cancellation issues in `pendingLoads`.\n5. No match — ref discusses URL construction throwing on malformed input, while generated discusses concurrent requests overwriting `pendingLoads`.\n6. No match — ref discusses `event.origin` being undefined on BroadcastChannel events, while generated discusses `pendingLoads` map handling.\n7. No match — ref discusses unhandled rejection in the `preload` branch, while generated discusses concurrent request tracking in `pendingLoads`.\n8. No match — ref discusses duplicated URL parsing logic, while generated discusses concurrent request handling in `pendingLoads`.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "web/src/service-worker/index.ts",
+   "matched_gt": [],
+   "reason": "1. No match — discusses hardcoded `useCache` configuration, not unhandled `cache.put()` promise.\n2. No match — discusses removing a redundant comment.\n3. No match — discusses extracting a hardcoded regex pattern into a constant.\n4. No match — discusses logging swallowed errors in an existing catch block, not unhandled rejections from `cache.put()`.\n5. No match — discusses handling malformed URLs during URL construction.\n6. No match — discusses `event.origin` being undefined on BroadcastChannel MessageEvent.\n7. No match — discusses unhandled promise rejection for `immichAsset(url)` in the preload handler, not `cache.put()`.\n8. No match — discusses deduplicating URL parsing logic.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

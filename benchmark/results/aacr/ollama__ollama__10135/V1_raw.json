@@ -1,0 +1,70 @@
+{
+ "results": [
+  {
+   "summary": "透過 errgroup 並發上傳模型檔案與 Adapter blobs 並進行並行限制，提升上傳效率。",
+   "issues": [
+    {
+     "line": 123,
+     "severity": "performance",
+     "comment": "目前宣告 `var g errgroup.Group`，當其中一個 blob 上傳發生錯誤時，無法及時中斷其他正在進行的 goroutine。由於模型檔通常體積龐大，繼續上傳失敗請求中的其餘檔案會徒增頻寬與 I/O 消耗。",
+     "suggestion": "建議改用 `g, ctx := errgroup.WithContext(cmd.Context())`，並將該 `ctx` 傳入 `createBlob`（或在呼叫處傳入），以確保任一檔案失敗時能立即取消其他進行中的上傳任務。"
+    }
+   ],
+   "filename": "cmd/cmd.go"
+  },
+  {
+   "summary": "更新了 CreateRequest 的欄位檢查為 Model，但錯誤訊息輸出中遺漏了對應變數的修改。",
+   "issues": [
+    {
+     "line": 692,
+     "severity": "bug",
+     "comment": "條件判斷已更新為檢查 req.Model，但隨後的 t.Errorf 依然輸出 req.Name，測試失敗時會印出錯誤或不一致的值。",
+     "suggestion": "將 t.Errorf 中的 req.Name 一併更新為 req.Model：t.Errorf(\"expected model name 'test-model', got %s\", req.Model)"
+    }
+   ],
+   "filename": "cmd/cmd_test.go"
+  },
+  {
+   "summary": "將寫死的終端寬度數值 80 替換為常量 defaultTermWidth，改進了程式碼的可讀性與維護性，改動良好無問題。",
+   "issues": [],
+   "filename": "progress/bar.go"
+  },
+  {
+   "summary": "限制進度條最大行數不超過終端機高度，但未同步更新游標位置追蹤 (p.pos) 與結尾換行判斷，會導致畫面游標錯位與格式異常。",
+   "issues": [
+    {
+     "line": 118,
+     "severity": "bug",
+     "comment": "當 states 數量超過終端機限制時，換行判斷 `if i < len(p.states)-1` 仍會為 true，導致最後一行被渲染後仍額外輸出換行符 `\\n`，多佔用一行。",
+     "suggestion": "建議將可渲染的行數抽取為變數（例如 `count := min(len(p.states), max(0, termHeight-1))`），換行條件改為 `if i < count-1`。"
+    },
+    {
+     "line": 125,
+     "severity": "bug",
+     "comment": "`p.pos` 記錄的是游標目前所在的行數位置，用以在下一次 render 或 StopAndClear 時往上移回起始處。若限制了渲染行數，但 `p.pos` 仍被賦值為完整的 `len(p.states)`，下一次 render 時會往上多移動多餘的行數，導致畫面內容被覆蓋甚至終端機顯示錯亂。",
+     "suggestion": "將 `p.pos` 設為實際渲染的行數，例如 `p.pos = min(len(p.states), max(0, termHeight-1))`。"
+    },
+    {
+     "line": 15,
+     "severity": "style",
+     "comment": "宣告了未使用的常數 `defaultTermWidth`。",
+     "suggestion": "若後續沒有根據寬度進行文字截斷的規劃，建議移除未使用的 `defaultTermWidth`。"
+    }
+   ],
+   "filename": "progress/progress.go"
+  }
+ ],
+ "n_files": 4,
+ "elapsed_s": 43.0,
+ "calls": 4,
+ "input_tokens": 10860,
+ "output_tokens": 849,
+ "call_input_tokens": [
+  4737,
+  1132,
+  2959,
+  2032
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

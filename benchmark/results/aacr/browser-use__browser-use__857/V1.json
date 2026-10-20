@@ -1,0 +1,131 @@
+{
+ "results": [
+  {
+   "filename": "browser_use/agent/service.py",
+   "summary": "在 Agent 初始化中強制將 Browser 的 disable_security 同步到 new_context_config，但此改動可能無條件覆寫外部傳入的配置並破壞封裝。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 261,
+     "end_line": 261,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "直接修改 `self.browser.config.new_context_config.disable_security` 有幾個問題：1. 若使用者注入已配置好的自訂 `browser`，此行會無條件覆蓋使用者在 `new_context_config` 上的自訂安全設定；2. 若使用者已傳入自訂的 `browser_context`，此修改對傳入的 context 無效，卻仍會產生副作用修改傳入的 `browser` 物件；3. 此配置繼承邏輯放在 Agent 層破壞了 BrowserConfig/Browser 的職責劃分。"
+    }
+   ]
+  },
+  {
+   "filename": "browser_use/browser/browser.py",
+   "summary": "本次改動將 Playwright 替換為 Patchright、修正了 Pydantic 驗證別名與 new_context 配置傳遞，但在 launch 時硬編碼 channel='chrome' 會破壞非 Chromium 瀏覽器的支援且可能在未安裝 Chrome 的環境失敗。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 283,
+     "end_line": 283,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在 `_setup_builtin_browser` 中硬編碼傳入 `channel='chrome'` 會導致當 `self.config.browser_class` 為 `'firefox'` 或 `'webkit'` 時，`launch` 因不支援 chrome channel 而拋出異常崩潰。此外，若執行環境（如 Docker 或無 GUI 伺服器）未預裝 Google Chrome，強制使用 `'chrome'` 也會導致啟動失敗。"
+    }
+   ]
+  },
+  {
+   "filename": "browser_use/browser/context.py",
+   "summary": "將 Playwright 替換為 Patchright 並精簡 anti-detection script，但在建立 BrowserContext 時對 viewport 的處理邏輯存在缺陷，導致 headful 模式下視窗尺寸設定失效。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 414,
+     "end_line": 414,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在非 headless (headful) 模式下，kwargs 完全未設定 viewport 或 no_viewport。這會使 Playwright/Patchright 回退到預設的 1280x720 固定尺寸，導致原本設定的 browser_window_size 被忽略，且 headful 模式下無法自適應瀏覽器視窗。此外，BrowserContextConfig 中定義的 no_viewport 設定值也未被使用。"
+    },
+    {
+     "start_line": 423,
+     "end_line": 423,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "在 new_context 參數列中使用 inline dict unpacking (**({'bypass_csp': True, ...} if ... else {})) 可讀性較差。"
+    }
+   ]
+  },
+  {
+   "filename": "browser_use/browser/dolphin_service.py",
+   "summary": "將 Playwright 替換為其修補分支 Patchright，替換方式正確且 API 介面相容。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "browser_use/controller/registry/views.py",
+   "summary": "將 Playwright 的 Page 型別導入改為 Patchright，改動單純且無明顯問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "browser_use/controller/service.py",
+   "summary": "將 Playwright async API 匯入替換為 Patchright，修改本身簡潔且無直接問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "browser_use/dom/service.py",
+   "summary": "將 TYPE_CHECKING 中的 Page 型別來源從 playwright 切換至 patchright，改動明確且無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "docs/customize/agent-settings.mdx",
+   "summary": "將範例程式碼中的 Playwright import 更新為 Patchright，但引入的 `BrowserContext` 在範例中並未使用。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 95,
+     "end_line": 95,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "在該程式碼範例中，從 `patchright.async_api` 匯入的 `BrowserContext` 完全沒有被使用（`browser.new_context()` 自動推導 context 且未標註型別）。"
+    }
+   ]
+  },
+  {
+   "filename": "pyproject.toml",
+   "summary": "在相依套件中新增 patchright 依賴，語法與設定正確無誤。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "tests/test_attach_chrome.py",
+   "summary": "將 Playwright 替換為其防偵測分支 Patchright，改動簡潔無明顯問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "tests/test_full_screen.py",
+   "summary": "將 Playwright async API 替換為 Patchright，改動單純且無明顯問題。",
+   "recommendation": "n/a",
+   "issues": []
+  }
+ ],
+ "n_files": 11,
+ "input_tokens": 29790,
+ "output_tokens": 1325,
+ "calls": 11,
+ "tool_calls": null,
+ "elapsed_s": 120.0,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  1252,
+  6123,
+  4498,
+  4947,
+  2188,
+  662,
+  3004,
+  3844,
+  1665,
+  1122,
+  485
+ ],
+ "model": "gemini-3.8-flash"
+}

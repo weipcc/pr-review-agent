@@ -1,0 +1,131 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 10,
+  "findings": [
+   {
+    "file": "src/nodes/gpgpu/ComputeNode.js",
+    "start": 222,
+    "end": 222,
+    "category": "style",
+    "comment": "JSDoc 中 countOrWorkgroupSize 的型別僅標註為 number，但實作上已支援傳入 Array<number> 作為 workgroupSize，這會導致 IDE 或 TypeScript 型別檢查發出警告或推導錯誤。"
+   },
+   {
+    "file": "src/renderers/common/Renderer.js",
+    "start": 2322,
+    "end": 2322,
+    "category": "bug",
+    "comment": "當 renderer 尚未初始化（_initialized === false）時，呼叫 this.computeAsync( computeNodes ) 遺漏了傳入 dispatchSize，導致呼叫者傳入的 dispatchSize 遺失。"
+   },
+   {
+    "file": "src/renderers/common/Renderer.js",
+    "start": 2314,
+    "end": 2314,
+    "category": "performance",
+    "comment": "以常規陣列實字 [ 0, 0, 0 ] 作為參數預設值，在每次未傳入第二參數呼叫 compute() 時都會重新建立一個新的 Array 實例，在每幀頻繁呼叫時會增加垃圾回收（GC）負擔。"
+   },
+   {
+    "file": "src/renderers/webgpu/WebGPUBackend.js",
+    "start": 1327,
+    "end": 1327,
+    "category": "bug",
+    "comment": "如果呼叫 compute() 時未傳入 dispatchSize（為 undefined 或 null），存取 dispatchSize[ 0 ] 會直接拋出 TypeError: Cannot read properties of undefined。"
+   },
+   {
+    "file": "src/renderers/webgpu/WebGPUBackend.js",
+    "start": 1329,
+    "end": 1329,
+    "category": "bug",
+    "comment": "在 isValid 為 false 時，dispatchSize 被指派為 computeNodeData（物件本身），但在第 1364-1376 行中卻存取了 dispatchSize.x/y/z。這導致 x 與 y 被直接掛在 computeNodeData 上，且 dispatchSize.z 變成 undefined，最終傳入 dispatchWorkgroups(dispatchSize.x, dispatchSize.y, undefined) 引發執行期錯誤。"
+   },
+   {
+    "file": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+    "start": 1903,
+    "end": 1903,
+    "category": "bug",
+    "comment": "強制要求 workgroupSize.length === 3 會造成 breaking change。使用者先前可能傳入一維或二維陣列（例如 [ 64 ] 或 [ 16, 16 ]），此檢查會導致原本可正常運行的設定拋出 Error。"
+   },
+   {
+    "file": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+    "start": 2136,
+    "end": 2136,
+    "category": "style",
+    "comment": "換行處使用了空格縮排（4 個空白），而專案全域程式碼風格慣用 tabs，造成縮排風格不一致。"
+   },
+   {
+    "file": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+    "start": 2105,
+    "end": 2105,
+    "category": "style",
+    "comment": "_getWGSLComputeCode 的 JSDoc 中 @param {string} workgroupSize 未同步更新，目前傳入的已是包含 3 個元素的數值陣列（Array<number>）。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/nodes/gpgpu/ComputeNode.js",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both point out that the JSDoc type for `countOrWorkgroupSize` only specifies `number` and should be updated to include array types.\n2. No match — reference discusses a runtime NaN error in `updateDispatchCount()`, whereas the generated comment addresses JSDoc type annotations.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "src/renderers/common/Renderer.js",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. No match — Reference 1 addresses the default value for `dispatchSize`, while the generated comment concerns `dispatchSize` being lost during uninitialized delegation.\n2. Match — Both identify that `dispatchSize` is lost when delegating to `computeAsync` prior to initialization.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "src/renderers/common/Renderer.js",
+   "matched_gt": [],
+   "reason": "1. No match — generated comment flags GC pressure from array allocation, while ref comment flags a logic/validation bug with `[0, 0, 0]`.\n2. No match — ref comment discusses parameter loss in `computeAsync`, which is unrelated to array allocation/GC.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "src/renderers/webgpu/WebGPUBackend.js",
+   "matched_gt": [],
+   "reason": "1. No match — concerns accepting 1D or 2D array inputs instead of requiring length 3, whereas the generated comment addresses `dispatchSize` being `undefined` or `null`.\n2. No match — concerns exceeding maxComputeWorkgroupsPerDimension limits in the fast path.\n3. No match — concerns missing y/z properties when setting components of an object, not undefined `dispatchSize` array.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "src/renderers/webgpu/WebGPUBackend.js",
+   "matched_gt": [],
+   "reason": "1. No match — Reference 1 addresses missing support for 1D/2D dispatch size arrays, whereas the Generated Comment addresses an incorrect variable assignment (`computeNodeData`).\n2. No match — Reference 2 discusses missing boundary/limit checks against `maxComputeWorkgroupsPerDimension`, whereas the Generated Comment concerns assigning the wrong object to `dispatchSize`.\n3. No match — Reference 3 claims the else branch only sets `dispatchSize.x` leaving `y` and `z` uninitialized, whereas the Generated Comment identifies that `dispatchSize` was incorrectly assigned `computeNodeData` at line 1329, mutating the node data and leaving `z` undefined.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 5,
+   "file": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+   "matched_gt": [
+    7
+   ],
+   "reason": "1. Match — both address the issue that requiring `workgroupSize` to strictly have 3 elements breaks or rejects valid 1D/2D array inputs (lengths 1 or 2).\n2. No match — concerns outdated JSDoc documentation for parameter types.\n3. No match — concerns missing `u32()` casts for workgroup size variables interpolated in WGSL.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 6,
+   "file": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses `workgroupSize` dimensions per WebGPU spec, generated discusses tab vs space indentation.\n2. No match — ref discusses outdated JSDoc parameter types, generated discusses indentation inconsistency.\n3. No match — ref discusses missing `u32()` casts in WGSL shader generation, generated discusses indentation style.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 7,
+   "file": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+   "matched_gt": [
+    8
+   ],
+   "reason": "1. No match — discusses handling workgroupSize array lengths (1 or 2 elements), not JSDoc parameter type.\n2. Match — both identify that the JSDoc for workgroupSize documents it as 'string' instead of 'Array<number>'.\n3. No match — discusses WGSL interpolation and `u32()` casts for workgroupSize variables.\n\n[2]",
+   "hit_new_gt": true
+  }
+ ]
+}

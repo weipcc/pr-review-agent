@@ -1,0 +1,71 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 5,
+  "findings": [
+   {
+    "file": "docs/src/details/widgets/animimg.rst",
+    "start": 36,
+    "end": 36,
+    "category": "style",
+    "comment": "英文語法與用詞略為生硬（例如 'images source' 與 'flip playback'）。"
+   },
+   {
+    "file": "src/widgets/animimage/lv_animimage.c",
+    "start": 119,
+    "end": 119,
+    "category": "style",
+    "comment": "lv_animimg_set_src_reverse 與 lv_animimg_set_src 的實作邏輯高度重複，僅在 lv_anim_set_values 的起迄數值設定上相反。"
+   },
+   {
+    "file": "src/widgets/animimage/lv_animimage.h",
+    "start": 79,
+    "end": 79,
+    "category": "style",
+    "comment": "Doxygen 註解描述開頭多了一個空格（` * Set` 比起標準的 ` * Set` 多了一格縮排）。"
+   },
+   {
+    "file": "tests/src/test_cases/widgets/test_animimg.c",
+    "start": 57,
+    "end": 57,
+    "category": "style",
+    "comment": "test_animimg_set_src_reverse 僅檢查了 animimg 是否為非空，但 animimg 早在 setUp() 中便已建立並非空，因此此斷言無法有效驗證 lv_animimg_set_src_reverse 是否成功執行或反向邏輯是否正確。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "docs/src/details/widgets/animimg.rst",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both critique the wording choices in this section, specifically highlighting \"flip playback\" (and \"images source\").\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "src/widgets/animimage/lv_animimage.c",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. Match — both identify that `lv_animimg_set_src` and `lv_animimg_set_src_reverse` contain duplicate logic.\n2. No match — reference discusses an out-of-bounds / buffer access issue with `num == 0`, whereas generated discusses code duplication.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "src/widgets/animimage/lv_animimage.h",
+   "matched_gt": [],
+   "reason": "1. No match — ref concerns breaking API changes, while generated concerns extra whitespace indentation in a Doxygen comment.\n2. No match — ref concerns ambiguous terminology and grammatical issues, while generated concerns extra whitespace indentation.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "tests/src/test_cases/widgets/test_animimg.c",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

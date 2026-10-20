@@ -1,0 +1,41 @@
+{
+ "owner": "vllm-project",
+ "repo": "vllm",
+ "full": "vllm-project/vllm",
+ "pr_number": 15998,
+ "title": "[Benchmark][Doc] Update throughput benchmark and README",
+ "body": "This PR updates benchmark README for the latest change from https://github.com/vllm-project/vllm/pull/15955 . Also, it adds AIMODataset to `benchmark_throughput.py` \n\n@JenZhao @ywang96 Thank you for the comments!",
+ "base_sha": "5e125e74d1b9739025ccb81106e28ce9b0dd4ea5",
+ "review_sha": "a800045d0e2473ce173865edb83967cd210dec4c",
+ "head_now": "143ab6ae69a063daf905a61fe35b288f4f65046f",
+ "raw_diff": "diff --git a/benchmarks/README.md b/benchmarks/README.md\nindex 4777d8329f2d..b0417631c514 100644\n--- a/benchmarks/README.md\n+++ b/benchmarks/README.md\n@@ -51,6 +51,12 @@ become available.\n       <td style=\"text-align: center;\">✅</td>\n       <td style=\"text-align: center;\">✅</td>\n       <td><code>likaixin/InstructCoder</code></td>\n+    </tr>\n+      <tr>\n+      <td><strong>HuggingFace-AIMO</strong></td>\n+      <td style=\"text-align: center;\">✅</td>\n+      <td style=\"text-align: center;\">✅</td>\n+      <td><code>AI-MO/aimo-validation-aime</code> , <code>AI-MO/NuminaMath-1.5</code>, <code>AI-MO/NuminaMath-CoT</code></td>\n     </tr>\n     <tr>\n       <td><strong>HuggingFace-Other</strong></td>\n@@ -187,6 +193,17 @@ python3 vllm/benchmarks/benchmark_serving.py \\\n   --num-prompts 10\n ```\n \n+**`AI-MO/aimo-validation-aime`**\n+\n+``` bash\n+python3 vllm/benchmarks/benchmark_serving.py \\\n+    --model Qwen/QwQ-32B \\\n+    --dataset-name hf \\\n+    --dataset-path AI-MO/aimo-validation-aime \\\n+    --num-prompts 10 \\\n+    --seed 42\n+```\n+\n ---\n ## Example - Offline Throughput Benchmark\n \n@@ -278,6 +295,18 @@ python3 vllm/benchmarks/benchmark_throughput.py \\\n   --num-prompts 10\n ```\n \n+**`AI-MO/aimo-validation-aime`**\n+\n+```bash\n+python3 benchmarks/benchmark_throughput.py \\\n+  --model Qwen/QwQ-32B \\\n+  --backend vllm \\\n+  --dataset-name hf \\\n+  --dataset-path AI-MO/aimo-validation-aime \\\n+  --hf-split train \\\n+  --num-prompts 10\n+```\n+\n ### Benchmark with LoRA Adapters\n \n ``` bash\ndiff --git a/benchmarks/benchmark_throughput.py b/benchmarks/benchmark_throughput.py\nindex 1ff63f0a4479..718ac0764078 100644\n--- a/benchmarks/benchmark_throughput.py\n+++ b/benchmarks/benchmark_throughput.py\n@@ -11,10 +11,10 @@\n \n import torch\n import uvloop\n-from benchmark_dataset import (BurstGPTDataset, ConversationDataset,\n-                               InstructCoderDataset, RandomDataset,\n-                               SampleRequest, ShareGPTDataset, SonnetDataset,\n-                               VisionArenaDataset)\n+from benchmark_dataset import (AIMODataset, BurstGPTDataset,\n+                               ConversationDataset, InstructCoderDataset,\n+                               RandomDataset, SampleRequest, ShareGPTDataset,\n+                               SonnetDataset, VisionArenaDataset)\n from benchmark_utils import convert_to_pytorch_benchmark_format, write_to_json\n from tqdm import tqdm\n from transformers import (AutoModelForCausalLM, AutoTokenizer,\n@@ -332,7 +332,10 @@ def get_requests(args, tokenizer):\n             common_kwargs['dataset_subset'] = args.hf_subset\n             common_kwargs['dataset_split'] = args.hf_split\n             sample_kwargs[\"enable_multimodal_chat\"] = True\n-\n+        elif args.dataset_path in AIMODataset.SUPPORTED_DATASET_PATHS:\n+            dataset_cls = AIMODataset\n+            common_kwargs['dataset_subset'] = args.hf_subset\n+            common_kwargs['dataset_split'] = \"train\"\n     else:\n         raise ValueError(f\"Unknown dataset name: {args.dataset_name}\")\n     # Remove None values\n@@ -473,6 +476,8 @@ def validate_args(args):\n             assert args.backend == \"vllm\", \"InstructCoder dataset needs to use vllm as the backend.\"  #noqa: E501\n         elif args.dataset_path in ConversationDataset.SUPPORTED_DATASET_PATHS:\n             assert args.backend == \"vllm-chat\", \"ConversationDataset needs to use vllm-chat as the backend.\"  #noqa: E501\n+        elif args.dataset_path in AIMODataset.SUPPORTED_DATASET_PATHS:\n+            assert args.backend == \"vllm\", \"AIMODataset needs to use vllm as the backend.\"  #noqa: E501\n         else:\n             raise ValueError(\n                 f\"{args.dataset_path} is not supported by hf dataset.\")\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "benchmarks/README.md",
+   "body": "Inconsistent script path prefix: This example uses `vllm/benchmarks/benchmark_serving.py` while the throughput benchmark example at line 301 uses `benchmarks/benchmark_throughput.py` (without the `vllm/` prefix).\n\nFor consistency and to avoid user confusion, both examples should use the same path convention. Based on the actual file structure and the throughput example, this should likely be `benchmarks/benchmark_serving.py` (without the `vllm/` prefix).\n\n```\nFix benchmarks/README.md:196: Remove 'vllm/' prefix from the script path to match the convention used in other examples throughout the document\n```",
+   "from_line": 196,
+   "to_line": 196,
+   "category": "Maintainability and Readability",
+   "context": "File Level",
+   "diff_hunk": "@@ -187,6 +193,17 @@ python3 vllm/benchmarks/benchmark_serving.py \\\n   --num-prompts 10\n ```\n \n+**`AI-MO/aimo-validation-aime`**\n+\n+``` bash\n+python3 vllm/benchmarks/benchmark_serving.py \\\n+    --model Qwen/QwQ-32B \\\n+    --dataset-name hf \\\n+    --dataset-path AI-MO/aimo-validation-aime \\\n+    --num-prompts 10 \\\n+    --seed 42\n+```\n+\n ---\n ## Example - Offline Throughput Benchmark",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 1,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "benchmarks/benchmark_throughput.py",
+   "body": "The AIMODataset condition hardcodes dataset_split to 'train' while other dataset types use args.hf_split. This inconsistency may limit flexibility when users want to use different splits for AIMODataset. Consider using args.hf_split like other dataset types for consistency.\n",
+   "from_line": 335,
+   "to_line": 338,
+   "category": "Code Defect",
+   "context": "File Level",
+   "diff_hunk": "@@ -332,7 +332,10 @@ def get_requests(args, tokenizer):\n             common_kwargs['dataset_subset'] = args.hf_subset\n             common_kwargs['dataset_split'] = args.hf_split\n             sample_kwargs[\"enable_multimodal_chat\"] = True\n-\n+        elif args.dataset_path in AIMODataset.SUPPORTED_DATASET_PATHS:\n+            dataset_cls = AIMODataset\n+            common_kwargs['dataset_subset'] = args.hf_subset\n+            common_kwargs['dataset_split'] = \"train\"\n     else:\n         raise ValueError(f\"Unknown dataset name: {args.dataset_name}\")\n     # Remove None values",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "Python"
+}

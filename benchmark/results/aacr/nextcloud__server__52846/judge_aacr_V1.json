@@ -1,0 +1,57 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 2,
+  "findings": [
+   {
+    "file": "lib/public/Defaults.php",
+    "start": 32,
+    "end": 32,
+    "category": "style",
+    "comment": "目前檔案已經位於 namespace OCP 命名空間內，在此處直接使用 Server::get(...) 即可，不必使用完整的命名空間前綴 \\OCP\\Server。"
+   },
+   {
+    "file": "lib/public/Files_FullTextSearch/Model/AFilesDocument.php",
+    "start": 19,
+    "end": 19,
+    "category": "style",
+    "comment": "在 PHPDoc 範例程式碼中使用了 `IEventDispatcher::class`，但該檔案並沒有引入（use）此介面，亦未使用完整命名空間，可能會對參考此註解範例的開發者造成困惑。"
+   },
+   {
+    "file": "lib/public/Security/ICrypto.php",
+    "start": 16,
+    "end": 16,
+    "category": "bug",
+    "comment": "\\OCP\\Server 類別並未提供靜態方法 getCrypto()，直接呼叫會導致 PHP Fatal Error（Call to undefined method OCP\\Server::getCrypto()）。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "lib/public/Defaults.php",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "lib/public/Files_FullTextSearch/Model/AFilesDocument.php",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both point out that `IEventDispatcher::class` in the doc example lacks the full namespace/import, potentially confusing developers.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "lib/public/Security/ICrypto.php",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. Match — both identify that `\\OCP\\Server::getCrypto()` does not exist and is an invalid method call.\n\n[1]",
+   "hit_new_gt": true
+  }
+ ]
+}

@@ -1,0 +1,86 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 9,
+  "findings": [
+   {
+    "file": "src/integrations/editor/DiffViewProvider.ts",
+    "start": 50,
+    "end": 57,
+    "category": "bug",
+    "comment": "chardet.detect can detect encodings that iconv-lite does not support (such as UTF-32LE, UTF-32BE, or unsupported code pages). Passing an unsupported encoding to iconv.decode will throw an unhandled 'Encoding not recognized' error and crash open()."
+   },
+   {
+    "file": "src/integrations/editor/DiffViewProvider.ts",
+    "start": 237,
+    "end": 240,
+    "category": "bug",
+    "comment": "jschardet reports UTF-8 as 'UTF-8' (with a hyphen) and plain ASCII files as 'ascii'. Checking fileEncoding.toLowerCase() !== 'utf8' evaluates to true for 'utf-8', causing redundant disk writes on all UTF-8 files. More seriously, files detected as 'ascii' will be re-encoded with iconv.encode(..., 'ascii'), which corrupts any non-ASCII characters added during editing into question marks (?). Additionally, writing directly to disk after showTextDocument has opened the document can cause editor desync or file change conflicts."
+   },
+   {
+    "file": "src/integrations/misc/extract-text.ts",
+    "start": 26,
+    "end": 29,
+    "category": "performance",
+    "comment": "Reading the entire file into a buffer before checking its size defeats the size limit check. For large files (e.g. multi-gigabyte files), this can cause significant memory pressure or crash the process with ERR_FS_FILE_TOO_LARGE. The file size should be inspected prior to reading the buffer (and getFileSizeInKB, imported on line 7, is now left unused)."
+   },
+   {
+    "file": "src/integrations/misc/extract-text.ts",
+    "start": 30,
+    "end": 42,
+    "category": "bug",
+    "comment": "isBinaryFile is only checked inside the else branch when chardet.detect returns no encoding. However, jschardet almost always detects an encoding (such as windows-1252 or ISO-8859-2) for arbitrary binary files like images, executables, and archives. As a result, the else branch is never reached, binary detection is bypassed, and binary files will be decoded as text and returned instead of throwing the expected error."
+   },
+   {
+    "file": "src/integrations/misc/extract-text.ts",
+    "start": 31,
+    "end": 43,
+    "category": "bug",
+    "comment": "jschardet can detect encodings that iconv-lite does not support (e.g. UTF-32LE, UTF-32BE, ISO-2022-KR, EUC-TW). When an unsupported encoding name is passed to iconv.decode, iconv-lite throws an unhandled error ('Encoding not recognized'). Additionally, jschardet.detect returns an IDetectResult object, never a string, making typeof detected === 'string' dead code."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/integrations/editor/DiffViewProvider.ts",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. No match — ref suggests adding explanatory code comments, while generated identifies a runtime exception from unsupported encodings.\n2. Match — both address unhandled exceptions resulting from encoding detection/decoding failures in this block and the need to handle them.\n3. No match — ref is about error handling during file writing (`writeFile`), not reading/decoding.\n4. No match — ref is about removing an unnecessary type cast.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "src/integrations/editor/DiffViewProvider.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref suggests adding documentation comments about encoding detection, while generated addresses incorrect encoding string comparison and data corruption.\n2. No match — ref addresses missing error handling in file reading/decoding, while generated addresses flawed encoding comparison and corruption logic during write.\n3. No match — ref addresses missing try/catch error handling around writeFile, while generated addresses encoding mismatches and character corruption.\n4. No match — ref addresses an unnecessary type cast, while generated addresses faulty encoding check and character corruption.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "src/integrations/misc/extract-text.ts",
+   "matched_gt": [
+    4,
+    5
+   ],
+   "reason": "1. Match — both identify that `getFileSizeInKB` should be used to check file size before reading the file into memory.\n2. Match — both state that reading the full file into memory before checking its size causes memory pressure/crashes and recommend checking size first.\n3. No match — concerns code duplication in `extractTextFromIPYNB`.\n4. No match — concerns nested ternary readability.\n5. No match — concerns type safety and the use of `as any`.\n\n[1, 2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "src/integrations/misc/extract-text.ts",
+   "matched_gt": [],
+   "reason": "1. No match — discusses unused import and file size check, while generated discusses binary detection logic being bypassed.\n2. No match — discusses reading large files into memory and checking file size first, unrelated to binary detection.\n3. No match — discusses code duplication between functions and extracting a helper, unrelated to the logic bug in binary detection.\n4. No match — discusses readability of a nested ternary expression.\n5. No match — discusses type safety with `as any` casting.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "src/integrations/misc/extract-text.ts",
+   "matched_gt": [],
+   "reason": "1. No match — discusses unused import `getFileSizeInKB` and file size checking.\n2. No match — discusses memory consumption and checking file size before reading the file.\n3. No match — discusses code duplication between functions and extracting a helper.\n4. No match — discusses readability of a nested ternary expression.\n5. No match — discusses avoiding `as any` for type safety, whereas the generated comment addresses unhandled iconv errors from unsupported encodings and dead code.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

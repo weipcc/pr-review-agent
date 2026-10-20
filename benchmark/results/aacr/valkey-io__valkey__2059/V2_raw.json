@@ -1,0 +1,129 @@
+{
+ "results": [
+  {
+   "change_intent": "Link valkey_rdma and valkey libraries to binaries and modules when USE_RDMA is enabled.",
+   "summary": "Looks good; correctly adds RDMA dependency targets in CMake setup macros when building with RDMA enabled.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "cmake/Modules/ValkeySetup.cmake"
+  },
+  {
+   "change_intent": "Enable RDMA support in the libvalkey dependency CMake build when USE_RDMA is set.",
+   "summary": "Follows the existing TLS configuration pattern to pass the RDMA build option to libvalkey and clean up the cache afterward.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "deps/CMakeLists.txt"
+  },
+  {
+   "change_intent": "Pass USE_RDMA=1 to the libvalkey build flags when Valkey is built with RDMA support.",
+   "summary": "Correctly mirrors the existing TLS configuration by forwarding USE_RDMA=1 to the libvalkey build when BUILD_RDMA is enabled.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "deps/Makefile"
+  },
+  {
+   "change_intent": "Link libvalkey RDMA client libraries into valkey-cli and valkey-benchmark when RDMA support is enabled.",
+   "summary": "The Makefile changes correctly link RDMA libraries into the CLI and benchmark binaries, but mistakenly link RDMA client libraries into the TLS module and duplicate RDMA library flags in FINAL_LIBS.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 519,
+     "end_line": 519,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "$(QUIET_CC)$(CC) -o $@ tls.c -shared -fPIC $(TLS_MODULE_CFLAGS) $(TLS_CLIENT_LIBS) $(RDMA_CLIENT_LIBS)",
+     "comment": "$(RDMA_CLIENT_LIBS) was added to the build rule for $(TLS_MODULE_NAME) (valkey-tls.so). The TLS module does not use RDMA and should not depend on libvalkey_rdma.a or RDMA libraries.",
+     "suggestion": "Remove $(RDMA_CLIENT_LIBS) from the $(TLS_MODULE_NAME) build rule.",
+     "suggested_code": "\t$(QUIET_CC)$(CC) -o $@ tls.c -shared -fPIC $(TLS_MODULE_CFLAGS) $(TLS_CLIENT_LIBS)"
+    },
+    {
+     "start_line": 344,
+     "end_line": 344,
+     "category": "refactor",
+     "confidence": "high",
+     "evidence": "FINAL_LIBS += ../deps/libvalkey/lib/libvalkey_rdma.a $(RDMA_LIBS)",
+     "comment": "Line 343 already appends $(RDMA_LIBS) to FINAL_LIBS, so adding $(RDMA_LIBS) again on line 344 duplicates these flags in the link command.",
+     "suggestion": "Remove the earlier FINAL_LIBS += $(RDMA_LIBS) line or avoid re-appending $(RDMA_LIBS) here.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "src/Makefile"
+  },
+  {
+   "change_intent": "Add RDMA connection support to valkeyConnectWrapper when built with USE_RDMA.",
+   "summary": "The RDMA connection option is cleanly integrated into valkeyConnectWrapper and matches the updated declaration in cli_common.h.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/cli_common.c"
+  },
+  {
+   "change_intent": "Update the declaration of valkeyConnectWrapper to add an rdma parameter.",
+   "summary": "The function prototype update in cli_common.h matches its updated definition and usage across caller files.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/cli_common.h"
+  },
+  {
+   "change_intent": "Add RDMA support to valkey-benchmark via the '--rdma' CLI flag.",
+   "summary": "The change adds RDMA support to connection helpers and event handling, but introduces a crash hazard when initializing clients, breaks RDMA in cluster mode, and passes hardcoded non-RDMA flags in several helpers.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 832,
+     "end_line": 840,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "    if (config.idlemode == 0) {\n        if (config.rdma) {\n            writeHandler(el, c->context->fd, c, 0);\n        } else {\n            aeCreateFileEvent(el, c->context->fd, AE_WRITABLE, writeHandler, c);\n        }\n    } else",
+     "comment": "When config.rdma is enabled, writeHandler is invoked synchronously before the client is appended to config.clients (which occurs at listAddNodeTail) and before config.liveclients is incremented. If writeHandler fails on the initial write, it calls freeClient(c), which performs listSearchKey(config.clients, c) and aborts on assert(ln != NULL).",
+     "suggestion": "Add the client to config.clients and increment config.liveclients before invoking writeHandler or registering event handlers.",
+     "suggested_code": null
+    },
+    {
+     "start_line": 658,
+     "end_line": 663,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "        if (!is_cluster_client) {\n            ip = config.conn_info.hostip;\n            port = config.conn_info.hostport;\n            rdma = config.rdma;\n        } else {",
+     "comment": "In createClient, rdma is only assigned config.rdma when !is_cluster_client. In cluster mode, rdma remains 0, so cluster clients connect over standard TCP. However, resetClient and createClient check the global config.rdma, which prevents registering AE_WRITABLE on the event loop for those TCP sockets, stalling them. Furthermore, cluster helpers (fetchClusterConfiguration at line 1104, fetchClusterSlotsConfiguration at line 1217, and node config fetching at line 1832) hardcode 0 instead of config.rdma.",
+     "suggestion": "Initialize rdma to config.rdma for cluster clients as well, and pass config.rdma instead of 0 to getValkeyContext and getServerConfig when fetching cluster configuration.",
+     "suggested_code": null
+    },
+    {
+     "start_line": 2079,
+     "end_line": 2079,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "            valkeyContext *ctx = getValkeyContext(config.conn_info.hostip, config.conn_info.hostport, NULL, 0);",
+     "comment": "When executing the 'fcall' test, getValkeyContext is called with rdma = 0 instead of config.rdma. If benchmarking over RDMA against an endpoint that requires RDMA, loading the function script will attempt a standard TCP connection and fail.",
+     "suggestion": "Pass config.rdma instead of 0 so the script loading connection respects the --rdma option.",
+     "suggested_code": "            valkeyContext *ctx = getValkeyContext(config.conn_info.hostip, config.conn_info.hostport, NULL, config.rdma);"
+    }
+   ],
+   "filename": "src/valkey-benchmark.c"
+  },
+  {
+   "change_intent": "Add RDMA support to valkey-cli via the --rdma CLI option using libvalkey RDMA capabilities.",
+   "summary": "The RDMA flag is cleanly integrated into option parsing, help text, and connection wrappers without any issues.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/valkey-cli.c"
+  }
+ ],
+ "n_files": 8,
+ "elapsed_s": 256.7,
+ "calls": 8,
+ "input_tokens": 125678,
+ "output_tokens": 1826,
+ "call_input_tokens": [
+  12299,
+  11154,
+  12593,
+  15308,
+  12530,
+  11444,
+  28795,
+  21555
+ ],
+ "mode": "per-file",
+ "routing_tokens": 46569
+}

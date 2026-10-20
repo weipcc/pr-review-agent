@@ -1,0 +1,116 @@
+{
+ "results": [
+  {
+   "summary": "變更集（changeset）檔案格式正確，描述清楚，無任何問題。",
+   "issues": [],
+   "filename": ".changeset/cold-dingos-dream.md"
+  },
+  {
+   "summary": "新增 `maybe_runes` 屬性以推斷非 runes 模式下的潛在 runes 模組，但存在使用未相容的迭代器方法及低效查詢的 Bug。",
+   "issues": [
+    {
+     "line": 441,
+     "severity": "bug",
+     "comment": "`module.scope.references` 為 `Map` 物件，其 `keys()` 回傳的是 `MapIterator`。在不支援 Iterator Helpers 的環境（如 Node.js 18 或較早期的 Node.js 20）中，`MapIterator` 並沒有 `.some()` 方法，執行時會拋出 `TypeError: module.scope.references.keys().some is not a function`。此外，僅為判斷集合中是否包含特定 key，使用 `.keys().some()` 是 O(N) 的線性遍歷。",
+     "suggestion": "改用 Map 自帶的 `.has()` 進行 O(1) 檢查：`!(module.scope.references.has('$$props') || module.scope.references.has('$$restProps'))`"
+    }
+   ],
+   "filename": "packages/svelte/src/compiler/phases/2-analyze/index.js"
+  },
+  {
+   "summary": "在 build_expression 中增加 maybe_runes 判斷，確保在非明確 legacy 模式下直接回傳表達式，避免產生 legacy 依賴收集程式碼。",
+   "issues": [],
+   "filename": "packages/svelte/src/compiler/phases/3-transform/client/visitors/shared/utils.js"
+  },
+  {
+   "summary": "在 ComponentAnalysis 介面中新增 maybe_runes 屬性以支援 runes 判斷，型別定義清晰且無問題。",
+   "issues": [],
+   "filename": "packages/svelte/src/compiler/phases/types.d.ts"
+  },
+  {
+   "summary": "新增的測試案例設定檔結構簡潔且符合 Svelte 測試框架慣例，無明顯問題。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-explicit-false/_config.js"
+  },
+  {
+   "summary": "新增用於測試明確設定 runes={false} 時行為的測試案例組件，程式碼簡潔且符合測試目的，無明顯問題。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-explicit-false/main.svelte"
+  },
+  {
+   "summary": "新增的 Svelte 5 runes 測試案例模組，邏輯簡潔正確且符合規範。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-explicit-false/test.svelte.js"
+  },
+  {
+   "summary": "新增的執行期測試案例撰寫簡潔正確，符合 Svelte 測試慣例，無明顯問題。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-const/_config.js"
+  },
+  {
+   "summary": "新增用於測試 legacy 與 runes 模式在 export const 情境下歧義處理的測試組件，無明顯問題。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-const/main.svelte"
+  },
+  {
+   "summary": "新增 Svelte 5 runes 模組測試案例，程式碼結構簡潔且符合規範，無發現問題。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-const/test.svelte.js"
+  },
+  {
+   "summary": "新增的測試案例設定檔寫法簡潔標準，符合 Svelte 測試規範，無明顯問題。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-let/_config.js"
+  },
+  {
+   "summary": "新增了用於測試 legacy export 與 runes 邊界情況的測試組件，程式碼簡潔且符合測試目的。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-let/main.svelte"
+  },
+  {
+   "summary": "新增的測試模組程式碼簡潔明確，符合 Svelte 5 runes 規範，無明顯問題。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-let/test.svelte.js"
+  },
+  {
+   "summary": "新增 legacy 與 runes 歧義測試案例的配置檔，程式碼簡潔且符合 Svelte runtime 測試慣例。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous/_config.js"
+  },
+  {
+   "summary": "新增 legacy-runes 模糊情境的測試元件，程式碼簡潔無問題。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous/main.svelte"
+  },
+  {
+   "summary": "新增 Svelte 5 模組級響應式狀態測試檔案，邏輯簡潔正確無問題。",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous/test.svelte.js"
+  }
+ ],
+ "n_files": 16,
+ "elapsed_s": 126.0,
+ "calls": 16,
+ "input_tokens": 9338,
+ "output_tokens": 863,
+ "call_input_tokens": [
+  263,
+  1419,
+  1122,
+  1841,
+  480,
+  362,
+  331,
+  480,
+  369,
+  331,
+  480,
+  403,
+  331,
+  472,
+  331,
+  323
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

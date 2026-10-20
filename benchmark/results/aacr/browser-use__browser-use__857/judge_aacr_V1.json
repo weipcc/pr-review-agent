@@ -1,0 +1,83 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 2,
+  "findings": [
+   {
+    "file": "browser_use/agent/service.py",
+    "start": 261,
+    "end": 261,
+    "category": "bug",
+    "comment": "直接修改 `self.browser.config.new_context_config.disable_security` 有幾個問題：1. 若使用者注入已配置好的自訂 `browser`，此行會無條件覆蓋使用者在 `new_context_config` 上的自訂安全設定；2. 若使用者已傳入自訂的 `browser_context`，此修改對傳入的 context 無效，卻仍會產生副作用修改傳入的 `browser` 物件；3. 此配置繼承邏輯放在 Agent 層破壞了 BrowserConfig/Browser 的職責劃分。"
+   },
+   {
+    "file": "browser_use/browser/browser.py",
+    "start": 283,
+    "end": 283,
+    "category": "bug",
+    "comment": "在 `_setup_builtin_browser` 中硬編碼傳入 `channel='chrome'` 會導致當 `self.config.browser_class` 為 `'firefox'` 或 `'webkit'` 時，`launch` 因不支援 chrome channel 而拋出異常崩潰。此外，若執行環境（如 Docker 或無 GUI 伺服器）未預裝 Google Chrome，強制使用 `'chrome'` 也會導致啟動失敗。"
+   },
+   {
+    "file": "browser_use/browser/context.py",
+    "start": 414,
+    "end": 414,
+    "category": "bug",
+    "comment": "在非 headless (headful) 模式下，kwargs 完全未設定 viewport 或 no_viewport。這會使 Playwright/Patchright 回退到預設的 1280x720 固定尺寸，導致原本設定的 browser_window_size 被忽略，且 headful 模式下無法自適應瀏覽器視窗。此外，BrowserContextConfig 中定義的 no_viewport 設定值也未被使用。"
+   },
+   {
+    "file": "browser_use/browser/context.py",
+    "start": 423,
+    "end": 423,
+    "category": "style",
+    "comment": "在 new_context 參數列中使用 inline dict unpacking (**({'bypass_csp': True, ...} if ... else {})) 可讀性較差。"
+   },
+   {
+    "file": "docs/customize/agent-settings.mdx",
+    "start": 95,
+    "end": 95,
+    "category": "style",
+    "comment": "在該程式碼範例中，從 `patchright.async_api` 匯入的 `BrowserContext` 完全沒有被使用（`browser.new_context()` 自動推導 context 且未標註型別）。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "browser_use/agent/service.py",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "browser_use/browser/browser.py",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both address the issue that hardcoding `channel='chrome'` causes runtime errors when using non-Chromium browsers (Firefox/WebKit).\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "browser_use/browser/context.py",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "browser_use/browser/context.py",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "docs/customize/agent-settings.mdx",
+   "matched_gt": [],
+   "reason": "1. No match — Generated comment points out an unused import (`BrowserContext`), whereas reference comment addresses inconsistency between Playwright mentions in text and Patchright in code imports.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

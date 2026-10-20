@@ -1,0 +1,69 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 4,
+  "findings": [
+   {
+    "file": "doc/tor.md",
+    "start": 60,
+    "end": 60,
+    "category": "style",
+    "comment": "單字拼寫錯誤：`occurences` 缺少一個 'r'，應為 `occurrences`。"
+   },
+   {
+    "file": "src/init.cpp",
+    "start": 1603,
+    "end": 1603,
+    "category": "bug",
+    "comment": "當使用者傳入以 '=' 開頭的參數（例如 -proxy==ipv4 或 -proxy==tor）時，eq_pos 為 0，此時 proxy_str 會是空字串。程式碼僅檢查了以 '=' 結尾的情況（eq_pos + 1 == param_value.length()），未檢查 eq_pos == 0。這會導致 proxy_str 為空而被判定為未設定，進而靜默地將該網路的代理設為無效（相當於被當作 -proxy=0=<network> 處理），而不會回傳格式錯誤。"
+   },
+   {
+    "file": "src/init.cpp",
+    "start": 1629,
+    "end": 1629,
+    "category": "bug",
+    "comment": "當指定 net_str 為 \"ipv4\" 或 \"ipv6\" 時，程式碼同時將 name_proxy 設為該 proxy。這會衍生幾個問題：1. 若同時設定 -proxy=host1=ipv4 與 -proxy=host2=ipv6，name_proxy 會依參數順序被最後一個覆蓋；2. 若使用者先設定通用代理 -proxy=host，再使用 -proxy=0=ipv4 僅停用 IPv4 代理，name_proxy 也會被一併清空，導致 IPv6/Tor 仍在代理但域名解析走本機；3. 說明文件寫明「set the proxy only for that network」，覆寫域名代理（name_proxy）不符合此預期行為。"
+   },
+   {
+    "file": "src/init.cpp",
+    "start": 571,
+    "end": 571,
+    "category": "style",
+    "comment": "參數說明文字中提及「The network can be any of ipv4, ipv6, tor or cjdns.」，但在 AppInitMain 的解析邏輯中（第 1632 行）同時支援了 \"onion\" 作為 \"tor\" 的別名（net_str == \"tor\" || net_str == \"onion\"）。說明文件漏列了 onion，可能會造成使用者的困惑或與 -bind=<addr>[=onion] 的命名慣例不一致。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "doc/tor.md",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "src/init.cpp",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — discusses documentation and command-line syntax expectations in help text.\n2. No match — concerns unix socket paths containing '=' and suffix detection at L1223-1224.\n3. Match — both address inputs like `-proxy==ipv4` where `proxy_str` is empty and results in setting an invalid proxy for that network.\n4. No match — concerns name resolution proxy remaining active when disabling a network proxy.\n\n[3]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "src/init.cpp",
+   "matched_gt": [],
+   "reason": "1. No match — discusses documentation examples and argument syntax UX, not the coupling of network-specific proxies to `name_proxy`.\n2. No match — focuses on parsing logic with `rfind('=')` on paths with equal signs, not name proxy configuration.\n3. No match — concerns parsing empty proxy strings (`-proxy==ipv4`) and unsetting-per-network behavior, not setting `name_proxy` on ipv4/ipv6 configurations.\n4. No match — raises the opposite concern (that name resolution proxying remains active when disabling a network proxy), whereas the generated comment argues network-specific proxies should not set or overwrite `name_proxy` at all.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "src/init.cpp",
+   "matched_gt": [],
+   "reason": "1. No match — discusses adding usage examples and clarifying order-dependence in docs, not the missing \"onion\" network alias.\n2. No match — addresses a parsing bug with paths containing '=' and suggests validating suffixes, not the help text omission of \"onion\".\n3. No match — concerns empty proxy values like `-proxy==ipv4` and proxy unsetting behavior.\n4. No match — addresses name resolution proxying behavior when disabling network-specific proxies.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

@@ -4,7 +4,7 @@ Compare THREE real versions of the system on the SAME pull request, with the SAM
 and the SAME judge:
 
     V1  6ddb19c   the original reviewer (baseline): Chinese prompt, per file, no schema extras
-    V2  2ed8205   after the prompt rework (#5): English prompt, few-shot, project context, no tools
+    V2  dfb986c   after the prompt rework (#5) + @mention poller (#6): English prompt, few-shot, project context, no tools
     V3  cbe4576   the final system (main, #9): agent + E2B sandbox, whole PR in one prompt
 
 What is being evaluated, exactly: given a PR as it was when a human reviewed it, which of the
@@ -35,7 +35,7 @@ PY = str(HERE / "_final_venv" / "bin" / "python")
 MODEL = "gemini-3.8-flash"
 VERSIONS = {
     "V1": {"dir": "_v1_main", "worker": "v1", "label": "V1 baseline (6ddb19c)"},
-    "V2": {"dir": "_v2_main", "worker": "v2", "label": "V2 prompt rework (2ed8205)"},
+    "V2": {"dir": "_v2_main", "worker": "v2", "label": "V2 workflow (dfb986c; review code identical to 2ed8205)"},
     "V3": {"dir": "_final_main", "worker": None, "label": "V3 final, sandbox agent (cbe4576)"},
 }
 CJK = re.compile(r"[一-鿿]")

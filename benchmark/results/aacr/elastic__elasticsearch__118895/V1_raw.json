@@ -1,0 +1,151 @@
+{
+ "results": [
+  {
+   "summary": "更新 wrapAnalyzer 方法簽名以配合父類別將 maxAnalyzedOffset 型別改為 QueryMaxAnalyzedOffset，改動乾淨且無問題。",
+   "issues": [],
+   "filename": "plugins/mapper-annotated-text/src/main/java/org/elasticsearch/index/mapper/annotatedtext/AnnotatedTextHighlighter.java"
+  },
+  {
+   "summary": "重構了測試輔助方法以使用 QueryMaxAnalyzedOffset 物件，並增加了驗證 queryMaxAnalyzedOffset 為 -1 時的測試案例，整體改動合理且無明顯問題。",
+   "issues": [],
+   "filename": "plugins/mapper-annotated-text/src/test/java/org/elasticsearch/index/mapper/annotatedtext/AnnotatedTextHighlighterTests.java"
+  },
+  {
+   "summary": "更新了 max_analyzed_offset 的測試案例名稱與例外錯誤訊息，以符合後端允許 >= -1 的驗證規則調整，改動正確無誤。",
+   "issues": [],
+   "filename": "rest-api-spec/src/yamlRestTest/resources/rest-api-spec/test/search.highlight/30_max_analyzed_offset.yml"
+  },
+  {
+   "summary": "新增了測試案例用以驗證 highlighter 的 maxAnalyzedOffset 設為 -1 時能正確採用索引層級的 index.highlight.max_analyzed_offset 設定，整體邏輯正確，僅有少數命名與型別風格建議。",
+   "issues": [
+    {
+     "line": 2635,
+     "severity": "style",
+     "comment": "測試方法名稱 testMaxQueryOffsetDefault 中的 MaxQueryOffset 可能是筆誤，對應的設定與 API 名稱皆為 maxAnalyzedOffset（而非 QueryOffset）。命名為 testMaxAnalyzedOffsetDefault 會更符合現有命名慣例與可讀性。",
+     "suggestion": "建議將方法名稱修改為 testMaxAnalyzedOffsetDefault。"
+    },
+    {
+     "line": 2638,
+     "severity": "style",
+     "comment": "index.highlight.max_analyzed_offset 為整數設定，在 Settings.builder() 中建議直接傳入 int 型別數值 10 而非字串 \"10\"，較符合型別慣例。",
+     "suggestion": "改為 .put(\"index.highlight.max_analyzed_offset\", 10)"
+    }
+   ],
+   "filename": "server/src/internalClusterTest/java/org/elasticsearch/search/fetch/subphase/highlight/HighlighterSearchIT.java"
+  },
+  {
+   "summary": "將 queryMaxAnalyzedOffset 型態由 Integer 重構為專屬的 QueryMaxAnalyzedOffset 類別，改動簡潔且無明顯問題。",
+   "issues": [],
+   "filename": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/CustomFieldHighlighter.java"
+  },
+  {
+   "summary": "將 queryMaxAnalyzedOffset 重構為 QueryMaxAnalyzedOffset 物件，但在條件判斷中直接呼叫 getNotNull() 可能導致未預期的 NullPointerException。",
+   "issues": [
+    {
+     "line": 128,
+     "severity": "bug",
+     "comment": "如果傳入的 queryMaxAnalyzedOffset 物件本身不為 null，但其內部封裝的值為 null（即查詢未指定 max_analyzed_offset），此處直接呼叫 queryMaxAnalyzedOffset.getNotNull() 會拋出 NullPointerException 或 AssertionError。原本邏輯在未設定該參數時，應比照 index 的 maxAnalyzedOffset 進行檢查並在超長時拋出 IllegalArgumentException，而非直接崩潰。",
+     "suggestion": "在呼叫 getNotNull() 之前，應先檢查其內部封裝的值是否為 null，例如：if ((queryMaxAnalyzedOffset == null || queryMaxAnalyzedOffset.get() == null || queryMaxAnalyzedOffset.getNotNull() > maxAnalyzedOffset)"
+    }
+   ],
+   "filename": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/CustomUnifiedHighlighter.java"
+  },
+  {
+   "summary": "新增了包裝 queryMaxAnalyzedOffset 的數值包裝類別，整體邏輯簡潔，但存在類別未宣告為 final 以及部分命名與註解位置不恰當的問題。",
+   "issues": [
+    {
+     "line": 12,
+     "severity": "style",
+     "comment": "類別的建構子已為 private，外部無法繼承此類別，建議將類別宣告為 final 以明確表達不可繼承的設計意圖。",
+     "suggestion": "public final class QueryMaxAnalyzedOffset {"
+    },
+    {
+     "line": 16,
+     "severity": "style",
+     "comment": "註解「If we have a negative value, grab value for the actual maximum from the index.」所描述的邏輯實際是在 create 工廠方法中實現，放在建構子中顯得位置不符。",
+     "suggestion": "可將此註解移至 create 方法中三元運算子判斷處，或從建構子中移除。"
+    },
+    {
+     "line": 27,
+     "severity": "style",
+     "comment": "方法回傳值為 primitive int 本身就無法為 null，方法名稱命名為 getNotNull() 較為不直觀，建議採用標準命名（如 getAsInt() 或 getValue()）。",
+     "suggestion": "public int getAsInt() {\n    return queryMaxAnalyzedOffset;\n}"
+    }
+   ],
+   "filename": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java"
+  },
+  {
+   "summary": "放寬了 maxAnalyzedOffset 的檢查條件，使其允許大於等於 -1 的整數（含 0 與 -1）。",
+   "issues": [
+    {
+     "line": 564,
+     "severity": "style",
+     "comment": "Javadoc 註解中描述 'or a negative int'，但程式碼實際限制 maxAnalyzedOffset < -1 會拋出例外，即負數只接受 -1。註解可能造成呼叫端誤以為所有負整數皆合法。",
+     "suggestion": "建議將 Javadoc 修正為更精確的說明，例如：'\"maxAnalyzedOffset\" might be non-negative int, null (unknown), or -1 (defaulting to index analyzed offset).'"
+    }
+   ],
+   "filename": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/AbstractHighlighterBuilder.java"
+  },
+  {
+   "summary": "重構將 maxAnalyzedOffset 封裝為 QueryMaxAnalyzedOffset 物件，邏輯清晰且改動正確。",
+   "issues": [],
+   "filename": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/DefaultHighlighter.java"
+  },
+  {
+   "summary": "引入 QueryMaxAnalyzedOffset 後，因直接對包裝物件進行 null 檢查，導致未設定 query 參數時的上限例外檢查失效，且 Analyzer 會被無條件包裝與截斷。",
+   "issues": [
+    {
+     "line": 126,
+     "severity": "bug",
+     "comment": "queryMaxAnalyzedOffset 現為 QueryMaxAnalyzedOffset.create(...) 回傳的物件。若該物件非 null 且其 getNotNull() 在未設定 query 參數時 fallback 為 index setting 的 maxAnalyzedOffset，則 `queryMaxAnalyzedOffset == null` 恆為 false，且 `queryMaxAnalyzedOffset.getNotNull() > maxAnalyzedOffset` 亦為 false（即 maxAnalyzedOffset > maxAnalyzedOffset 為 false）。這會導致此條件永遠無法成立，當文件長度超過 index.highlight.max_analyzed_offset 且使用者未設定 query 參數時，原本應拋出 IllegalArgumentException 的安全防護機制將完全失效。",
+     "suggestion": "應判斷 query 層級是否實際有指定 max_analyzed_offset（例如檢查 queryMaxAnalyzedOffset.get() == null 或其對應的方法），而非僅檢查 QueryMaxAnalyzedOffset 物件實例本身是否為 null。"
+    },
+    {
+     "line": 250,
+     "severity": "bug",
+     "comment": "在 wrapAnalyzer 中，`if (maxAnalyzedOffset != null)` 檢查的是 QueryMaxAnalyzedOffset 物件實例。若 create(...) 總是回傳非 null 實例，此條件將永遠為 true，使得無論使用者是否有在 query 指定 max_analyzed_offset，Analyzer 都會被 LimitTokenOffsetAnalyzer 包裝並強制截斷，破壞了原有未設定時不進行額外包裝的行為與語意。",
+     "suggestion": "應改為僅在 query 有顯式指定 max_analyzed_offset 時才包裝 Analyzer，例如判斷 `maxAnalyzedOffset != null && maxAnalyzedOffset.get() != null`。"
+    }
+   ],
+   "filename": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/PlainHighlighter.java"
+  },
+  {
+   "summary": "更新 CustomUnifiedHighlighter 建構子呼叫以使用 QueryMaxAnalyzedOffset.create，符合型別重構，無明顯問題。",
+   "issues": [],
+   "filename": "server/src/test/java/org/elasticsearch/lucene/search/uhighlight/CustomUnifiedHighlighterTests.java"
+  },
+  {
+   "summary": "更新了錯誤訊息的斷言，但測試中產生的無效值範圍未同步修正，會導致測試隨機失敗（flaky test）。",
+   "issues": [
+    {
+     "line": 580,
+     "severity": "bug",
+     "comment": "錯誤訊息已修改為要求 `[max_analyzed_offset] must be an integer >= -1`，代表 `-1` 與 `0` 現為有效值。但此處測試產生的無效值範圍仍為 `randomIntBetween(-100, 0)`。當隨機抽到 `-1` 或 `0` 時，解析將視為合法而不會拋出預期的異常，導致測試失敗（flaky test）。",
+     "suggestion": "應將無效值的隨機範圍調整為小於 -1 的整數，例如改為 `randomIntBetween(-100, -2)`。"
+    }
+   ],
+   "filename": "server/src/test/java/org/elasticsearch/search/fetch/subphase/highlight/HighlightBuilderTests.java"
+  }
+ ],
+ "n_files": 12,
+ "elapsed_s": 459.1,
+ "calls": 12,
+ "input_tokens": 33052,
+ "output_tokens": 2047,
+ "call_input_tokens": [
+  1417,
+  6181,
+  2506,
+  1808,
+  1998,
+  4961,
+  1001,
+  1214,
+  4752,
+  4698,
+  1289,
+  1227
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

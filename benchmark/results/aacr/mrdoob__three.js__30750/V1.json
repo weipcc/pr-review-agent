@@ -1,0 +1,44 @@
+{
+ "results": [
+  {
+   "filename": "src/geometries/ExtrudeGeometry.js",
+   "summary": "本次改動加入了相鄰頂點清理函式並延後三角剖分時機以適應 bevel 偏移，但在 bevel 關閉或 bevelSegments 為 0 時會導致頂點未收集而遺失面的嚴重 Bug。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 433,
+     "end_line": 433,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "當 bevelEnabled 為 false 或 bevelSegments 為 0 時，前方的 for 迴圈（第 392 行）完全不會執行，導致 contractedContourVertices 與 expandedHoleVertices 為空陣列，ShapeUtils.triangulateShape 將無法生成正面與背面的面（faces），使幾何體破損。"
+    },
+    {
+     "start_line": 180,
+     "end_line": 180,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在封閉路徑檢查首尾點距離（i === points.length 且 currentIndex === 0）時，使用 points.splice(0, 1) 會刪除起點（index 0）而非重複的末尾頂點，這會導致整個頂點陣列向前位移一個索引，可能影響頂點順序與 UV 映射。"
+    },
+    {
+     "start_line": 407,
+     "end_line": 407,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "使用 t == 0 進行鬆散相等比較，且依賴浮點數除法結果 t = b / bevelSegments。直接判斷整數索引 b === 0 更清晰且能避免潛在的浮點數誤差。"
+    }
+   ]
+  }
+ ],
+ "n_files": 1,
+ "input_tokens": 5383,
+ "output_tokens": 498,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 29.9,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  5383
+ ],
+ "model": "gemini-3.8-flash"
+}

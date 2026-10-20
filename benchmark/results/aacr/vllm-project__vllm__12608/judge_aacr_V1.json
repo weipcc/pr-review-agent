@@ -1,0 +1,70 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 6,
+  "findings": [
+   {
+    "file": "vllm/v1/core/kv_cache_manager.py",
+    "start": 163,
+    "end": 163,
+    "category": "bug",
+    "comment": "當所需區塊數超過請求上限（即 num_new_blocks > self.max_num_blocks_per_req - len(req_blocks) - len(new_computed_blocks)）時，程式只檢查了 free_block_queue 的數量。這會導致在 line 180 處 min() 將 num_new_blocks 截斷為小於實際所需區塊數的值，導致配置的區塊不足以容納 num_tokens；或在額度已滿時觸發 line 190 的 AssertionError。"
+   },
+   {
+    "file": "vllm/v1/core/kv_cache_manager.py",
+    "start": 160,
+    "end": 160,
+    "category": "style",
+    "comment": "由於 self.req_to_blocks 改為 defaultdict(list)，在 line 160 存取未曾加入過的 request.request_id 時會自動建立一個空串列。若後續因資源不足在 line 166 返回 None，該 request_id 仍會殘留在 req_to_blocks 中，造成未成功分配但 key 已存在的副作用。"
+   },
+   {
+    "file": "vllm/v1/core/kv_cache_manager.py",
+    "start": 432,
+    "end": 432,
+    "category": "style",
+    "comment": "_untouch 方法的 docstring 參數描述寫成 'A list of blocks to touch.'，應為 untouch；另外 line 155 註解中的 'prefix cacheing hits' 有拼字錯誤（cacheing -> caching）。"
+   },
+   {
+    "file": "vllm/v1/core/scheduler.py",
+    "start": 142,
+    "end": 142,
+    "category": "bug",
+    "comment": "在第 133 行已透過 _try_schedule_encoder_inputs 取得該請求欲排程的 encoder_inputs_to_schedule，但呼叫 allocate_slots 時卻傳入硬編碼的空列表 []，這會導致需要排程的 encoder inputs 無法正確分配對應的 KV 快取 slots。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "vllm/v1/core/kv_cache_manager.py",
+   "matched_gt": [],
+   "reason": "1. No match — ref suggests making `new_computed_blocks` optional with a default value, while generated comment addresses a block allocation logic error when exceeding the per-request block limit.\n2. No match — ref fixes a typo in a comment, while generated comment points out a block allocation bug.\n3. No match — ref concerns LRU cache queue ordering in `_untouch`, while generated comment concerns missing limit validation during block allocation.\n4. No match — ref corrects grammatical and parameter description errors in docstrings, while generated comment discusses logic errors in block capacity checking.\n5. No match — ref addresses wording in a docstring, while generated comment addresses an allocation truncation and assertion failure issue.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "vllm/v1/core/kv_cache_manager.py",
+   "matched_gt": [],
+   "reason": "1. No match — discusses making `new_computed_blocks` optional, while the generated comment concerns side effects of `defaultdict` access.\n2. No match — concerns a spelling error in a comment.\n3. No match — addresses LRU queue ordering in `_untouch`, unrelated to the `req_to_blocks` dictionary issue.\n4. No match — concerns documentation wording errors in `_untouch`.\n5. No match — concerns grammar in docstrings for `_untouch`.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "vllm/v1/core/kv_cache_manager.py",
+   "matched_gt": [
+    1,
+    3
+   ],
+   "reason": "1. No match — concerns parameter defaults, not docstring typos.\n2. Match — both identify the typo 'cacheing' -> 'caching' in the comment at line 154-155.\n3. No match — concerns LRU cache policy logic, not docstrings.\n4. Match — both point out that the docstring parameter description incorrectly says \"blocks to touch\" instead of \"untouch\".\n5. No match — concerns a different grammatical wording issue in the docstring.\n\n[2, 4]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "vllm/v1/core/scheduler.py",
+   "matched_gt": [],
+   "reason": "1. No match — the generated comment concerns passing scheduled encoder inputs to allocate KV cache slots, whereas the reference comment concerns passing computed blocks for prefix caching in running requests.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

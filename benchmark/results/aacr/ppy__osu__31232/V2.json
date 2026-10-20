@@ -1,0 +1,44 @@
+{
+ "results": [
+  {
+   "change_intent": "Add a setting to Sudden Death mod in osu! ruleset that fails the player upon missing a slider tail.",
+   "summary": "Implements slider tail failure handling for Sudden Death, but duplicates the base fail condition and uses misleading setting naming.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 22,
+     "end_line": 22,
+     "category": "style",
+     "confidence": "high",
+     "evidence": "[SettingSource(\"PFC mode\", \"Fail when missing on a slider tail\")]",
+     "comment": "The label \"PFC mode\" is misleading. In osu! and rhythm games generally, \"PFC\" stands for \"Perfect Full Combo\" (100% accuracy / all 300s). Sudden Death only fails on combo breaks, meaning players can still get 100s or 50s without failing; enabling this option does not enforce a PFC.",
+     "suggestion": "Rename the setting label to accurately reflect its effect, such as \"Fail on slider tail miss\" or \"Strict slider tails\".",
+     "suggested_code": "[SettingSource(\"Fail on slider tail miss\", \"Fail when missing on a slider tail\")]"
+    },
+    {
+     "start_line": 30,
+     "end_line": 30,
+     "category": "refactor",
+     "confidence": "high",
+     "evidence": "return result.Type.AffectsCombo() && !result.IsHit;",
+     "comment": "The combo failure logic duplicates the implementation already present in ModSuddenDeath.FailCondition.",
+     "suggestion": "Delegate to base.FailCondition(healthProcessor, result) instead of duplicating the condition.",
+     "suggested_code": "return base.FailCondition(healthProcessor, result);"
+    }
+   ],
+   "filename": "osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs"
+  }
+ ],
+ "n_files": 1,
+ "input_tokens": 4959,
+ "output_tokens": 473,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 38.6,
+ "mode": "batch",
+ "routing_tokens": 721,
+ "call_input_tokens": [
+  4959
+ ],
+ "model": "gemini-3.8-flash"
+}

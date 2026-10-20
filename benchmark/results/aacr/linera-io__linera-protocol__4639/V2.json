@@ -1,0 +1,59 @@
+{
+ "results": [
+  {
+   "change_intent": "Export CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES constant from chain_worker module.",
+   "summary": "Exposes the new constant for use in other modules.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "linera-core/src/chain_worker/mod.rs"
+  },
+  {
+   "change_intent": "Cap the number of received_log entries returned in a ChainInfo response.",
+   "summary": "Caps read range using CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES, but does not guard against start exceeding log count.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 1418,
+     "end_line": 1420,
+     "category": "bug",
+     "confidence": "medium",
+     "evidence": "let end = (start.saturating_add(CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES))\n                .min(chain.received_log.count());\n            info.requested_received_log = chain.received_log.read(start..end).await?;",
+     "comment": "If `start > chain.received_log.count()`, then `end` will be clamped to `chain.received_log.count()`, resulting in `start > end`. Passing an inverted range `start..end` to `read` can panic or cause runtime errors in Rust range slicing depending on the underlying collection/view implementation.",
+     "suggestion": "Clamp `start` as well or ensure `end = end.max(start)` (or check `if start < end` / `if start <= count`) before constructing the slice range.",
+     "suggested_code": "let count = chain.received_log.count();\n            let start = start.min(count);\n            let end = (start.saturating_add(CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES)).min(count);\n            info.requested_received_log = chain.received_log.read(start..end).await?;"
+    }
+   ],
+   "filename": "linera-core/src/chain_worker/state.rs"
+  },
+  {
+   "change_intent": "Paginate received_log fetching in client synchronization until all entries are retrieved.",
+   "summary": "Fetches received_log in a loop, but relies on hardcoded validator limits and lacks a termination guard against non-advancing responses.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 851,
+     "end_line": 856,
+     "category": "bug",
+     "confidence": "medium",
+     "evidence": "let received_entries = info.requested_received_log.len();\n            offset += received_entries as u64;\n            remote_log.extend(info.requested_received_log);\n            if received_entries < CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES {\n                break;\n            }",
+     "comment": "Breaking only when `received_entries < CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES` is fragile if the remote validator runs a different limit (e.g. an older validator that returns all entries, or a future validator version with a smaller limit, or if `received_entries == 0`). Specifically, if `received_entries == 0` when `CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES == 0` (or if remote returns empty when offset is beyond total, though handled here if `0 < CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES`), an infinite loop can occur if the validator returned a batch equal to a smaller limit or if offset does not advance. Furthermore, if a validator has a limit smaller than `CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES`, it will terminate prematurely before fetching all entries.",
+     "suggestion": "Guard against zero progress with `if received_entries == 0 { break; }`, and consider whether the node should explicitly indicate if there are more entries remaining rather than coupling the client to a shared constant.",
+     "suggested_code": "let received_entries = info.requested_received_log.len();\n            if received_entries == 0 {\n                break;\n            }\n            offset += received_entries as u64;\n            remote_log.extend(info.requested_received_log);\n            if received_entries < CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES {\n                break;\n            }"
+    }
+   ],
+   "filename": "linera-core/src/client/mod.rs"
+  }
+ ],
+ "n_files": 3,
+ "input_tokens": 9074,
+ "output_tokens": 1088,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 10.9,
+ "mode": "batch",
+ "routing_tokens": 4492,
+ "call_input_tokens": [
+  9074
+ ],
+ "model": "gemini-3.8-flash"
+}

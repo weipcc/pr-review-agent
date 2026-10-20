@@ -1,0 +1,83 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 2,
+  "findings": [
+   {
+    "file": "browser_use/browser/browser.py",
+    "start": 111,
+    "end": 111,
+    "category": "bug",
+    "comment": "The field is typed as `int | None`, but `None` is not supported in the implementation. If `None` is provided, `_setup_builtin_browser` will crash with `TypeError: an integer is required (got type NoneType)` inside `socket.connect_ex(('localhost', self.config.chrome_remote_debugging_port))`, and `_setup_user_provided_browser` will attempt HTTP calls to `http://localhost:None/...`. If disabling the port with `None` is not supported, the field should be typed strictly as `int`."
+   },
+   {
+    "file": "browser_use/browser/browser.py",
+    "start": 220,
+    "end": 220,
+    "category": "refactor",
+    "comment": "Using `%`-formatting with `CHROME_DEBUGGING_ARG` and a single-item dictionary is unnecessarily verbose and inconsistent with line 292, which directly uses an f-string (`f'--remote-debugging-port={self.config.chrome_remote_debugging_port}'`)."
+   },
+   {
+    "file": "browser_use/browser/browser.py",
+    "start": 234,
+    "end": 234,
+    "category": "nitpick",
+    "comment": "Passing `shell=False` to `asyncio.create_subprocess_exec` is redundant, as `create_subprocess_exec` already executes the command directly without a shell."
+   },
+   {
+    "file": "tests/test_browser.py",
+    "start": 171,
+    "end": 180,
+    "category": "bug",
+    "comment": "`Browser._setup_user_provided_browser` uses `httpx.AsyncClient.get` to check the Chrome debugging endpoint, not `requests.get`. Patching `requests.get` has no effect, so real HTTP requests are attempted against `localhost:9223`. Consequently, the post-launch retry loop in `browser.py` fails all 10 attempts and sleeps for 0.5s each iteration, adding a 5-second delay to the test run."
+   },
+   {
+    "file": "tests/test_browser.py",
+    "start": 189,
+    "end": 191,
+    "category": "nitpick",
+    "comment": "Duplicated word 'with with' in the assertion failure message."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "browser_use/browser/browser.py",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. No match — ref discusses a typo in a docstring, while generated discusses port typing and `None` handling.\n2. Match — both address the issue where `chrome_remote_debugging_port` being `None` causes `socket.connect_ex` to fail with a `TypeError`.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "browser_use/browser/browser.py",
+   "matched_gt": [],
+   "reason": "1. No match — ref flags a typo in a docstring/comment, while generated flags `%`-formatting vs f-string consistency.\n2. No match — ref addresses a potential `TypeError` when port is `None`, while generated concerns string formatting style.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "browser_use/browser/browser.py",
+   "matched_gt": [],
+   "reason": "1. No match — ref flags a typo in documentation/comments, whereas generated flags a redundant argument in subprocess creation.\n2. No match — ref addresses a potential TypeError with port configuration, whereas generated flags redundant `shell=False`.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "tests/test_browser.py",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "tests/test_browser.py",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

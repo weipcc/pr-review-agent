@@ -1,0 +1,101 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 10,
+  "findings": [
+   {
+    "file": "src/nodes/gpgpu/ComputeNode.js",
+    "start": 226,
+    "end": 240,
+    "category": "question",
+    "comment": "The PR title is \"TSL: Introduce `computeKernel()`\" and the description explicitly shows usage via `computeUpdate().computeKernel( [ 16, 16, 1 ] )`. However, `computeKernel` is neither declared, exported, nor registered with `addMethodChaining()`. Calling `.computeKernel(...)` will throw a runtime TypeError."
+   },
+   {
+    "file": "src/renderers/common/Renderer.js",
+    "start": 2314,
+    "end": 2314,
+    "category": "bug",
+    "comment": "When `compute()` is called before backend initialization, it delegates to `this.computeAsync( computeNodes )`, dropping `dispatchSize`. Furthermore, `computeAsync` has not been updated to accept `dispatchSize` and forward it back to `this.compute()`."
+   },
+   {
+    "file": "src/renderers/webgpu/WebGPUBackend.js",
+    "start": 1327,
+    "end": 1327,
+    "category": "bug",
+    "comment": "If compute() is called without passing dispatchSize (or if it is passed as undefined/null), indexing dispatchSize[ 0 ] will throw a TypeError: Cannot read properties of undefined."
+   },
+   {
+    "file": "src/renderers/webgpu/WebGPUBackend.js",
+    "start": 1329,
+    "end": 1376,
+    "category": "bug",
+    "comment": "When isValid is false, dispatchSize is reassigned to computeNodeData instead of computeNodeData.dispatchSize. Consequently, computeNodeData.dispatchSize initialized on line 1360 is ignored, dispatchSize.x and dispatchSize.y are set directly on computeNodeData, dispatchSize.y is never set when computeNode.dispatchCount <= maxComputeWorkgroupsPerDimension, and dispatchSize.z is undefined. This results in passEncoderGPU.dispatchWorkgroups() being called with undefined dimensions."
+   },
+   {
+    "file": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+    "start": 1901,
+    "end": 1903,
+    "category": "bug",
+    "comment": "Strictly requiring workgroupSize to have exactly 3 elements breaks backwards compatibility for any existing code that specifies 1D or 2D workgroup sizes (such as [ 128 ] or [ 16, 16 ]). In WebGPU, workgroup dimensions for Y and Z default to 1 when omitted."
+   },
+   {
+    "file": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+    "start": 2136,
+    "end": 2137,
+    "category": "style",
+    "comment": "These lines use 4-space indentation instead of tabs, which is inconsistent with the Three.js codebase style."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/nodes/gpgpu/ComputeNode.js",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses updating JSDoc types, while generated discusses missing `computeKernel` function and method chaining.\n2. No match — ref discusses `count` being `null` causing `NaN` in `updateDispatchCount()`, while generated discusses missing `computeKernel` implementation.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "src/renderers/common/Renderer.js",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. No match — ref discusses the default value `[0, 0, 0]` for `dispatchSize`, not delegation issues.\n2. Match — both identify that `dispatchSize` is dropped when delegating to `computeAsync` and that `computeAsync` should accept and forward it.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "src/renderers/webgpu/WebGPUBackend.js",
+   "matched_gt": [],
+   "reason": "1. No match — ref addresses accepting 1D/2D arrays and defaulting missing dimensions, whereas generated flags an unhandled undefined/null `dispatchSize` argument.\n2. No match — ref concerns missing device limit checks/clamping on the fast path, while generated concerns null/undefined indexing errors.\n3. No match — ref concerns `dispatchSize.y` and `dispatchSize.z` being undefined when setting dimensions from `dispatchCount`, while generated concerns missing argument validation when `dispatchSize` itself is undefined.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "src/renderers/webgpu/WebGPUBackend.js",
+   "matched_gt": [
+    6
+   ],
+   "reason": "1. No match — discusses input array validation and defaulting missing dimensions to 1.\n2. No match — discusses bypassing device limit validation for fast path dispatch.\n3. Match — both identify that when `dispatchCount <= maxComputeWorkgroupsPerDimension`, dispatch dimensions (y and z) are left undefined when passed to `dispatchWorkgroups()`.\n\n[3]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 4,
+   "file": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+   "matched_gt": [
+    7
+   ],
+   "reason": "1. Match — both identify that requiring `workgroupSize` to have exactly 3 elements is incorrect because WebGPU supports 1D/2D sizes with missing dimensions defaulting to 1.\n2. No match — concerns JSDoc parameter documentation, not `workgroupSize` array length constraints.\n3. No match — concerns WGSL type casting (`u32`) during shader interpolation, not `workgroupSize` array length validation.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 5,
+   "file": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+   "matched_gt": [],
+   "reason": "1. No match — discusses workgroupSize dimension handling in WebGPU, while generated comment addresses indentation style.\n2. No match — discusses outdated JSDoc parameter types, while generated comment addresses indentation style.\n3. No match — discusses missing u32 casts in generated WGSL code, while generated comment addresses indentation style.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

@@ -1,0 +1,87 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 5,
+  "findings": [
+   {
+    "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java",
+    "start": 16,
+    "end": 16,
+    "category": "nitpick",
+    "comment": "This comment explains the logic of falling back to the index maximum for negative values, but that check is performed in the `create` factory method on line 24 rather than within this constructor."
+   },
+   {
+    "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java",
+    "start": 27,
+    "end": 29,
+    "category": "style",
+    "comment": "The method name `getNotNull()` is non-idiomatic for a Java getter returning a primitive `int`. A wrapper representing an offset typically exposes standard accessor names such as `getAsInt()`, `getValue()`, or `get()`."
+   },
+   {
+    "file": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/AbstractHighlighterBuilder.java",
+    "start": 568,
+    "end": 570,
+    "category": "bug",
+    "comment": "Changing the check from `maxAnalyzedOffset <= 0` to `maxAnalyzedOffset < -1` inadvertently allows `0` as a valid offset. Previously, `0` was rejected because the offset had to be a positive integer (and the cluster/index setting `index.highlight.max_analyzed_offset` has a minimum value of 1). The pull request is only intended to allow `-1` as a sentinel value to use the index setting; allowing `0` bypasses offset checks and limits the token analyzer to start offset 0."
+   },
+   {
+    "file": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/AbstractHighlighterBuilder.java",
+    "start": 564,
+    "end": 564,
+    "category": "nitpick",
+    "comment": "The Javadoc states that `maxAnalyzedOffset` can be 'a negative int', but any negative integer other than `-1` will cause an IllegalArgumentException. Additionally, if `0` is invalid, 'non-negative int' is misleading."
+   },
+   {
+    "file": "server/src/test/java/org/elasticsearch/search/fetch/subphase/highlight/HighlightBuilderTests.java",
+    "start": 583,
+    "end": 583,
+    "category": "bug",
+    "comment": "While the expected error message was updated for the new validation rule (max_analyzed_offset < -1), the test input at line 580 still uses randomIntBetween(-100, 0). Because -1 and 0 are now valid values that do not throw an IllegalArgumentException, the test will intermittently fail whenever the random generator picks -1 or 0."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. Match — both identify that the comment describes negative value handling that is not actually present in the constructor implementation.\n2. No match — discusses method naming (`getNotNull()`), which is unrelated.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — concerns a mismatch between constructor documentation and implementation regarding negative values.\n2. Match — both criticize the method name `getNotNull()` for returning a primitive int and suggest renaming to `getValue()` or a similar idiomatic accessor.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/AbstractHighlighterBuilder.java",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. Match — both identify that the validation logic mistakenly allows 0 for `maxAnalyzedOffset` instead of only allowing -1 and positive integers.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/AbstractHighlighterBuilder.java",
+   "matched_gt": [],
+   "reason": "1. No match — the generated comment points out inaccuracies in the Javadoc description, while the reference comment addresses a bug in the code's validation logic.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "server/src/test/java/org/elasticsearch/search/fetch/subphase/highlight/HighlightBuilderTests.java",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

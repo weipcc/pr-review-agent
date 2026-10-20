@@ -1,0 +1,37 @@
+{
+ "results": [
+  {
+   "filename": "src/Symfony/Component/TypeInfo/Tests/TypeFactoryTest.php",
+   "summary": "新增了針對純 Enum 與 Backed Enum 的 Type::fromValue 測試案例，改動清楚且正確。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "src/Symfony/Component/TypeInfo/TypeFactoryTrait.php",
+   "summary": "新增對 UnitEnum 類型的識別支援，但檢查方式可改用 instanceof 進行簡化與優化。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 415,
+     "end_line": 415,
+     "category": "performance",
+     "confidence": "n/a",
+     "comment": "檢查物件是否為 Enum 不需要同時使用 `\\is_object($value)` 與 `is_subclass_of($value::class, \\UnitEnum::class)`。直接使用 `$value instanceof \\UnitEnum` 不僅已隱含物件型別檢查、執行效率更好（避免函式呼叫），且能提升程式碼可讀性。此外，在該 trait 內部呼叫 factory 方法時，使用 `self::enum()` 與同區塊的其他程式碼（如 `self::object()`、`self::builtin()`）風格更一致。"
+    }
+   ]
+  }
+ ],
+ "n_files": 2,
+ "input_tokens": 5956,
+ "output_tokens": 250,
+ "calls": 2,
+ "tool_calls": null,
+ "elapsed_s": 17.8,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  4845,
+  1111
+ ],
+ "model": "gemini-3.8-flash"
+}

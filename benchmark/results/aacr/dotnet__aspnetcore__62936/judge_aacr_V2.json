@@ -1,0 +1,25 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 5,
+  "findings": [
+   {
+    "file": "src/SignalR/server/StackExchangeRedis/test/Docker.cs",
+    "start": 19,
+    "end": 19,
+    "category": "bug",
+    "comment": "While `_redisImageName` is now used to start the Redis server container, the monitor container launched in `Start()` (line 138) still runs `redis` directly: `run -i --name {_dockerMonitorContainerName} --link {_dockerContainerName}:redis --rm redis redis-cli -h redis -p 6379`. Previously, line 116 pre-pulled `redis:latest`, so line 138 reused the local image. Now line 138 will trigger an un-mirrored pull of `redis:latest` from Docker Hub, re-introducing the rate limiting this PR aims to prevent."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/SignalR/server/StackExchangeRedis/test/Docker.cs",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses hardcoding the ACR URL, while generated points out the monitor container still uses un-mirrored `redis`.\n2. No match — ref discusses hardcoding version '74' in the container name, unrelated to the monitor container image pull.\n3. No match — ref discusses test parallelism and fixed container names, unrelated to the monitor container image pull.\n4. No match — ref discusses an outdated comment referencing the container name, unrelated to the monitor container image pull.\n5. No match — ref discusses timeout comment discrepancy and explicit pull, unrelated to the monitor container image pull.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

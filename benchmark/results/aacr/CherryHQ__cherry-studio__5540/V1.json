@@ -1,0 +1,196 @@
+{
+ "results": [
+  {
+   "filename": "src/renderer/src/i18n/locales/en-us.json",
+   "summary": "新增了 defaultaides 翻譯鍵值，格式正確，但 key 的命名風格建議確認是否符合專案慣例。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 1391,
+     "end_line": 1391,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "鍵名 'defaultaides' 使用了全小寫拼接，與同層級其他項目（如 'quickPhrase'、'quickPanel' 採用 camelCase，或 'subscribe_name' 採用 snake_case）的命名慣例不一致，可讀性稍差。"
+    }
+   ]
+  },
+  {
+   "filename": "src/renderer/src/i18n/locales/ja-jp.json",
+   "summary": "新增日文語系翻譯鍵值 defaultaides，格式與內容均正常。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "src/renderer/src/i18n/locales/ru-ru.json",
+   "summary": "新增俄文語系鍵值 defaultaides，JSON 格式正確且無明顯問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "src/renderer/src/i18n/locales/zh-cn.json",
+   "summary": "新增了助手配置相關的語系文字，格式正確，但 placeholder 文案與標籤相同且稍嫌簡短。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 972,
+     "end_line": 972,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "repo_url_placeholder 與 repo_url 內容完全一致（'助手URL'），未能發揮輸入提示的作用，且可依照中英混排慣例在中文與英文間保留空格。"
+    }
+   ]
+  },
+  {
+   "filename": "src/renderer/src/i18n/locales/zh-tw.json",
+   "summary": "新增繁體中文本地化詞條 defaultaides，用詞符合台灣在地慣用語且格式正確。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "src/renderer/src/pages/agents/index.ts",
+   "summary": "重構中嚴重違反了 React Hooks 的使用規則（條件式呼叫 Hook 及提早 return 導致 Hook 執行順序不一致），且存在硬編碼延遲與狀態訂閱不即時的問題。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 23,
+     "end_line": 23,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在條件判斷式中呼叫 Hook (`useLocalSystemAgents` 與 `useRemoteSystemAgents`)，違反了 React Hooks 規則（Rules of Hooks）。這會造成不同渲染週期中 Hook 呼叫數量與順序不一致，導致 React 拋出執行期錯誤。"
+    },
+    {
+     "start_line": 36,
+     "end_line": 36,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在 `useRemoteSystemAgents` 內的 `useEffect`（第 40 行）之前提前 return，同樣違反了 Hook 不得在條件判斷後呼叫的規則。"
+    },
+    {
+     "start_line": 20,
+     "end_line": 20,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "直接使用 `store.getState().settings` 讀取 Redux 狀態，當 store 內部的 `settings` 改變時，該 Hook 與使用它的組件將不會收到通知且不會觸發 re-render。"
+    },
+    {
+     "start_line": 43,
+     "end_line": 43,
+     "category": "performance",
+     "confidence": "n/a",
+     "comment": "在 `loadAgents` 中寫死了 `await new Promise(resolve => setTimeout(resolve, 500))` 人工延遲 500ms，看起來像除錯殘留，會拖慢載入速度與影響使用者體驗。"
+    },
+    {
+     "start_line": 41,
+     "end_line": 41,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "`useEffect` 內的非同步 fetch 沒有處理組件卸載（unmount）或 `resourcesPath` 改變時的競態條件（Race Condition）與取消機制。"
+    }
+   ]
+  },
+  {
+   "filename": "src/renderer/src/pages/settings/DataSettings/DataSettings.tsx",
+   "summary": "新增了 DefaultaidesSettings 選單項目與對應圖示，但存在命名駝峰慣例、程式風格（分號）與圖示顏色未適配主題的小問題。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 35,
+     "end_line": 35,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "元件與檔名命名採用了 `DefaultaidesSettings`，若按照駝峰命名法（PascalCase）慣例，建議將 `aides` 字首大寫為 `DefaultAidesSettings`，以提升可讀性與一致性。"
+    },
+    {
+     "start_line": 70,
+     "end_line": 70,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "AidesIcon 的 fill 顏色寫死為固定色值 `#FFD700`，與其他圖示（如 JoplinIcon 使用 `var(--color-icon)` 或 iconfont）不同，在不同主題（暗色/亮色）下可能存在對比度或視覺風格不協調的問題。"
+    },
+    {
+     "start_line": 73,
+     "end_line": 73,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "行尾有多餘的分號 `;`，與專案其餘部分的程式碼風格（無分號）不一致。"
+    }
+   ]
+  },
+  {
+   "filename": "src/renderer/src/pages/settings/DataSettings/DefaultaidesSettings.tsx",
+   "summary": "新增預設助理設定元件，但存在多處拼字錯誤（typo）、命名慣例不符以及 antd 內部模組引用路徑問題。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 4,
+     "end_line": 4,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "action 名稱「setefaultAides」疑似為拼字錯誤（缺少字母 'd'，應為 setDefaultAides）。"
+    },
+    {
+     "start_line": 5,
+     "end_line": 5,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "直接引用 antd 內部深層路徑 `antd/es/input/Input` 不符合 antd 官方推薦做法，可能影響打包或樣式引入。"
+    },
+    {
+     "start_line": 16,
+     "end_line": 16,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "一般常數或區域變數 `Aides` 使用了大寫駝峰命名，在 React/JavaScript 慣例中大寫開頭多用於元件、類別或型別。"
+    }
+   ]
+  },
+  {
+   "filename": "src/renderer/src/store/settings.ts",
+   "summary": "本次改動新增了預設智能體相關設定，但存在明顯的拼字錯誤及變數命名規範不一致的問題。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 459,
+     "end_line": 459,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "reducer action 名稱拼字錯誤，漏掉了字母 'D'（setefaultAides 應為 setDefaultAides）。"
+    },
+    {
+     "start_line": 106,
+     "end_line": 106,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "狀態欄位名稱 `defaultaides` 未遵循專案普遍使用的 camelCase 命名慣例（如上方 `defaultObsidianVault`）。"
+    },
+    {
+     "start_line": 210,
+     "end_line": 210,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "初始值設為字串 `'settings.defaultaides'`，這看起來像是 i18n 翻譯鍵值而非智能體的實際識別碼（ID）或預設值；若業務邏輯需要的是 Assistant ID 或 null，此處可能導致查詢失敗。"
+    }
+   ]
+  }
+ ],
+ "n_files": 9,
+ "input_tokens": 20781,
+ "output_tokens": 2152,
+ "calls": 9,
+ "tool_calls": null,
+ "elapsed_s": 80.6,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  1218,
+  1273,
+  1339,
+  1292,
+  1256,
+  1874,
+  7742,
+  1265,
+  3522
+ ],
+ "model": "gemini-3.8-flash"
+}

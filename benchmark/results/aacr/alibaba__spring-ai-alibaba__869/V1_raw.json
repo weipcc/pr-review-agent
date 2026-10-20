@@ -1,0 +1,63 @@
+{
+ "results": [
+  {
+   "summary": "新增 tool-calling-common 依賴並更新 alimt SDK 版本至 1.0.3，變更內容合理且無異常。",
+   "issues": [],
+   "filename": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/pom.xml"
+  },
+  {
+   "summary": "改用屬性前綴常數提高維護性，並明確指定 Bean 銷毀方法，改動合理且無顯著問題。",
+   "issues": [],
+   "filename": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/src/main/java/com/alibaba/cloud/ai/toolcalling/alitranslate/AliTranslateAutoConfiguration.java"
+  },
+  {
+   "summary": "重構 AliTranslateProperties 繼承 CommonToolCallProperties 並向後相容舊的 AccessKey 屬性，整體結構清楚，但建議對廢棄方法與環境變數命名作進一步調整。",
+   "issues": [
+    {
+     "line": 34,
+     "severity": "style",
+     "comment": "環境變數名稱使用 'ACCESS_KEY_ID' 與 'ACCESS_KEY_SECRET' 過於寬鬆，容易與其他雲廠商（如 AWS）或系統變數衝突，且阿里雲 SDK 預設慣用的環境變數通常為 'ALIBABA_CLOUD_ACCESS_KEY_ID' 及 'ALIBABA_CLOUD_ACCESS_KEY_SECRET'。",
+     "suggestion": "建議評估改用阿里雲慣例的環境變數名稱（例如 'ALIBABA_CLOUD_ACCESS_KEY_ID' 和 'ALIBABA_CLOUD_ACCESS_KEY_SECRET'），或考慮支援兩者以提升相容性與避免衝突。"
+    },
+    {
+     "line": 37,
+     "severity": "style",
+     "comment": "setter 方法 setAccessKeyId/setAccessKeySecret 已標記 @Deprecated，但對應的 getter 方法 getAccessKeyId/getAccessKeySecret 尚未標記 @Deprecated，API 規範不一致。",
+     "suggestion": "建議在 getAccessKeyId() 與 getAccessKeySecret() 上也加上 @Deprecated 註解及 javadoc 說明，建議改用 getApiKey() 與 getSecretKey()。"
+    }
+   ],
+   "filename": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/src/main/java/com/alibaba/cloud/ai/toolcalling/alitranslate/AliTranslateProperties.java"
+  },
+  {
+   "summary": "重構了阿里翻譯服務的回傳解析邏輯，新增支援來源語言設定並實作 Closeable，但選填參數的預設值處理與例外處理仍有待改進。",
+   "issues": [
+    {
+     "line": 84,
+     "severity": "bug",
+     "comment": "在 Request 定義中，sourceLanguage 與 targetLanguage 均被標註為 required = false 且具有預設值；但在 apply() 方法中，若 request.sourceLanguage 或 request.targetLanguage 為 null 或空字串，會直接返回 null，導致 LLM 工具調用若省略這兩個選填參數時呼叫直接失效。",
+     "suggestion": "建議在 Request record 的 compact constructor 中處理預設值（當為 null 或 blank 時填入 LANGUAGE_CODE_ZH 與 LANGUAGE_CODE_EN），或在 apply() 判斷時若為空則退回使用預設常數，而非直接返回 null。"
+    },
+    {
+     "line": 104,
+     "severity": "bug",
+     "comment": "CompletableFuture.get() 會拋出 InterruptedException 與 ExecutionException。捕獲通用的 Exception 時，未針對 InterruptedException 恢復執行緒中斷狀態（Thread.currentThread().interrupt()），且 logger.error 僅輸出 e.getMessage()，無法取得完整堆疊追蹤，不利於排查線上問題。",
+     "suggestion": "建議將例外物件傳入 logger.error(\"Failed to invoke alitranslate\", e) 以記錄堆疊資訊，並在捕獲到 InterruptedException 時調用 Thread.currentThread().interrupt()。"
+    }
+   ],
+   "filename": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/src/main/java/com/alibaba/cloud/ai/toolcalling/alitranslate/AliTranslateService.java"
+  }
+ ],
+ "n_files": 4,
+ "elapsed_s": 48.4,
+ "calls": 4,
+ "input_tokens": 7944,
+ "output_tokens": 822,
+ "call_input_tokens": [
+  1386,
+  973,
+  1641,
+  3944
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

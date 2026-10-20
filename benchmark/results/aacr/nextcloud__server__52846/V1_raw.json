@@ -1,0 +1,136 @@
+{
+ "results": [
+  {
+   "summary": "Psalm baseline 檔案更新，移除了已修正或不再需要的靜態分析忽略項目，變更內容正常且無問題。",
+   "issues": [],
+   "filename": "build/psalm-baseline-ocp.xml"
+  },
+  {
+   "summary": "使用 IRequest::getHeader() 替代直接存取 $_SERVER 陣列，提升程式碼規範與封裝性，改動良好無問題。",
+   "issues": [],
+   "filename": "lib/public/AppFramework/ApiController.php"
+  },
+  {
+   "summary": "將內部 \\OC::$server 存取改為透過公開 API \\OCP\\Server::get(IConfig::class) 取得組態，改動良好且符合 Nextcloud 慣例。",
+   "issues": [],
+   "filename": "lib/public/AppFramework/App.php"
+  },
+  {
+   "summary": "將內部的 \\OC::$server 替換為公開 API \\OCP\\Server::get()，符合 Nextcloud 公開命名空間規範，改動簡潔正確。",
+   "issues": [],
+   "filename": "lib/public/AppFramework/Http/RedirectToDefaultAppResponse.php"
+  },
+  {
+   "summary": "將非公開的 \\OC::$server 替換為公開 API \\OCP\\Server::get()，符合 public API 的最佳實踐。",
+   "issues": [],
+   "filename": "lib/public/AppFramework/Http/Response.php"
+  },
+  {
+   "summary": "將內部的私有 API \\OC::$server 替換為 public API \\OCP\\Server，改動方向正確且無重大問題。",
+   "issues": [
+    {
+     "line": 32,
+     "severity": "style",
+     "comment": "目前檔案已經位於 namespace OCP 命名空間內，在此處直接使用 Server::get(...) 即可，不必使用完整的命名空間前綴 \\OCP\\Server。",
+     "suggestion": "$defaults = Server::get('ThemingDefaults');"
+    }
+   ],
+   "filename": "lib/public/Defaults.php"
+  },
+  {
+   "summary": "將 stopQuery() 的 PHPDoc 回傳型別修正為 void，符合介面設計，無問題。",
+   "issues": [],
+   "filename": "lib/public/Diagnostics/IQueryLogger.php"
+  },
+  {
+   "summary": "為 GenericEvent 補充了 Psalm/PHPStan 的泛型實作註解並微調文件文字，改動良好無問題。",
+   "issues": [],
+   "filename": "lib/public/EventDispatcher/GenericEvent.php"
+  },
+  {
+   "summary": "將取得 MimeTypeDetector 的方式由內部的 \\OC::$server 重構為透過 public API 的 Server::get()，改動乾淨且符合規範。",
+   "issues": [],
+   "filename": "lib/public/Files.php"
+  },
+  {
+   "summary": "更新了文件註解中的範例程式碼以改用推薦的 API，但範例中的類別名稱未指定完整命名空間。",
+   "issues": [
+    {
+     "line": 19,
+     "severity": "style",
+     "comment": "在 PHPDoc 範例程式碼中使用了 `IEventDispatcher::class`，但該檔案並沒有引入（use）此介面，亦未使用完整命名空間，可能會對參考此註解範例的開發者造成困惑。",
+     "suggestion": "建議在範例中使用完整命名空間，例如 `\\OCP\\EventDispatcher\\IEventDispatcher::class`。"
+    }
+   ],
+   "filename": "lib/public/Files_FullTextSearch/Model/AFilesDocument.php"
+  },
+  {
+   "summary": "更新了介面的泛型型別標註、補上原生 void 回傳型別並調整了型別宣告格式，改動乾淨且符合規範。",
+   "issues": [],
+   "filename": "lib/public/L10N/ILanguageIterator.php"
+  },
+  {
+   "summary": "更新 Docblock 中的範例程式碼，將內部命名空間 \\OC::$server 替換為公開 API \\OCP\\Server::get，改動良好無問題。",
+   "issues": [],
+   "filename": "lib/public/Mail/IMailer.php"
+  },
+  {
+   "summary": "將註解範例中的非公開 API \\OC::$server 替換為公開 API \\OCP\\Server::get，改動正確無誤。",
+   "issues": [],
+   "filename": "lib/public/Profiler/IProfile.php"
+  },
+  {
+   "summary": "更新了文件註解中的用法範例，但該範例使用了不存在的靜態方法。",
+   "issues": [
+    {
+     "line": 16,
+     "severity": "bug",
+     "comment": "\\OCP\\Server 類別並未提供靜態方法 getCrypto()，直接呼叫會導致 PHP Fatal Error（Call to undefined method OCP\\Server::getCrypto()）。",
+     "suggestion": "建議改用容器取得實例 \\OCP\\Server::get(\\OCP\\Security\\ICrypto::class)，或是示範以依賴注入（Dependency Injection）注入 ICrypto 的方式。"
+    }
+   ],
+   "filename": "lib/public/Security/ICrypto.php"
+  },
+  {
+   "summary": "更新了文件註解中的用法範例，改用公開 API `\\OCP\\Server::get` 替代內部靜態變數 `\\OC::$server`，改動恰當且無問題。",
+   "issues": [],
+   "filename": "lib/public/Security/IHasher.php"
+  },
+  {
+   "summary": "更新 PHPDoc 中的範例程式碼，將內部 API 參照改為公開的 \\OCP\\Server API，改動正確無誤。",
+   "issues": [],
+   "filename": "lib/public/Security/ISecureRandom.php"
+  },
+  {
+   "summary": "將原本使用 \\OC::$server 存取服務的寫法重構為 \\OCP\\Server::get(...)，整體邏輯等價且符合現代 Nextcloud API 規範，無重大問題。",
+   "issues": [],
+   "filename": "lib/public/Util.php"
+  }
+ ],
+ "n_files": 17,
+ "elapsed_s": 143.1,
+ "calls": 17,
+ "input_tokens": 37233,
+ "output_tokens": 1143,
+ "call_input_tokens": [
+  1269,
+  1340,
+  2674,
+  821,
+  3290,
+  2988,
+  979,
+  2362,
+  1882,
+  1213,
+  1071,
+  1432,
+  1942,
+  1027,
+  1251,
+  1172,
+  10520
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

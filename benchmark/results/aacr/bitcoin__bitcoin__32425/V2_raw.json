@@ -1,0 +1,64 @@
+{
+ "results": [
+  {
+   "change_intent": "Update Tor documentation to reflect the new network-specific -proxy configuration options and clarify DNS proxy behavior.",
+   "summary": "The documentation updates accurately explain the new per-network proxy syntax and DNS routing behavior, with only a minor spelling error to address.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 60,
+     "end_line": 60,
+     "category": "nitpick",
+     "confidence": "high",
+     "evidence": "If -proxy or -onion is specified multiple times, later occurences override",
+     "comment": "'occurences' is misspelled.",
+     "suggestion": "Fix the spelling of 'occurences' to 'occurrences'.",
+     "suggested_code": "If -proxy or -onion is specified multiple times, later occurrences override"
+    }
+   ],
+   "filename": "doc/tor.md"
+  },
+  {
+   "change_intent": "Allow configuring the SOCKS5 proxy on a per-network basis (IPv4, IPv6, Tor/onion, and CJDNS) using a '=network' suffix on the -proxy argument.",
+   "summary": "The changes cleanly implement per-network proxy configuration, argument validation, and documentation without issues.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/init.cpp"
+  },
+  {
+   "change_intent": "Remove DEFAULT_TOR_SOCKS_PORT definition from torcontrol.cpp so it can be exported via torcontrol.h.",
+   "summary": "The internal constant was cleanly removed to avoid duplicate definitions after exposing it in torcontrol.h.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/torcontrol.cpp"
+  },
+  {
+   "change_intent": "Expose the default Tor SOCKS port constant in torcontrol.h so it can be shared with init.cpp.",
+   "summary": "Defining DEFAULT_TOR_SOCKS_PORT as a constexpr constant in the header is clean and correct.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/torcontrol.h"
+  },
+  {
+   "change_intent": "Add functional tests for setting and overriding network-specific proxy options.",
+   "summary": "The test additions are clean, follow existing test patterns, and thoroughly verify the new network-specific proxy behavior and error cases.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "test/functional/feature_proxy.py"
+  }
+ ],
+ "n_files": 5,
+ "elapsed_s": 210.5,
+ "calls": 5,
+ "input_tokens": 58714,
+ "output_tokens": 532,
+ "call_input_tokens": [
+  12479,
+  15215,
+  9845,
+  10843,
+  10332
+ ],
+ "mode": "per-file",
+ "routing_tokens": 19564
+}

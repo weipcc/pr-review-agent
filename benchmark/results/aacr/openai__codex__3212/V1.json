@@ -1,0 +1,144 @@
+{
+ "results": [
+  {
+   "filename": "codex-rs/core/src/client.rs",
+   "summary": "將 Responses API 請求的 `store` 參數固定為 `false`，並在啟用 reasoning 時一律請求加密思考內容（encrypted COT），改動清晰且無明顯問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "codex-rs/core/src/client_common.rs",
+   "summary": "移除 store 欄位時疑似誤刪註解而遺留 ResponsesApiRequest.store，導致測試缺少必要欄位無法編譯。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 128,
+     "end_line": 128,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在 ResponsesApiRequest 結構體中僅刪除了註解，未將 `pub(crate) store: bool,` 欄位刪除。但下方單元測試（第 190 行與第 219 行）中已經移除了 `store` 欄位的初始化，導致直接構造 ResponsesApiRequest 時缺少該欄位而無法通過編譯。"
+    }
+   ]
+  },
+  {
+   "filename": "codex-rs/core/src/codex.rs",
+   "summary": "清理已棄用的 disable_response_storage 設定與 Prompt 中的 store 欄位，改動乾淨一致。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "codex-rs/core/src/config.rs",
+   "summary": "移除 disable_response_storage 設定及相應測試的改動相當完整，但 struct 中留下了不必要的 tombstone 註解。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 81,
+     "end_line": 81,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "移除欄位後留下的註解 `// Removed: ...` 夾在不相關的欄位（`user_instructions`）上方，容易造成混淆。Git 歷史已有完整變更紀錄，不需要在程式碼中保留此類 tombstone 註解。"
+    },
+    {
+     "start_line": 416,
+     "end_line": 416,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "移除欄位後留下的註解 `// Removed: ...` 夾在不相關的欄位（`notify`）上方，沒有保留必要。"
+    }
+   ]
+  },
+  {
+   "filename": "codex-rs/core/src/config_profile.rs",
+   "summary": "乾淨地移除了 `disable_response_storage` 欄位及其對應的轉換邏輯，改動無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "codex-rs/core/tests/suite/client.rs",
+   "summary": "更新了測試中對 message id 與 store 旗標的預期，但在移除 store 斷言後遺留了未使用的區域變數，可能導致編譯器產生警告或 CI 失敗。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 580,
+     "end_line": 580,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "移除 store 的 assert 之後，變數 `request` 與 `request_body` 未被使用，這會在 Rust 編譯時產生 unused variable 警告（若 CI 開啟了 `-D warnings` 則會導致編譯失敗）。若意圖是驗證 request body 中不包含 `store` 欄位，應進行對應斷言；若不需要，則應移除未使用的變數讀取。"
+    },
+    {
+     "start_line": 661,
+     "end_line": 661,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "移除 store 的 assert 之後，變數 `request` 與 `request_body` 未被使用，會在編譯時產生 unused variable 警告。"
+    }
+   ]
+  },
+  {
+   "filename": "codex-rs/core/tests/suite/prompt_caching.rs",
+   "summary": "從測試案例預期的 message payload JSON 中移除了未使用的 `id: null` 欄位，改動單純且一致，沒有發現問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "codex-rs/exec/src/lib.rs",
+   "summary": "移除了 ConfigOverrides 中已不再使用的 disable_response_storage 設定，改動簡潔且無副作用。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "codex-rs/mcp-server/src/codex_message_processor.rs",
+   "summary": "移除了 ConfigOverrides 中已不再使用的 disable_response_storage 欄位初始化，改動簡潔且無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "codex-rs/mcp-server/src/codex_tool_config.rs",
+   "summary": "移除 ConfigOverrides 中已不再使用的 disable_response_storage 欄位，改動單純且無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "codex-rs/protocol/src/mcp_protocol.rs",
+   "summary": "從 Profile 結構體中移除了已棄用或未使用的 disable_response_storage 欄位，改動單純且無明顯問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "codex-rs/protocol/src/models.rs",
+   "summary": "為 ResponseItem 各 variant 的 id 欄位統一加上 skip_serializing，改動簡潔且正確。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "codex-rs/tui/src/lib.rs",
+   "summary": "移除了 ConfigOverrides 中已不再需要的 disable_response_storage 設定，改動簡潔且無可見問題。",
+   "recommendation": "n/a",
+   "issues": []
+  }
+ ],
+ "n_files": 13,
+ "input_tokens": 56574,
+ "output_tokens": 1277,
+ "calls": 13,
+ "tool_calls": null,
+ "elapsed_s": 120.3,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  2996,
+  3565,
+  8924,
+  11518,
+  956,
+  5449,
+  5345,
+  4085,
+  1060,
+  4809,
+  1266,
+  5439,
+  1162
+ ],
+ "model": "gemini-3.8-flash"
+}

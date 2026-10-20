@@ -1,0 +1,43 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 5,
+  "findings": [
+   {
+    "file": "tsl/src/hypercore/hypercore_handler.c",
+    "start": 109,
+    "end": 109,
+    "category": "bug",
+    "comment": "函數 hypercore_open_compressed 接收了 mode 參數，但在呼叫 table_open 時卻寫死了 AccessShareLock，導致 mode 參數完全被忽略。這會造成需要 RowExclusiveLock 或 AccessExclusiveLock（例如 hypercore_tuple_delete 或 compress_and_swap_heap）的地方只拿到 AccessShareLock，引發嚴重的並行競爭與鎖定安全問題。"
+   },
+   {
+    "file": "tsl/src/hypercore/hypercore_handler.c",
+    "start": 3899,
+    "end": 3899,
+    "category": "performance",
+    "comment": "在 for 迴圈內重複呼叫 RelationGetHypercoreInfo(rel)。迴圈內部並無任何可能使 rd_amcache 失效的呼叫，每次迭代重複呼叫造成不必要的效能開銷。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "tsl/src/hypercore/hypercore_handler.c",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both identify that `hypercore_open_compressed` accepts a `mode` parameter but hardcodes `AccessShareLock` in `table_open()`, causing concurrency and lock-level issues.\n2. No match — concerns variable shadowing, not lock mode handling.\n3. No match — concerns cache invalidation and use-after-free, not lock mode handling.\n4. No match — concerns variable shadowing, not lock mode handling.\n5. No match — concerns performance and repeated cache lookups inside a loop, not lock mode handling.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "tsl/src/hypercore/hypercore_handler.c",
+   "matched_gt": [
+    4
+   ],
+   "reason": "1. No match — concerns hardcoded lock mode parameter in `table_open()`.\n2. No match — concerns variable shadowing and inlining at L1751.\n3. No match — concerns holding raw pointer across catalog/heap operations at L1751.\n4. No match — concerns variable shadowing of `hsinfo` at L3899.\n5. Match — both identify unnecessary performance overhead from calling `RelationGetHypercoreInfo(rel)` inside the loop at L3899 and suggest hoisting it outside.\n\n[5]",
+   "hit_new_gt": true
+  }
+ ]
+}

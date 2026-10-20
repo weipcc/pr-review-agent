@@ -1,0 +1,55 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 4,
+  "findings": [
+   {
+    "file": "src/geometries/ExtrudeGeometry.js",
+    "start": 433,
+    "end": 433,
+    "category": "bug",
+    "comment": "When bevelEnabled is false (or options specify bevelSegments: 0), bevelSegments is 0. As a result, the loop for ( let b = 0; b < bevelSegments; b ++ ) never executes, leaving contractedContourVertices and expandedHoleVertices empty. triangulateShape is called with empty arrays, resulting in faces.length === 0, which completely skips generating both front and back lid/cap faces for non-beveled extrusions."
+   },
+   {
+    "file": "src/geometries/ExtrudeGeometry.js",
+    "start": 180,
+    "end": 184,
+    "category": "bug",
+    "comment": "When checking the wrap-around connection between the last point and the first point (when i === points.length, so currentIndex === 0), points.splice( currentIndex, 1 ) splices index 0. This removes the initial vertex of the shape rather than the duplicate closing endpoint, inadvertently shifting the starting vertex and altering the shape's UV alignment and vertex order."
+   },
+   {
+    "file": "src/geometries/ExtrudeGeometry.js",
+    "start": 169,
+    "end": 170,
+    "category": "bug",
+    "comment": "If points has fewer than 2 elements (e.g., an empty hole array or a single degenerate point), cleanPoints will access points[0] as undefined or splice a 1-point array into an empty array. A guard at the beginning of the function will prevent unintended side effects on degenerate input."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/geometries/ExtrudeGeometry.js",
+   "matched_gt": [],
+   "reason": "1. No match — ref suggests renaming `cleanPoints`, generated flags a bug where lid/cap faces are omitted when bevelSegments is 0.\n2. No match — ref flags missing guard in `cleanPoints`, generated discusses missing cap generation when bevel is disabled.\n3. No match — ref suggests using strict equality, generated discusses a functional bug in lid face generation.\n4. No match — ref suggests adding a documentation comment about cleaned vertices, generated discusses a logic bug causing empty lid faces.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "src/geometries/ExtrudeGeometry.js",
+   "matched_gt": [],
+   "reason": "1. No match — ref suggests renaming `cleanPoints`, while generated discusses splicing the wrong point on wrap-around.\n2. No match — ref addresses missing guard for arrays with fewer than 2 points, while generated discusses removing index 0 instead of the closing endpoint.\n3. No match — ref flags non-strict equality, while generated discusses a bug with `points.splice`.\n4. No match — ref suggests adding documentation/comments, while generated discusses an incorrect splice index bug.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "src/geometries/ExtrudeGeometry.js",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. No match — discusses renaming the function, whereas the generated comment addresses degenerate/empty array handling.\n2. Match — both identify that `cleanPoints` fails when `points.length < 2` and suggest adding a guard check at the beginning of the function.\n3. No match — concerns strict equality comparison, not related to array length checks.\n4. No match — suggests adding explanatory code comments, unrelated to handling fewer than 2 points.\n\n[2]",
+   "hit_new_gt": true
+  }
+ ]
+}

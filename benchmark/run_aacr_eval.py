@@ -3,7 +3,7 @@
 Evaluate V1 / V2 / V3 on the 10 shortlisted AACR-Bench pull requests, judged with the official AACR-Bench protocol (LLM judge).
 
     V1  6ddb19c   baseline: framework only, original prompt
-    V2  2ed8205   prompt rework (workflow version, no tools)
+    V2  dfb986c   prompt rework (#5) + @mention poller (#6), no tools (review code identical to 2ed8205)
     V3  cbe4576   final system: agent + E2B sandbox
 
 Ground truth = every AACR comment the AACR experts verified (label = 1), whether a human or an
@@ -51,8 +51,20 @@ def pr_dir(url: str) -> Path:
     return OUT / f"{owner}__{repo}__{n}"
 
 
-def shortlist() -> list[str]:
-    return [x["url"] for x in json.loads((SEL / "shortlist_aacr.json").read_text(encoding="utf-8"))]
+def shortlist(which: str = "small50") -> list[str]:
+    """pilot = the first 10 PRs; small50 = the final evaluation set (pilot + 40 small);
+    batch1 = pilot + 30 small + 10 large (first cost check); all = the 100 of selection_100.json."""
+    if which == "pilot":
+        return [x["url"] for x in json.loads((SEL / "shortlist_aacr.json").read_text(encoding="utf-8"))]
+    sel = json.loads((SEL / "selection_100.json").read_text(encoding="utf-8"))["selected"]
+    if which == "small50":
+        return [x["url"] for x in sel if x.get("in_small50")]
+    return [x["url"] for x in sel if which == "all" or x["batch"] == 1]
+
+
+def groups() -> dict[str, str]:
+    """url -> 'small' / 'large' (diff size at the review commit, <= / > 6,000 tokens)."""
+    return {x["url"]: x["group"] for x in json.loads((SEL / "selection_100.json").read_text(encoding="utf-8"))["selected"]}
 
 
 def hunk_for(raw_diff: str, path: str, line: int, slack: int = 5) -> str:
@@ -106,6 +118,7 @@ def check(state: dict) -> list[str]:
 
 
 def cmd_build(urls: list[str], force: bool) -> None:
+    pe.load_env()  # GITHUB_TOKEN for the GitHub API
     data = json.loads((SEL / "aacr.json").read_text(encoding="utf-8"))
     rows_by = {}
     for r in data:
@@ -139,12 +152,17 @@ def run_version(state: dict, sp: Path, v: str, model: str) -> dict | None:
         r = subprocess.run([rvc.PY, str(HERE / "_version_worker.py"), spec["worker"], str(sp), str(of), model, str(rvc.REPO / ".env")],
                            cwd=str(HERE / spec["dir"]), env=dict(os.environ), capture_output=True, text=True)
         if r.returncode != 0:
-            print("   FAILED:", (r.stderr or r.stdout)[-600:])
+            err = (r.stderr or r.stdout)[-600:]
+            print("   FAILED:", err)
+            if "402" in err or "credits are depleted" in err:  # out of credits: retrying cannot help
+                sys.exit("Gemini credits are depleted (402); stopped. Rerun the same command after topping up: finished runs are cached.")
             return None
         raw = json.loads(of.read_text(encoding="utf-8"))
         return {"results": rvc.to_new_schema(raw["results"], old=(v == "V1")), "n_files": raw["n_files"],
                 "input_tokens": raw["input_tokens"], "output_tokens": raw["output_tokens"],
-                "calls": raw["calls"], "tool_calls": None, "elapsed_s": raw["elapsed_s"]}
+                "calls": raw["calls"], "tool_calls": None, "elapsed_s": raw["elapsed_s"],
+                "mode": raw.get("mode"), "routing_tokens": raw.get("routing_tokens"),
+                "call_input_tokens": raw.get("call_input_tokens")}
     try:
         rv = pe.run_review(state, model)
     except Exception as e:  # noqa: BLE001
@@ -333,58 +351,81 @@ def cmd_sheet() -> None:
 
 
 def cmd_summary() -> None:
-    agg = {v: {"prs": 0, "tok": 0, "s": 0.0, "nofind": 0, "missing": 0, "cap": 0, "find": 0, "eff": 0, "dup": 0,
-               "ref": {}, "ctx": {}} for v in rvc.VERSIONS}
-    per_pr = []
+    grp = groups()
+    data = []  # one entry per PR: state + {version: (review, judge)}
     for d in sorted(OUT.glob("*__*__*")):
         state = json.loads((d / "state.json").read_text(encoding="utf-8"))
-        row = {"pr": f"{state['full'].split('/')[1]}#{state['pr_number']}", "lang": state["language"], "n": len(state["ground_truth"])}
-        for v in rvc.VERSIONS:
-            got = load_judged(d, v)
-            if not got:
+        runs = {v: got[1:] for v in rvc.VERSIONS if (got := load_judged(d, v))}
+        url = f"https://github.com/{state['full']}/pull/{state['pr_number']}"
+        v2 = runs.get("V2", ({}, {}))[0]
+        data.append({"state": state, "runs": runs, "group": grp.get(url, "small"), "route": v2.get("mode") or "unknown"})
+
+    def stats(entries, v):
+        a = {"prs": 0, "ref": 0, "cov": 0, "find": 0, "eff": 0, "tok": 0, "s": 0.0, "nofind": 0}
+        for e in entries:
+            if v not in e["runs"]:
                 continue
-            _, r, j = got
-            a = agg[v]
+            r, j = e["runs"][v]
             recs = j["records"]
-            covered = {g for x in recs for g in x["matched_gt"]}
-            a["prs"] += 1; a["tok"] += r["input_tokens"]; a["s"] += r["elapsed_s"]
-            a["nofind"] += not recs
-            a["missing"] += len(r["results"]) < r["n_files"]
-            a["cap"] += bool(r["tool_calls"] is not None and len(r["tool_calls"]) >= 10)
-            a["find"] += len(recs)
-            a["eff"] += sum(x["hit_new_gt"] for x in recs)
-            a["dup"] += sum(bool(x["matched_gt"]) and not x["hit_new_gt"] for x in recs)
-            for c in state["ground_truth"]:
-                m = c["id"] in covered
-                for k, key in (("ref", c["source"]), ("ref", "all"), ("ctx", c["context"])):
-                    t = a[k].setdefault(key, [0, 0]); t[0] += m; t[1] += 1
-            row[v] = f"{len(covered)} / {sum(x['hit_new_gt'] for x in recs)} / {len(recs)}"
-        per_pr.append(row)
-    vs = [v for v in rvc.VERSIONS if agg[v]["prs"]]
+            a["prs"] += 1; a["ref"] += len(e["state"]["ground_truth"])
+            a["cov"] += len({g for x in recs for g in x["matched_gt"]})
+            a["find"] += len(recs); a["eff"] += sum(x["hit_new_gt"] for x in recs)
+            a["tok"] += r["input_tokens"]; a["s"] += r["elapsed_s"]; a["nofind"] += not recs
+        rec = a["cov"] / a["ref"] if a["ref"] else 0
+        prec = a["eff"] / a["find"] if a["find"] else 0
+        a["bal"] = 2 * rec * prec / (rec + prec) if rec + prec else 0
+        return a
+
     pct = lambda h, n: f"{h}/{n} ({100 * h / n:.0f}%)" if n else "–"  # noqa: E731
-    print("Protocol: AACR-Bench file-level semantic coverage (official judge prompt, temperature 0, greedy dedup).\n")
-    print("## Table 1: overall\n")
-    print("| version | PRs | recall (all) | recall (human-written) | recall (AI-written) | precision | balanced score | findings | duplicate hits | mean input tokens | mean time (s) | PRs with no findings | missing files in output | hit 10-step cap |")
-    print("|---|" + "---|" * 13)
-    for v in vs:
-        a = agg[v]
-        rh, rn = a["ref"].get("all", [0, 0])
-        rec, prec = (rh / rn if rn else 0), (a["eff"] / a["find"] if a["find"] else 0)
-        bal = 2 * rec * prec / (rec + prec) if rec + prec else 0
-        print(f"| {v} | {a['prs']} | {pct(rh, rn)} | {pct(*a['ref'].get('human', [0, 0]))} | {pct(*a['ref'].get('ai', [0, 0]))} | "
-              f"{pct(a['eff'], a['find'])} | {bal:.3f} | {a['find']} | {a['dup']} | {a['tok'] // a['prs']:,} | {a['s'] / a['prs']:.0f} | "
-              f"{a['nofind']} | {a['missing']} | " + (str(a["cap"]) if v == "V3" else "–") + " |")
-    print("\n## Table 2: per PR (covered references / effective findings / findings)\n")
-    print("| PR | language | reference comments | " + " | ".join(vs) + " |")
-    print("|---|---|---|" + "---|" * len(vs))
-    for row in per_pr:
-        print(f"| {row['pr']} | {row['lang']} | {row['n']} | " + " | ".join(row.get(v, "–") for v in vs) + " |")
-    print("\n## Table 3: recall by context needed\n")
-    ctxs = sorted({k for v in vs for k in agg[v]["ctx"]})
-    print("| context | " + " | ".join(vs) + " |")
-    print("|---|" + "---|" * len(vs))
-    for k in ctxs:
-        print(f"| {k} | " + " | ".join(pct(*agg[v]["ctx"].get(k, [0, 0])) for v in vs) + " |")
+
+    def row(label, a):
+        if not a["prs"]:
+            return f"| {label} | 0 | – | – | – | – | – | – | – |"
+        return (f"| {label} | {a['prs']} | {pct(a['cov'], a['ref'])} | {pct(a['eff'], a['find'])} | {a['bal']:.3f} | {a['find']} | "
+                f"{a['tok'] // a['prs']:,} | {a['s'] / a['prs']:.0f} | {a['nofind']} |")
+
+    head = "| {} | PRs | recall | precision | balanced score | findings | mean input tokens | mean time (s) | PRs with no findings |\n|---|---|---|---|---|---|---|---|---|"
+    both = [e for e in data if "V1" in e["runs"] and "V2" in e["runs"]]
+    print("Protocol: AACR-Bench file-level semantic coverage (official judge prompt, temperature 0, greedy dedup).")
+    print(f"PRs with V1 and V2 judged: {len(both)} ({sum(e['group'] == 'small' for e in both)} small, {sum(e['group'] == 'large' for e in both)} large).\n")
+    print("## Table 1: overall (PRs with both V1 and V2)\n"); print(head.format("version"))
+    for v in ("V1", "V2"):
+        print(row(v, stats(both, v)))
+    pilot3 = [e for e in data if "V3" in e["runs"]]
+    if pilot3:
+        print(f"\nV3 was run on the pilot only ({len(pilot3)} PRs); same PRs for comparison:\n"); print(head.format("version"))
+        for v in ("V1", "V2", "V3"):
+            print(row(v, stats(pilot3, v)))
+    if len({e["group"] for e in both}) > 1:  # only meaningful once the large group has been run
+        print("\n## Table: by diff size at the review commit (small <= 6,000 tokens < large)\n"); print(head.format("group / version"))
+        for g in ("small", "large"):
+            for v in ("V1", "V2"):
+                print(row(f"{g} / {v}", stats([e for e in both if e["group"] == g], v)))
+    print("\n## Table 2: split by the mode V2 used on the PR (V1 always reviews file by file; its rows are the same PRs)\n")
+    print(head.format("PRs where V2 used ... / version"))
+    for m in sorted({e["route"] for e in both}):
+        sub = [e for e in both if e["route"] == m]
+        for v in ("V1", "V2"):
+            print(row(f"{m} mode ({len(sub)} PRs) / {v}", stats(sub, v)))
+    print("\n## Table 3: recall by context needed (AACR-Bench label)\n")
+    ctx = {}
+    for e in both:
+        for v in ("V1", "V2"):
+            cov = {g for x in e["runs"][v][1]["records"] for g in x["matched_gt"]}
+            for c in e["state"]["ground_truth"]:
+                t = ctx.setdefault((c["context"], v), [0, 0]); t[0] += c["id"] in cov; t[1] += 1
+    print("| context | V1 | V2 |\n|---|---|---|")
+    for k in sorted({k for k, _ in ctx}):
+        print(f"| {k} | {pct(*ctx[(k, 'V1')])} | {pct(*ctx[(k, 'V2')])} |")
+    print("\n## Table 4: per PR (covered references / effective findings / findings; input tokens)\n")
+    print("| PR | group | V2 route | references | V1 | V2 |\n|---|---|---|---|---|---|")
+    for e in both:
+        cells = []
+        for v in ("V1", "V2"):
+            r, j = e["runs"][v]; recs = j["records"]
+            cells.append(f"{len({g for x in recs for g in x['matched_gt']})} / {sum(x['hit_new_gt'] for x in recs)} / {len(recs)}; {r['input_tokens']:,}")
+        s = e["state"]
+        print(f"| {s['full']}#{s['pr_number']} | {e['group']} | {e['route']} | {len(s['ground_truth'])} | {cells[0]} | {cells[1]} |")
     p = OUT / "spotcheck.csv"
     if p.exists():
         rows = [x for x in csv.DictReader(p.open(encoding="utf-8")) if x["agree"].strip()]
@@ -396,17 +437,19 @@ def cmd_summary() -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=["build", "run", "judge", "sheet", "summary"])
-    ap.add_argument("--pr", help="comma list of owner/repo#N (default: all 10 shortlisted)")
-    ap.add_argument("--only", default="V1,V2,V3", help="versions to run")
+    ap.add_argument("--set", default="small50", choices=["pilot", "small50", "batch1", "all"],
+                    help="which PRs (default: small50 = the final 50 small PRs)")
+    ap.add_argument("--pr", help="comma list of owner/repo#N, restricted to --set")
+    ap.add_argument("--only", default="V1,V2", help="versions to run (V3 was run on the pilot only)")
     ap.add_argument("--model", default=rvc.MODEL)
     ap.add_argument("--force", action="store_true", help="rebuild / rerun even if cached")
     a = ap.parse_args()
-    urls = shortlist()
+    urls = shortlist(a.set)
     if a.pr:
         want = {f"https://github.com/{p.replace('#', '/pull/')}" for p in a.pr.split(",")}
         urls = [u for u in urls if u in want]
         if not urls:
-            sys.exit("none of --pr is in the shortlist")
+            sys.exit("none of --pr is in --set")
     if a.cmd == "build":
         cmd_build(urls, a.force)
     elif a.cmd == "run":

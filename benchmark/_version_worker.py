@@ -23,10 +23,28 @@ for line in open(env_path, encoding="utf-8"):
 
 state = json.load(open(state_path, encoding="utf-8"))
 
+# The historical versions call the GitHub REST API (file contents, README) without authentication,
+# so they hit the 60 requests/hour limit. Add GITHUB_TOKEN to those requests only; nothing else changes.
+import requests  # noqa: E402
+
+_gh_token = os.environ.get("GITHUB_TOKEN", "").strip()
+_orig_request = requests.sessions.Session.request
+
+
+def _with_token(self, method, url, *a, **k):
+    if _gh_token and str(url).startswith("https://api.github.com/"):
+        headers = dict(k.pop("headers", None) or {})
+        headers.setdefault("Authorization", f"Bearer {_gh_token}")
+        k["headers"] = headers
+    return _orig_request(self, method, url, *a, **k)
+
+
+requests.sessions.Session.request = _with_token
+
 # Count tokens of every generate_content call (these versions do not report usage themselves).
 from google.genai import models as _gm  # noqa: E402
 
-usage = {"calls": 0, "input_tokens": 0, "output_tokens": 0}
+usage = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "call_input_tokens": []}
 _orig = _gm.Models.generate_content
 
 
@@ -36,6 +54,7 @@ def _counting(self, *a, **k):
     usage["calls"] += 1
     if u:
         usage["input_tokens"] += u.prompt_token_count or 0
+        usage["call_input_tokens"].append(u.prompt_token_count or 0)
         usage["output_tokens"] += u.candidates_token_count or 0
     return r
 
@@ -50,6 +69,19 @@ reviewer.MODEL_NAME = model  # same model for every version: only the code/promp
 
 file_diffs = parse_diff(state["raw_diff"])
 file_contexts = build_context_for_files(state["owner"], state["repo"], state["review_sha"], file_diffs)
+
+# V2 routes by size (batch below BATCH_TOKEN_THRESHOLD, per-file otherwise): record which route it took.
+route = {"mode": "per-file (always)" if version == "v1" else None, "routing_tokens": None}
+if version != "v1" and hasattr(reviewer, "count_total_tokens"):
+    _orig_count = reviewer.count_total_tokens
+
+    def _count(fc):
+        n = _orig_count(fc)
+        route["routing_tokens"] = n
+        route["mode"] = "batch" if n < reviewer.BATCH_TOKEN_THRESHOLD else "per-file"
+        return n
+
+    reviewer.count_total_tokens = _count
 
 t0 = time.time()
 if version == "v1":
@@ -66,7 +98,7 @@ else:
     results = reviewer.review_all_files(file_contexts, project_context)
 
 json.dump(
-    {"results": results, "n_files": len(file_diffs), "elapsed_s": round(time.time() - t0, 1), **usage},
+    {"results": results, "n_files": len(file_diffs), "elapsed_s": round(time.time() - t0, 1), **usage, **route},
     open(out_path, "w", encoding="utf-8"),
     ensure_ascii=False,
     indent=1,

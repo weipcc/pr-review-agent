@@ -1,0 +1,55 @@
+{
+ "results": [
+  {
+   "change_intent": "Gate the `url` crate import under the `v1` feature flag to avoid unused import warnings when compiling for `v2`.",
+   "summary": "The change correctly restricts the `url` import to the `v1` feature flag without side effects.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "crates/api_models/src/admin.rs"
+  },
+  {
+   "change_intent": "Move v1-only payment and payment method imports under feature = \"v1\" conditional compilation flags to eliminate unused import warnings when building for v2.",
+   "summary": "Clean refactoring that properly gates v1 imports and removes unused imports in payment event models.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "crates/api_models/src/events/payment.rs"
+  },
+  {
+   "change_intent": "Conditionally import v1-only refund types behind the `v1` feature flag to avoid unused import warnings when compiling for `v2`.",
+   "summary": "The imports for types only used in v1 implementations were properly placed behind `#[cfg(feature = \"v1\")]` with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "crates/api_models/src/events/refund.rs"
+  },
+  {
+   "change_intent": "Conditionally compile an import and a type alias to eliminate unused item compiler warnings under specific feature flags.",
+   "summary": "The cfg gates added for OptionalEncryptableName and PaymentMethodMigrationResponseType correctly match their usage and resolve dead code / unused import warnings.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "crates/api_models/src/payment_methods.rs"
+  },
+  {
+   "change_intent": "Conditionally import v1-only modules/types under `#[cfg(feature = \"v1\")]` and add `#[allow(dead_code)]` to an unused deserializer helper to eliminate compiler warnings under v2.",
+   "summary": "Clean and correct feature-gating of v1-specific imports and attributes with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "crates/api_models/src/payments.rs"
+  }
+ ],
+ "n_files": 5,
+ "input_tokens": 38988,
+ "output_tokens": 397,
+ "calls": 5,
+ "tool_calls": null,
+ "elapsed_s": 55.5,
+ "mode": "per-file",
+ "routing_tokens": 8329,
+ "call_input_tokens": [
+  7053,
+  7746,
+  7675,
+  7913,
+  8601
+ ],
+ "model": "gemini-3.8-flash"
+}

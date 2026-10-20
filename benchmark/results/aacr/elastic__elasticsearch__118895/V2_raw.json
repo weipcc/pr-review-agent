@@ -1,0 +1,162 @@
+{
+ "results": [
+  {
+   "change_intent": "Update the wrapAnalyzer method signature to accept QueryMaxAnalyzedOffset instead of Integer to match the parent DefaultHighlighter class changes.",
+   "summary": "The override signature in AnnotatedTextHighlighter was correctly updated to align with DefaultHighlighter.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "plugins/mapper-annotated-text/src/main/java/org/elasticsearch/index/mapper/annotatedtext/AnnotatedTextHighlighter.java"
+  },
+  {
+   "change_intent": "Update tests to use QueryMaxAnalyzedOffset and add a test case verifying that setting queryMaxAnalyzedOffset to -1 defaults to the index's max_analyzed_offset.",
+   "summary": "The test updates and new assertion correctly test the fallback to the index max_analyzed_offset setting when -1 is provided.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "plugins/mapper-annotated-text/src/test/java/org/elasticsearch/index/mapper/annotatedtext/AnnotatedTextHighlighterTests.java"
+  },
+  {
+   "change_intent": "Update the test case name and expected error message to reflect that max_analyzed_offset now permits values down to -1.",
+   "summary": "The test title and expected error message match the updated validation logic and error message in the highlighter code.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "rest-api-spec/src/yamlRestTest/resources/rest-api-spec/test/search.highlight/30_max_analyzed_offset.yml"
+  },
+  {
+   "change_intent": "Add an integration test verifying that setting maxAnalyzedOffset to -1 defaults to the index.highlight.max_analyzed_offset setting.",
+   "summary": "The test correctly exercises and asserts the -1 fallback behavior against the index-level highlight setting with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "server/src/internalClusterTest/java/org/elasticsearch/search/fetch/subphase/highlight/HighlighterSearchIT.java"
+  },
+  {
+   "change_intent": "Update CustomFieldHighlighter to use the new QueryMaxAnalyzedOffset wrapper instead of an Integer for queryMaxAnalyzedOffset.",
+   "summary": "The change correctly updates the field type, constructor parameter, and offset extraction method to use QueryMaxAnalyzedOffset.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/CustomFieldHighlighter.java"
+  },
+  {
+   "change_intent": "Update CustomUnifiedHighlighter to use the QueryMaxAnalyzedOffset wrapper instead of an Integer for the query-level max analyzed offset.",
+   "summary": "The changes correctly update the type and safely unwrap QueryMaxAnalyzedOffset with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/CustomUnifiedHighlighter.java"
+  },
+  {
+   "change_intent": "Introduce the QueryMaxAnalyzedOffset helper class to encapsulate query-level max analyzed offset resolution against the index-level setting.",
+   "summary": "The class functions as intended, with minor nitpicks regarding a misplaced comment and non-idiomatic getter naming.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 16,
+     "end_line": 16,
+     "category": "nitpick",
+     "confidence": "medium",
+     "evidence": "// If we have a negative value, grab value for the actual maximum from the index.",
+     "comment": "This comment explains the logic of falling back to the index maximum for negative values, but that check is performed in the `create` factory method on line 24 rather than within this constructor.",
+     "suggestion": "Move this explanatory comment to `create(...)` above the ternary expression.",
+     "suggested_code": null
+    },
+    {
+     "start_line": 27,
+     "end_line": 29,
+     "category": "style",
+     "confidence": "medium",
+     "evidence": "public int getNotNull() {\n        return queryMaxAnalyzedOffset;\n    }",
+     "comment": "The method name `getNotNull()` is non-idiomatic for a Java getter returning a primitive `int`. A wrapper representing an offset typically exposes standard accessor names such as `getAsInt()`, `getValue()`, or `get()`.",
+     "suggestion": "Consider renaming `getNotNull()` to a more conventional getter name like `getAsInt()` or `getValue()`.",
+     "suggested_code": "    public int getAsInt() {\n        return queryMaxAnalyzedOffset;\n    }"
+    }
+   ],
+   "filename": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java"
+  },
+  {
+   "change_intent": "Allow setting maxAnalyzedOffset to -1 to fall back to the index-level highlight max analyzed offset setting.",
+   "summary": "The validation change permits 0 as a valid maxAnalyzedOffset and contains inaccurate Javadoc regarding supported negative values.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 568,
+     "end_line": 570,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "        if (maxAnalyzedOffset != null && maxAnalyzedOffset < -1) {\n            throw new IllegalArgumentException(\"[\" + MAX_ANALYZED_OFFSET_FIELD + \"] must be an integer >= -1\");\n        }",
+     "comment": "Changing the check from `maxAnalyzedOffset <= 0` to `maxAnalyzedOffset < -1` inadvertently allows `0` as a valid offset. Previously, `0` was rejected because the offset had to be a positive integer (and the cluster/index setting `index.highlight.max_analyzed_offset` has a minimum value of 1). The pull request is only intended to allow `-1` as a sentinel value to use the index setting; allowing `0` bypasses offset checks and limits the token analyzer to start offset 0.",
+     "suggestion": "Keep `0` disallowed by checking for `maxAnalyzedOffset < -1 || maxAnalyzedOffset == 0` (or `maxAnalyzedOffset <= 0 && maxAnalyzedOffset != -1`), and adjust the error message to state that it must be a positive integer or -1.",
+     "suggested_code": "        if (maxAnalyzedOffset != null && (maxAnalyzedOffset < -1 || maxAnalyzedOffset == 0)) {\n            throw new IllegalArgumentException(\"[\" + MAX_ANALYZED_OFFSET_FIELD + \"] must be a positive integer or -1\");\n        }"
+    },
+    {
+     "start_line": 564,
+     "end_line": 564,
+     "category": "nitpick",
+     "confidence": "medium",
+     "evidence": "     * \"maxAnalyzedOffset\" might be non-negative int, null (unknown), or a negative int (defaulting to index analyzed offset).",
+     "comment": "The Javadoc states that `maxAnalyzedOffset` can be 'a negative int', but any negative integer other than `-1` will cause an IllegalArgumentException. Additionally, if `0` is invalid, 'non-negative int' is misleading.",
+     "suggestion": "Update the Javadoc to explicitly state that `-1` (rather than any negative int) defaults to the index setting.",
+     "suggested_code": "     * \"maxAnalyzedOffset\" might be a positive int, null (unknown), or -1 (defaulting to index analyzed offset)."
+    }
+   ],
+   "filename": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/AbstractHighlighterBuilder.java"
+  },
+  {
+   "change_intent": "Update highlighter initialization to use QueryMaxAnalyzedOffset instead of raw Integer for max analyzed offset resolution.",
+   "summary": "The changes in DefaultHighlighter cleanly adopt the new QueryMaxAnalyzedOffset abstraction with proper null-safety and matching constructor/method signatures.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/DefaultHighlighter.java"
+  },
+  {
+   "change_intent": "Adapt PlainHighlighter to use QueryMaxAnalyzedOffset to support setting max_analyzed_offset to -1 (defaulting to index.highlight.max_analyzed_offset).",
+   "summary": "The change updates PlainHighlighter to use QueryMaxAnalyzedOffset and matches the implementation across other highlighters with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/PlainHighlighter.java"
+  },
+  {
+   "change_intent": "Update CustomUnifiedHighlighter instantiation in tests to pass a QueryMaxAnalyzedOffset object instead of an Integer.",
+   "summary": "The change correctly updates the test helper to construct QueryMaxAnalyzedOffset matching the updated constructor signature of CustomUnifiedHighlighter.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "server/src/test/java/org/elasticsearch/lucene/search/uhighlight/CustomUnifiedHighlighterTests.java"
+  },
+  {
+   "change_intent": "Update the expected error message in the test for invalid max_analyzed_offset to reflect the new lower bound of -1.",
+   "summary": "The expected error message was updated, but the test still generates values of -1 and 0, which are now valid and will cause intermittent test failures.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 583,
+     "end_line": 583,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "assertThat(e.getCause().getMessage(), containsString(\"[max_analyzed_offset] must be an integer >= -1\"));",
+     "comment": "While the expected error message was updated for the new validation rule (max_analyzed_offset < -1), the test input at line 580 still uses randomIntBetween(-100, 0). Because -1 and 0 are now valid values that do not throw an IllegalArgumentException, the test will intermittently fail whenever the random generator picks -1 or 0.",
+     "suggestion": "Update the input generator in testInvalidMaxAnalyzedOffset from randomIntBetween(-100, 0) to randomIntBetween(-100, -2) so that only invalid values are passed to expectParseThrows.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "server/src/test/java/org/elasticsearch/search/fetch/subphase/highlight/HighlightBuilderTests.java"
+  }
+ ],
+ "n_files": 12,
+ "elapsed_s": 367.9,
+ "calls": 12,
+ "input_tokens": 132082,
+ "output_tokens": 2130,
+ "call_input_tokens": [
+  9788,
+  14147,
+  10861,
+  9857,
+  10324,
+  13226,
+  9252,
+  9584,
+  12809,
+  12727,
+  9821,
+  9686
+ ],
+ "mode": "per-file",
+ "routing_tokens": 30822
+}

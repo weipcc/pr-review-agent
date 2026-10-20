@@ -1,0 +1,125 @@
+{
+ "results": [
+  {
+   "filename": ".github/workflows/release-publish.yml",
+   "summary": "在 docker/build-push-action 的 build-args 中無法直接使用 shell 的命令替換語法，導致日期變數傳入未展開的字面字串。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 106,
+     "end_line": 106,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "GitHub Actions 中的 action 參數（with 下的設定）並非在 shell 中執行，因此不會解析 command substitution `$(date ...)`。這會導致 Docker build-arg `N8N_RELEASE_DATE` 的值被直接設為字面字串 `$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")`，而非實際的時間戳記。"
+    }
+   ]
+  },
+  {
+   "filename": "docker/images/n8n/Dockerfile",
+   "summary": "新增 OCI 映像檔建立日期標籤與 N8N_RELEASE_DATE 環境變數，整體改動簡潔，但需留意對 Docker 建置快取的影響。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 18,
+     "end_line": 18,
+     "category": "performance",
+     "confidence": "n/a",
+     "comment": "ENV N8N_RELEASE_DATE 定義在昂貴的 npm install 指令之前。若建置時傳入的時間戳記頻繁變動（例如以建置當下時間作為參數），會導致後續的 RUN npm install 快取失效，增加建置時間。"
+    }
+   ]
+  },
+  {
+   "filename": "packages/@n8n/config/src/configs/generic.config.ts",
+   "summary": "新增了 N8N_RELEASE_DATE 環境變數設定，但需注意環境變數值在執行時期是否能正確轉換為 Date 型別。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 13,
+     "end_line": 13,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "環境變數讀取出的原始型別皆為字串。若 `@Env` 裝飾器內部未實作針對 `Date` 型別的自動轉換邏輯（例如使用 `new Date()` 轉換），在執行時期 `releaseDate` 的實際值可能會是 `string` 而非 `Date` 實例，導致型別不符；若有轉換邏輯，也需注意格式錯誤時產生 Invalid Date 的狀況。"
+    }
+   ]
+  },
+  {
+   "filename": "packages/@n8n/config/src/decorators.ts",
+   "summary": "新增對 Date 類型的環境變數解析支援，整體實作簡潔，但需留意數值型 timestamp 字串解析與錯誤訊息一致性。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 59,
+     "end_line": 59,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "使用 `Date.parse(value)` 解析日期字串（如 ISO 8601）是正常的，但如果環境變數傳入的是純數字的 Unix timestamp 字串（例如 '1700000000000'），`Date.parse` 會回傳 `NaN`。若預期支援 timestamp 數值，此處將無法正確解析。"
+    },
+    {
+     "start_line": 61,
+     "end_line": 61,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "錯誤訊息文字為 'Invalid timestamp value'，與上方的 'Invalid number value' 和 'Invalid boolean value' 不一致，且型別對應為 Date，若僅支援日期格式字串容易造成混淆。"
+    }
+   ]
+  },
+  {
+   "filename": "packages/@n8n/config/test/config.test.ts",
+   "summary": "重構測試中的物件深拷貝為 structuredClone，並新增 releaseDate 環境變數解析與無效數值/時間戳記的警告測試，整體改動良好且嚴謹。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "packages/cli/src/commands/base-command.ts",
+   "summary": "將 releaseDate 從 generic 設定傳入 errorReporter.init，改動簡潔且無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "packages/core/src/errors/error-reporter.ts",
+   "summary": "新增了版本超過 6 週即關閉錯誤追蹤的機制，但 setTimeout 存在嚴重的 32 位元整數溢位 Bug，會導致新版本在啟動 1 毫秒後就被錯誤關閉追蹤。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 89,
+     "end_line": 89,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "Node.js 的 `setTimeout` 延遲時間上限為 32 位元有號整數（2,147,483,647 毫秒，約 24.8 天）。若 `releaseDate` 是近期（例如小於 17 天前），`releaseExpiresInMs` 會大於 2,147,483,647 毫秒。這會觸發 Node.js 的 `TimeoutOverflowWarning`，並將延遲重設為 1 毫秒立即執行，導致新版本的錯誤追蹤在啟動瞬間就被關閉。"
+    },
+    {
+     "start_line": 85,
+     "end_line": 85,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "當版本已經過期（`releaseExpiresInMs <= 0`）時直接 return，但此時 `this.enabled` 仍保持預設值 `true`。雖然跳過了 Sentry 初始化，但內部狀態與實際過期語意不一致。"
+    },
+    {
+     "start_line": 89,
+     "end_line": 89,
+     "category": "performance",
+     "confidence": "n/a",
+     "comment": "此處建立的 `setTimeout` 未呼叫 `.unref()`，若應用程式為短暫執行的任務或在特定情境下嘗試自然結束（graceful exit），此長定時器會阻止 Node.js event loop 結束。"
+    }
+   ]
+  }
+ ],
+ "n_files": 7,
+ "input_tokens": 21639,
+ "output_tokens": 1688,
+ "calls": 7,
+ "tool_calls": null,
+ "elapsed_s": 82.1,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  3129,
+  1572,
+  574,
+  1758,
+  6432,
+  4403,
+  3771
+ ],
+ "model": "gemini-3.8-flash"
+}

@@ -1,0 +1,69 @@
+{
+ "results": [
+  {
+   "summary": "文件改動清楚補充了依網路類型設定 proxy 的說明與 DNS 代理行為，整體良好，僅發現一處英文拼字錯誤。",
+   "issues": [
+    {
+     "line": 60,
+     "severity": "style",
+     "comment": "單字拼寫錯誤：`occurences` 缺少一個 'r'，應為 `occurrences`。",
+     "suggestion": "將 `later occurences override` 修改為 `later occurrences override`。"
+    }
+   ],
+   "filename": "doc/tor.md"
+  },
+  {
+   "summary": "本次改動為 -proxy 參數新增了依網路（per-network）設定代理伺服器的支援，但在解析邊界檢查、name_proxy 賦值邏輯及文件描述上有幾處問題需要修正。",
+   "issues": [
+    {
+     "line": 1603,
+     "severity": "bug",
+     "comment": "當使用者傳入以 '=' 開頭的參數（例如 -proxy==ipv4 或 -proxy==tor）時，eq_pos 為 0，此時 proxy_str 會是空字串。程式碼僅檢查了以 '=' 結尾的情況（eq_pos + 1 == param_value.length()），未檢查 eq_pos == 0。這會導致 proxy_str 為空而被判定為未設定，進而靜默地將該網路的代理設為無效（相當於被當作 -proxy=0=<network> 處理），而不會回傳格式錯誤。",
+     "suggestion": "在檢查結尾是否有 '=' 之後，應一併檢查 eq_pos == 0（或 proxy_str.empty()），例如：if (eq_pos == 0) { return InitError(strprintf(_(\"Invalid -proxy address or hostname, starts with '=': '%s'\"), param_value)); }"
+    },
+    {
+     "line": 1629,
+     "severity": "bug",
+     "comment": "當指定 net_str 為 \"ipv4\" 或 \"ipv6\" 時，程式碼同時將 name_proxy 設為該 proxy。這會衍生幾個問題：1. 若同時設定 -proxy=host1=ipv4 與 -proxy=host2=ipv6，name_proxy 會依參數順序被最後一個覆蓋；2. 若使用者先設定通用代理 -proxy=host，再使用 -proxy=0=ipv4 僅停用 IPv4 代理，name_proxy 也會被一併清空，導致 IPv6/Tor 仍在代理但域名解析走本機；3. 說明文件寫明「set the proxy only for that network」，覆寫域名代理（name_proxy）不符合此預期行為。",
+     "suggestion": "指定特定網路（ipv4 或 ipv6）時不應直接覆寫 name_proxy，只有未指定網路（net_str.empty()）設定全域代理時才應更新 name_proxy。可改為僅更新 ipv4_proxy 與 ipv6_proxy：} else if (net_str == \"ipv4\") { ipv4_proxy = proxy; } else if (net_str == \"ipv6\") { ipv6_proxy = proxy; }"
+    },
+    {
+     "line": 571,
+     "severity": "style",
+     "comment": "參數說明文字中提及「The network can be any of ipv4, ipv6, tor or cjdns.」，但在 AppInitMain 的解析邏輯中（第 1632 行）同時支援了 \"onion\" 作為 \"tor\" 的別名（net_str == \"tor\" || net_str == \"onion\"）。說明文件漏列了 onion，可能會造成使用者的困惑或與 -bind=<addr>[=onion] 的命名慣例不一致。",
+     "suggestion": "將說明文字調整為涵蓋 onion 別名，例如：\"The network can be any of ipv4, ipv6, tor (or onion) or cjdns.\""
+    }
+   ],
+   "filename": "src/init.cpp"
+  },
+  {
+   "summary": "移除了未使用的 DEFAULT_TOR_SOCKS_PORT 常數，改動乾淨無問題。",
+   "issues": [],
+   "filename": "src/torcontrol.cpp"
+  },
+  {
+   "summary": "新增 DEFAULT_TOR_SOCKS_PORT 常數以定義預設 Tor SOCKS 連接埠，型別與命名均符合慣例且無問題。",
+   "issues": [],
+   "filename": "src/torcontrol.h"
+  },
+  {
+   "summary": "新增針對 -proxy=<addr>=<net> 網路指定語法的錯誤處理與功能驗證測試，邏輯清晰且符合測試套件慣例，無明顯問題。",
+   "issues": [],
+   "filename": "test/functional/feature_proxy.py"
+  }
+ ],
+ "n_files": 5,
+ "elapsed_s": 225.1,
+ "calls": 5,
+ "input_tokens": 20393,
+ "output_tokens": 1042,
+ "call_input_tokens": [
+  4778,
+  9623,
+  1197,
+  2173,
+  2622
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

@@ -1,0 +1,145 @@
+{
+ "results": [
+  {
+   "change_intent": "Propagate the browser-level disable_security configuration to the default context configuration upon Agent initialization.",
+   "summary": "Synchronizing browser configuration inside Agent.__init__ mutates injected browser state and is misplaced outside the Browser/BrowserConfig classes.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 261,
+     "end_line": 261,
+     "category": "refactor",
+     "confidence": "medium",
+     "evidence": "self.browser.config.new_context_config.disable_security = self.browser.config.disable_security",
+     "comment": "Synchronizing Browser configuration attributes inside Agent.__init__ mutates an injected browser instance's context config (even if a custom browser_context was already provided, or if new_context_config was explicitly configured). Additionally, this synchronization will not take effect when Browser is used independently of Agent.",
+     "suggestion": "Move configuration propagation into BrowserConfig (e.g. via model_post_init) or Browser.__init__, ensuring it only sets disable_security if not already explicitly specified on new_context_config.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "browser_use/agent/service.py"
+  },
+  {
+   "change_intent": "Switch the browser automation engine from Playwright to Patchright, fix context configuration defaulting, and launch Chrome by default.",
+   "summary": "Hardcoding channel='chrome' will cause launch failures when using Firefox or WebKit, or in environments where Google Chrome is not installed.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 283,
+     "end_line": 283,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "channel='chrome',",
+     "comment": "Hardcoding channel='chrome' causes two issues: 1) It will raise a runtime error when self.config.browser_class is 'firefox' or 'webkit' because neither supports the 'chrome' channel. 2) Unlike bundled Chromium installed via 'playwright install chromium', channel='chrome' requires a system installation of Google Chrome and will fail if Chrome is not installed in the environment (such as in Docker or CI).",
+     "suggestion": "Only pass channel='chrome' if browser_class is 'chromium', or make the channel configurable on BrowserConfig so users can fall back to the bundled Chromium or other browsers.",
+     "suggested_code": "\t\t\tchannel='chrome' if self.config.browser_class == 'chromium' else None,"
+    }
+   ],
+   "filename": "browser_use/browser/browser.py"
+  },
+  {
+   "change_intent": "Switch browser automation from Playwright to Patchright for stealth/anti-bot evasion, adjust default user agent, and configure viewport settings based on headless mode.",
+   "summary": "Replaced Playwright imports with Patchright, but when running in headed mode, viewport and no_viewport settings are omitted, causing Playwright/Patchright to fall back to an emulated 1280x720 viewport.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 414,
+     "end_line": 416,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "if self.browser.config.headless:\n\t\t\t\tkwargs['viewport'] = self.config.browser_window_size\n\t\t\t\tkwargs['no_viewport'] = False",
+     "comment": "When self.browser.config.headless is False, neither viewport nor no_viewport is added to kwargs. Previously, no_viewport=True was passed unconditionally. In headed mode, Playwright/Patchright falls back to its default viewport (1280x720), ignoring self.config.browser_window_size (1280x1100) and preventing the viewport from matching the browser window. In addition, the existing self.config.no_viewport attribute is never respected.",
+     "suggestion": "Add an else branch for non-headless mode to preserve no_viewport=True (or respect self.config.no_viewport if specified).",
+     "suggested_code": "if self.config.no_viewport is not None:\n\t\t\t\tkwargs['no_viewport'] = self.config.no_viewport\n\t\t\t\tif not self.config.no_viewport:\n\t\t\t\t\tkwargs['viewport'] = self.config.browser_window_size\n\t\t\telif self.browser.config.headless:\n\t\t\t\tkwargs['viewport'] = self.config.browser_window_size\n\t\t\t\tkwargs['no_viewport'] = False\n\t\t\telse:\n\t\t\t\tkwargs['no_viewport'] = True"
+    }
+   ],
+   "filename": "browser_use/browser/context.py"
+  },
+  {
+   "change_intent": "Switch Playwright imports to Patchright as part of the project-wide replacement for anti-bot detection.",
+   "summary": "Importing Page and async_playwright from patchright.async_api is consistent with the repository-wide migration.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "browser_use/browser/dolphin_service.py"
+  },
+  {
+   "change_intent": "Update the Page type import from playwright to patchright to match the rest of the codebase.",
+   "summary": "Importing Page from patchright is correct and consistent with the anti-bot detection migration.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "browser_use/controller/registry/views.py"
+  },
+  {
+   "change_intent": "Update playwright imports to patchright across the controller service to support anti-bot detection.",
+   "summary": "Import updated to use patchright instead of playwright, consistent with the rest of the changes.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "browser_use/controller/service.py"
+  },
+  {
+   "change_intent": "Update the type-checking import of Page from playwright to patchright to align with the new library dependency.",
+   "summary": "The change correctly updates the type-checking import to patchright with no issues.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "browser_use/dom/service.py"
+  },
+  {
+   "change_intent": "Update the documentation example to import BrowserContext from patchright instead of playwright.",
+   "summary": "The import in the documentation snippet was updated to reflect the switch to patchright and looks good.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "docs/customize/agent-settings.mdx"
+  },
+  {
+   "change_intent": "Add patchright to project dependencies.",
+   "summary": "Added patchright as a dependency, but playwright remains listed despite all imports being migrated to patchright.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 19,
+     "end_line": 19,
+     "category": "question",
+     "confidence": "medium",
+     "evidence": "\"patchright>=1.51.0\",",
+     "comment": "All imports across the codebase have been migrated from `playwright` to `patchright`. Since `patchright` serves as a drop-in replacement, retaining `playwright>=1.51.0` in `dependencies` appears redundant and will cause both packages to be installed.",
+     "suggestion": "Remove `playwright>=1.51.0` from `dependencies` if it is no longer used directly.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "pyproject.toml"
+  },
+  {
+   "change_intent": "Update the import of async_playwright from playwright to patchright to match the rest of the codebase.",
+   "summary": "Import replacement is clean, correct, and consistent with the library-wide migration to patchright.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "tests/test_attach_chrome.py"
+  },
+  {
+   "change_intent": "Update Playwright import to Patchright in the full screen test file to align with the library-wide migration.",
+   "summary": "The import was successfully updated to patchright with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "tests/test_full_screen.py"
+  }
+ ],
+ "n_files": 11,
+ "elapsed_s": 208.4,
+ "calls": 11,
+ "input_tokens": 103424,
+ "output_tokens": 1850,
+ "call_input_tokens": [
+  8027,
+  12505,
+  10308,
+  11771,
+  9039,
+  7478,
+  9843,
+  10679,
+  8479,
+  7966,
+  7329
+ ],
+ "mode": "per-file",
+ "routing_tokens": 27957
+}

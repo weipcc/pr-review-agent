@@ -1,0 +1,127 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 9,
+  "findings": [
+   {
+    "file": ".github/scripts/download-translations.js",
+    "start": 7,
+    "end": 7,
+    "category": "style",
+    "comment": "定義了 `__filename` 變數但後續程式碼未曾使用過。"
+   },
+   {
+    "file": ".github/scripts/download-translations.js",
+    "start": 12,
+    "end": 12,
+    "category": "bug",
+    "comment": "以逗號分隔語言字串時沒有去除空白。若環境變數設定如 `LANGUAGES=\"tr, en\"`，將會得到含有前導空白的語言代碼（例如 `\" en\"`），導致 API 請求失敗。"
+   },
+   {
+    "file": ".github/scripts/download-translations.js",
+    "start": 57,
+    "end": 57,
+    "category": "bug",
+    "comment": "使用 `if (item.term && item.definition)` 檢查時，若該詞彙尚未翻譯或翻譯內容為空字串 `\"\"`，會被視為 falsy 而直接略過，可能導致輸出的 JSON 遺失未翻譯的空字串 key。"
+   },
+   {
+    "file": ".github/scripts/download-translations.js",
+    "start": 71,
+    "end": 71,
+    "category": "style",
+    "comment": "`downloadTranslations` 函式內部捕捉錯誤後直接呼叫 `process.exit(1)`，造成外層 `main()` 的 try...catch 無法正常捕捉錯誤，屬於重複且多餘的錯誤處理架構。"
+   },
+   {
+    "file": ".github/workflows/poeditor-sync.yml",
+    "start": 21,
+    "end": 21,
+    "category": "bug",
+    "comment": "工作流程中未設定 GITHUB_TOKEN 的權限。在 GitHub Actions 預設安全設定（唯讀）下，步驟結尾的 git push 會因缺少 contents 寫入權限而失敗 (HTTP 403)。"
+   },
+   {
+    "file": ".github/workflows/poeditor-sync.yml",
+    "start": 60,
+    "end": 60,
+    "category": "bug",
+    "comment": "語言代碼預設值不一致。在 workflow_dispatch 的預設值是 'tr,en'，但在排程 (schedule) 觸發時 fallback 是 'tr,gb'，這會導致自動排程與手動執行的行為不一致。"
+   },
+   {
+    "file": ".github/workflows/poeditor-sync.yml",
+    "start": 26,
+    "end": 26,
+    "category": "style",
+    "comment": "actions/checkout 與 actions/setup-node 仍在使用 v3 版本，Node.js 18 也即將或已終止維護 (EOL)。"
+   },
+   {
+    "file": ".github/workflows/poeditor-sync.yml",
+    "start": 69,
+    "end": 69,
+    "category": "style",
+    "comment": "在 bash 預設行為下，若 temp/ 目錄下沒有任何 .json 檔案，temp/*.json 不會展開而是作為字串進入迴圈，可能導致提示訊息不夠明確。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": ".github/scripts/download-translations.js",
+   "matched_gt": [],
+   "reason": "1. No match — discusses missing global axios error interceptor, while generated comment is about an unused `__filename` variable.\n2. No match — discusses missing validation for required environment variables.\n3. No match — discusses whitespace trimming and filtering for `LANGUAGES` parsing.\n4. No match — discusses a default language mismatch between workflow and script.\n5. No match — discusses missing null safety checks on API responses.\n6. No match — discusses a missing trailing newline at the end of the file.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": ".github/scripts/download-translations.js",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — concerns axios error interceptors, not language string trimming.\n2. No match — addresses missing validation for POEDITOR API tokens/IDs, not whitespace trimming when parsing languages.\n3. Match — both flag that splitting `LANGUAGES` by comma fails to trim whitespace (e.g., `\"tr, en\"` leading to invalid codes).\n4. No match — concerns default language mismatch between files, not trimming whitespace.\n5. No match — addresses null safety on nested API response properties.\n6. No match — concerns a missing trailing newline at the end of the file.\n\n[3]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": ".github/scripts/download-translations.js",
+   "matched_gt": [],
+   "reason": "1. No match — concerns axios error interceptors, not falsy filtering of translation definitions.\n2. No match — concerns missing environment variable validation.\n3. No match — concerns parsing and sanitizing the `LANGUAGES` environment variable.\n4. No match — concerns default language inconsistency with workflow files.\n5. No match — concerns null safety on API response properties, not translation definition evaluation.\n6. No match — concerns a missing trailing newline at the end of the file.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": ".github/scripts/download-translations.js",
+   "matched_gt": [],
+   "reason": "1. No match — discusses missing global axios error interceptor, not premature process.exit(1) in downloadTranslations.\n2. No match — concerns missing environment variable validation.\n3. No match — addresses parsing and trimming of the LANGUAGES string.\n4. No match — relates to default language configuration mismatch between files.\n5. No match — concerns null safety on nested API response properties.\n6. No match — addresses a missing trailing newline at the end of the file.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": ".github/workflows/poeditor-sync.yml",
+   "matched_gt": [],
+   "reason": "1. No match — Reference 1 concerns inconsistent default language codes between manual and scheduled runs.\n2. No match — Reference 2 concerns the missing `jq` utility installation.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 5,
+   "file": ".github/workflows/poeditor-sync.yml",
+   "matched_gt": [
+    7
+   ],
+   "reason": "1. Match — both identify the inconsistent default language codes ('tr,en' vs 'tr,gb') between manual and scheduled workflow triggers.\n2. No match — discusses `jq` installation, whereas the generated comment concerns language code inconsistency.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 6,
+   "file": ".github/workflows/poeditor-sync.yml",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses inconsistent default language codes, generated discusses outdated action versions and Node.js EOL.\n2. No match — ref discusses missing jq installation, generated discusses outdated action versions and Node.js EOL.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 7,
+   "file": ".github/workflows/poeditor-sync.yml",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses language code inconsistencies, while generated comment addresses bash glob expansion behavior when no matching files exist.\n2. No match — ref addresses missing `jq` installation, while generated comment concerns bash globbing behavior in a loop.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

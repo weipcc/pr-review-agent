@@ -53,5 +53,8 @@
  "calls": 1,
  "tool_calls": null,
  "elapsed_s": 70.5,
- "model": "gemini-3.8-flash"
+ "model": "gemini-3.8-flash",
+ "mode": "batch",
+ "routing_tokens": 4619,
+ "route_backfilled": true
 }

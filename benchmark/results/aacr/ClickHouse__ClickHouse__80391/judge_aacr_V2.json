@@ -1,0 +1,41 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 7,
+  "findings": [
+   {
+    "file": "src/Disks/DiskLocalCheckThread.cpp",
+    "start": 41,
+    "end": 44,
+    "category": "style",
+    "comment": "`diskStatusChange` is declared with external linkage in the `DB` namespace inside this translation unit. It should be declared in an anonymous namespace or marked `static` (or `constexpr`) to avoid polluting the namespace and symbol table."
+   },
+   {
+    "file": "src/Disks/DiskLocalCheckThread.cpp",
+    "start": 83,
+    "end": 84,
+    "category": "bug",
+    "comment": "When a disk checker thread shuts down or the disk object is destroyed while `disk->isReadOnly()` or `disk->isBroken()` is true, the `CurrentMetrics::ReadonlyDisks` or `BrokenDisks` metrics are not decremented, leading to metric leakage (metrics remaining positive indefinitely after disk detach/removal/shutdown)."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/Disks/DiskLocalCheckThread.cpp",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. No match — discusses duration conversion and precision in startup log.\n2. No match — discusses missing disk name in log statements.\n3. No match — discusses marking function parameters as const.\n4. Match — both recommend placing `diskStatusChange` in an anonymous namespace or marking it `static`/`constexpr` to avoid external linkage.\n5. No match — discusses missing disk name in readonly log message.\n6. No match — discusses removing disk name from log messages.\n7. No match — discusses CurrentMetrics updates and exception safety.\n\n[4]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "src/Disks/DiskLocalCheckThread.cpp",
+   "matched_gt": [],
+   "reason": "1. No match — concerns numeric conversion and precision in startup logging.\n2. No match — concerns missing disk name in log statements.\n3. No match — concerns adding `const` to function parameters.\n4. No match — concerns visibility and `constexpr` for the `diskStatusChange` helper function.\n5. No match — concerns missing disk name in the readonly log message.\n6. No match — concerns retaining disk names in log messages for debuggability.\n7. No match — concerns metric inconsistency caused by early returns or exceptions within the `run()` loop rather than cleanup/decrement on shutdown or destruction.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

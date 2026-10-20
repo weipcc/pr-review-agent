@@ -1,0 +1,27 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 2,
+  "findings": [
+   {
+    "file": "osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs",
+    "start": 30,
+    "end": 30,
+    "category": "style",
+    "comment": "直接重複了基類 ModSuddenDeath.FailCondition 的預設實作（result.Type.AffectsCombo() && !result.IsHit），若基類未來調整判定邏輯將無法同步。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. No match — ref discusses slider tail failure logic consistency, while generated discusses duplicating base class failure logic.\n2. Match — both identify that the `FailCondition` override duplicates the base class implementation `result.Type.AffectsCombo() && !result.IsHit` instead of delegating to `base.FailCondition`.\n\n[2]",
+   "hit_new_gt": true
+  }
+ ]
+}

@@ -1,0 +1,39 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 1,
+  "findings": [
+   {
+    "file": "crates/uv/tests/it/pip_install.rs",
+    "start": 496,
+    "end": 496,
+    "category": "bug",
+    "comment": "正則表達式 `127\\.0\\.0\\.1[^\\r\\n]*` 會匹配該行從 IP 開始的所有字元，導致錯誤訊息中的端口、路徑、閉合反引號與實際 HTTP 錯誤碼（如 401 Unauthorized）全被替換為 `[LOCALHOST]`，造成 snapshot 訊息被截斷且無法驗證實際錯誤原因。"
+   },
+   {
+    "file": "crates/uv/tests/it/pip_install.rs",
+    "start": 563,
+    "end": 563,
+    "category": "bug",
+    "comment": "wiremock 依照 mock 被掛載的順序（FIFO）進行請求比對。第 504 行掛載的 Mock 與此處具有完全相同的比對條件（GET、/requirements.txt、basic_auth）且沒有設定次數上限，因此後續發出的請求仍會優先被第 504 行的 Mock 攔截並回傳 \"Flask\"，此處新掛載的 Mock 永遠不會被觸發，測試未能如預期驗證遠端 requirements.txt 更新為 Jinja2 後的行為。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "crates/uv/tests/it/pip_install.rs",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "crates/uv/tests/it/pip_install.rs",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

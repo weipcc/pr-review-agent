@@ -1,0 +1,44 @@
+{
+ "results": [
+  {
+   "summary": "更新 Cargo.lock 新增 wiremock 依賴項目，改動正常無問題。",
+   "issues": [],
+   "filename": "Cargo.lock"
+  },
+  {
+   "summary": "在 dev-dependencies 中正確且按字母順序引入了 workspace 的 wiremock 套件，改動乾淨無問題。",
+   "issues": [],
+   "filename": "crates/uv/Cargo.toml"
+  },
+  {
+   "summary": "新增了遠端 requirements.txt 的 basic auth 安裝測試，但存在 Mock 被既有規則遮蔽未生效的邏輯問題，以及正則過濾過度匹配導致錯誤訊息截斷的缺陷。",
+   "issues": [
+    {
+     "line": 496,
+     "severity": "bug",
+     "comment": "正則表達式 `127\\.0\\.0\\.1[^\\r\\n]*` 會匹配該行從 IP 開始的所有字元，導致錯誤訊息中的端口、路徑、閉合反引號與實際 HTTP 錯誤碼（如 401 Unauthorized）全被替換為 `[LOCALHOST]`，造成 snapshot 訊息被截斷且無法驗證實際錯誤原因。",
+     "suggestion": "建議將正則改為僅匹配 IP 與端口（例如 `r\"127\\.0\\.0\\.1:\\d+\"`），或直接將 `&server.uri()` 替換為固定字串，以保留後續的 URL 路徑與 HTTP 狀態碼輸出。"
+    },
+    {
+     "line": 563,
+     "severity": "bug",
+     "comment": "wiremock 依照 mock 被掛載的順序（FIFO）進行請求比對。第 504 行掛載的 Mock 與此處具有完全相同的比對條件（GET、/requirements.txt、basic_auth）且沒有設定次數上限，因此後續發出的請求仍會優先被第 504 行的 Mock 攔截並回傳 \"Flask\"，此處新掛載的 Mock 永遠不會被觸發，測試未能如預期驗證遠端 requirements.txt 更新為 Jinja2 後的行為。",
+     "suggestion": "在掛載新的 Mock 之前呼叫 `server.reset().await;` 清空舊的 mock 規則，或在原本的 Mock 上使用 `.up_to_n_times(1)` 限制比對次數。"
+    }
+   ],
+   "filename": "crates/uv/tests/it/pip_install.rs"
+  }
+ ],
+ "n_files": 3,
+ "elapsed_s": 74.4,
+ "calls": 3,
+ "input_tokens": 6043,
+ "output_tokens": 529,
+ "call_input_tokens": [
+  963,
+  2524,
+  2556
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

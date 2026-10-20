@@ -1,0 +1,52 @@
+{
+ "results": [
+  {
+   "change_intent": "Weld adjacent near-duplicate points in ExtrudeGeometry paths before triangulation, and delay triangulation to use bevel-offset contour and hole vertices.",
+   "summary": "Introduces critical bugs: non-beveled shapes (or bevelSegments === 0) will have no lid faces because triangulateShape receives empty arrays, and cleanPoints deletes index 0 instead of the duplicate endpoint.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 433,
+     "end_line": 433,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "const faces = ShapeUtils.triangulateShape( contractedContourVertices, expandedHoleVertices );",
+     "comment": "When bevelEnabled is false (or options specify bevelSegments: 0), bevelSegments is 0. As a result, the loop for ( let b = 0; b < bevelSegments; b ++ ) never executes, leaving contractedContourVertices and expandedHoleVertices empty. triangulateShape is called with empty arrays, resulting in faces.length === 0, which completely skips generating both front and back lid/cap faces for non-beveled extrusions.",
+     "suggestion": "Fall back to contour and holes when bevelSegments === 0 (or when contractedContourVertices is empty) so that non-beveled shapes are triangulated properly.",
+     "suggested_code": "const faces = ShapeUtils.triangulateShape(\n\t\t\t\tcontractedContourVertices.length > 0 ? contractedContourVertices : contour,\n\t\t\t\texpandedHoleVertices.length > 0 ? expandedHoleVertices : holes\n\t\t\t);"
+    },
+    {
+     "start_line": 180,
+     "end_line": 184,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "points.splice( currentIndex, 1 );\n\t\t\t\t\t\tif ( currentIndex == 0 ) break;\n\t\t\t\t\t\ti --;\n\t\t\t\t\t\tcontinue;",
+     "comment": "When checking the wrap-around connection between the last point and the first point (when i === points.length, so currentIndex === 0), points.splice( currentIndex, 1 ) splices index 0. This removes the initial vertex of the shape rather than the duplicate closing endpoint, inadvertently shifting the starting vertex and altering the shape's UV alignment and vertex order.",
+     "suggestion": "When currentIndex === 0, delete the duplicate closing endpoint at points.length - 1 (e.g. points.pop()) instead of deleting the first vertex at index 0.",
+     "suggested_code": "if ( currentIndex === 0 ) {\n\t\t\t\t\t\tpoints.pop();\n\t\t\t\t\t\tbreak;\n\t\t\t\t\t}\n\n\t\t\t\t\tpoints.splice( currentIndex, 1 );\n\t\t\t\t\ti --;\n\t\t\t\t\tcontinue;"
+    },
+    {
+     "start_line": 169,
+     "end_line": 170,
+     "category": "bug",
+     "confidence": "medium",
+     "evidence": "let prevPos = points[ 0 ];\n\t\t\t\tfor ( let i = 1; i <= points.length; i ++ ) {",
+     "comment": "If points has fewer than 2 elements (e.g., an empty hole array or a single degenerate point), cleanPoints will access points[0] as undefined or splice a 1-point array into an empty array. A guard at the beginning of the function will prevent unintended side effects on degenerate input.",
+     "suggestion": "Add an early exit condition at the start of cleanPoints: if ( points.length < 3 ) return;.",
+     "suggested_code": "function cleanPoints( points ) {\n\n\t\t\t\tif ( points.length < 3 ) return;\n\n\t\t\t\tconst THRESHOLD = 0.0002;"
+    }
+   ],
+   "filename": "src/geometries/ExtrudeGeometry.js"
+  }
+ ],
+ "n_files": 1,
+ "elapsed_s": 142.2,
+ "calls": 1,
+ "input_tokens": 8904,
+ "output_tokens": 1039,
+ "call_input_tokens": [
+  8904
+ ],
+ "mode": "batch",
+ "routing_tokens": 5202
+}

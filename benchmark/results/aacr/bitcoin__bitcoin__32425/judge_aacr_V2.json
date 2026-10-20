@@ -1,0 +1,25 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 4,
+  "findings": [
+   {
+    "file": "doc/tor.md",
+    "start": 60,
+    "end": 60,
+    "category": "nitpick",
+    "comment": "'occurences' is misspelled."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "doc/tor.md",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

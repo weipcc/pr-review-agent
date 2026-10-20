@@ -1,0 +1,171 @@
+{
+ "results": [
+  {
+   "change_intent": "Remove resolved static analysis suppressions from the Psalm baseline for public OCP classes.",
+   "summary": "Cleaned up Psalm baseline suppressions that were resolved by the refactor, with no new issues introduced.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "build/psalm-baseline-ocp.xml"
+  },
+  {
+   "change_intent": "Use the IRequest::getHeader method instead of directly accessing the request's server property to retrieve the Origin header.",
+   "summary": "The change correctly replaces access to an undeclared interface property with the public getHeader method, resolving static analysis issues without changing behavior.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/AppFramework/ApiController.php"
+  },
+  {
+   "change_intent": "Replace the internal \\OC::$server call with \\OCP\\Server::get(IConfig::class) when checking the debug configuration in the constructor.",
+   "summary": "Clean replacement of internal \\OC access with public OCP API, with correct imports.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/AppFramework/App.php"
+  },
+  {
+   "change_intent": "Replace internal `\\OC::$server` call with the public API `\\OCP\\Server::get()` to decouple public code from internal namespaces.",
+   "summary": "Clean refactor replacing internal server accessor with the public `\\OCP\\Server` method, with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/AppFramework/Http/RedirectToDefaultAppResponse.php"
+  },
+  {
+   "change_intent": "Replace internal \\OC::$server calls with public \\OCP\\Server::get calls and remove redundant type annotation.",
+   "summary": "Clean and correct refactoring to use the public server API instead of internal OC static references.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/AppFramework/Http/Response.php"
+  },
+  {
+   "change_intent": "Replace the reference to the internal \\OC::$server with the public \\OCP\\Server API.",
+   "summary": "The change correctly replaces internal \\OC usage with \\OCP\\Server to decouple public code and clean up Psalm baseline warnings.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/Defaults.php"
+  },
+  {
+   "change_intent": "Update the stopQuery return type docblock from mixed to void to align with Doctrine's SQLLogger interface and resolve Psalm errors.",
+   "summary": "The docblock update correctly reflects the SQLLogger interface contract without introducing breaking signature changes.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/Diagnostics/IQueryLogger.php"
+  },
+  {
+   "change_intent": "Add Psalm template annotations for ArrayAccess and IteratorAggregate to satisfy static analysis and remove baseline entries.",
+   "summary": "The added `@template-implements` annotations resolve Psalm's missing template parameter warnings cleanly with no issues.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/EventDispatcher/GenericEvent.php"
+  },
+  {
+   "change_intent": "Replace internal \\OC::$server access with OCP\\Server::get(IMimeTypeDetector::class) in public Files class.",
+   "summary": "Clean and correct refactoring to use the public OCP\\Server container instead of the internal \\OC static accessor.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/Files.php"
+  },
+  {
+   "change_intent": "Update the docblock code example to use \\OCP\\Server::get instead of direct access to \\OC::$server.",
+   "summary": "The example was updated to reference OCP\\Server, but IEventDispatcher is unqualified in the docblock and lacks a namespace or import.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 19,
+     "end_line": 19,
+     "category": "nitpick",
+     "confidence": "high",
+     "evidence": " *    \\OCP\\Server::get(IEventDispatcher::class)->addListener(",
+     "comment": "Unlike \\OCP\\Server and the other classes referenced in this docblock example, IEventDispatcher is neither imported nor fully qualified, which can cause confusion or errors when copying the snippet.",
+     "suggestion": "Use the fully qualified class name \\OCP\\EventDispatcher\\IEventDispatcher::class in the docblock example.",
+     "suggested_code": " *    \\OCP\\Server::get(\\OCP\\EventDispatcher\\IEventDispatcher::class)->addListener("
+    }
+   ],
+   "filename": "lib/public/Files_FullTextSearch/Model/AFilesDocument.php"
+  },
+  {
+   "change_intent": "Add template extends annotation for static analysis and modernize method signatures to include explicit return types.",
+   "summary": "Clean and correct typing update that resolves a Psalm template parameter error and adds standard PHP 8 return types to the iterator interface.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/L10N/ILanguageIterator.php"
+  },
+  {
+   "change_intent": "Update docblock example usage to reference the public \\OCP\\Server class instead of the internal \\OC class.",
+   "summary": "Clean and straightforward documentation update in the interface docblock with no issues.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/Mail/IMailer.php"
+  },
+  {
+   "change_intent": "Update sample code in documentation to use public OCP\\Server instead of internal OC::$server.",
+   "summary": "The docblock example was updated to use OCP\\Server, with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/Profiler/IProfile.php"
+  },
+  {
+   "change_intent": "Update example usage in ICrypto docblock to use public OCP API instead of internal OC.",
+   "summary": "The docblock example calls a non-existent static method getCrypto() on \\OCP\\Server instead of using \\OCP\\Server::get(ICrypto::class).",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 16,
+     "end_line": 17,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": " * $encryptWithDefaultPassword = \\OCP\\Server::getCrypto()->encrypt('EncryptedText');\n * $encryptWithCustomPassword = \\OCP\\Server::getCrypto()->encrypt('EncryptedText', 'password');",
+     "comment": "\\OCP\\Server does not define a static getCrypto() method. Following this example usage will result in a fatal Call to undefined method \\OCP\\Server::getCrypto() error at runtime.",
+     "suggestion": "Retrieve the ICrypto instance via \\OCP\\Server::get(ICrypto::class) instead.",
+     "suggested_code": " * $encryptWithDefaultPassword = \\OCP\\Server::get(ICrypto::class)->encrypt('EncryptedText');\n * $encryptWithCustomPassword = \\OCP\\Server::get(ICrypto::class)->encrypt('EncryptedText', 'password');"
+    }
+   ],
+   "filename": "lib/public/Security/ICrypto.php"
+  },
+  {
+   "change_intent": "Update code examples in the docblock to use \\OCP\\Server instead of the internal \\OC::$server.",
+   "summary": "Documentation example update to reference the public API; looks good.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/Security/IHasher.php"
+  },
+  {
+   "change_intent": "Update docblock example usage to reference the public API \\OCP\\Server instead of internal \\OC::$server.",
+   "summary": "The docblock example was updated to follow public API conventions with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/Security/ISecureRandom.php"
+  },
+  {
+   "change_intent": "Replace direct calls to internal \\OC::$server with \\OCP\\Server::get calls in Util.",
+   "summary": "The refactoring correctly replaces direct \\OC::$server references with \\OCP\\Server::get service lookups without introducing regressions.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "lib/public/Util.php"
+  }
+ ],
+ "n_files": 17,
+ "elapsed_s": 186.3,
+ "calls": 17,
+ "input_tokens": 192699,
+ "output_tokens": 1699,
+ "call_input_tokens": [
+  9863,
+  10654,
+  11893,
+  10092,
+  12251,
+  12330,
+  10305,
+  11648,
+  11153,
+  10518,
+  10228,
+  10742,
+  11291,
+  10305,
+  10422,
+  10521,
+  18483
+ ],
+ "mode": "per-file",
+ "routing_tokens": 34356
+}

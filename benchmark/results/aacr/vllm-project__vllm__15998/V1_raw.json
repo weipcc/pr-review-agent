@@ -1,0 +1,44 @@
+{
+ "results": [
+  {
+   "summary": "新增 HuggingFace-AIMO 資料集的說明與評測範例，內容整體清楚，但存在格式縮排與參數設定不一致的小問題。",
+   "issues": [
+    {
+     "line": 55,
+     "severity": "style",
+     "comment": "HTML 表格標籤縮排不一致（多縮排了 2 個空格），且資料集清單中的逗號前方有多餘空格（`...aime</code> , <code>...`）。",
+     "suggestion": "統一 HTML 縮排並移除逗號前的多餘空格：\n```html\n    <tr>\n      <td><strong>HuggingFace-AIMO</strong></td>\n      <td style=\"text-align: center;\">✅</td>\n      <td style=\"text-align: center;\">✅</td>\n      <td><code>AI-MO/aimo-validation-aime</code>, <code>AI-MO/NuminaMath-1.5</code>, <code>AI-MO/NuminaMath-CoT</code></td>\n    </tr>\n```"
+    },
+    {
+     "line": 199,
+     "severity": "style",
+     "comment": "在 Serving 範例中未加上 `--hf-split train` 參數，但同一份文件中的其他 HF 資料集範例（以及下方對應的 Throughput 範例）皆有明確指定 `--hf-split train`，建議保持一致。",
+     "suggestion": "建議補上 `--hf-split train`：\n```bash\npython3 vllm/benchmarks/benchmark_serving.py \\\n    --model Qwen/QwQ-32B \\\n    --dataset-name hf \\\n    --dataset-path AI-MO/aimo-validation-aime \\\n    --hf-split train \\\n    --num-prompts 10 \\\n    --seed 42\n```"
+    },
+    {
+     "line": 301,
+     "severity": "style",
+     "comment": "腳本呼叫路徑不一致：第 199 行使用 `python3 vllm/benchmarks/benchmark_serving.py`，此處卻使用 `python3 benchmarks/benchmark_throughput.py`，建議在同一份文件中統一使用相同的相對路徑風格。",
+     "suggestion": "建議將 `python3 benchmarks/benchmark_throughput.py` 改為 `python3 vllm/benchmarks/benchmark_throughput.py`（或反之，依 repo 規範統一）。"
+    }
+   ],
+   "filename": "benchmarks/README.md"
+  },
+  {
+   "summary": "新增 AIMODataset 的支援與對應的參數驗證，改動風格一致且結構清晰。",
+   "issues": [],
+   "filename": "benchmarks/benchmark_throughput.py"
+  }
+ ],
+ "n_files": 2,
+ "elapsed_s": 28.1,
+ "calls": 2,
+ "input_tokens": 8409,
+ "output_tokens": 621,
+ "call_input_tokens": [
+  5099,
+  3310
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

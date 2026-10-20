@@ -1,0 +1,44 @@
+{
+ "results": [
+  {
+   "summary": "實作 containerSeemsToBeEmptyDomElement 判斷，但 lib 選項的比對方式及 HTML 元素名稱的正則比對邏輯存在偏差。",
+   "issues": [
+    {
+     "line": 10829,
+     "severity": "bug",
+     "comment": "在 TypeScript 中，`compilerOptions.lib` 的設定通常為 `\"dom\"` 或 `\"DOM\"`，且原始比對邏輯為不分大小寫檢查是否包含 `\"dom\"`（`lib.some(l => l.toLowerCase() === \"dom\")`）。直接使用 `slices.Contains` 比對 `\"lib.dom.d.ts\"` 會導致大小寫不一致或設定為 `\"dom\"` 時比對失敗。",
+     "suggestion": "建議改用 `slices.ContainsFunc` 配合 `strings.EqualFold` 進行比對，例如：`slices.ContainsFunc(c.compilerOptions.Lib, func(lib string) bool { return strings.EqualFold(lib, \"dom\") || strings.EqualFold(lib, \"lib.dom.d.ts\") })`。"
+    },
+    {
+     "line": 10844,
+     "severity": "bug",
+     "comment": "TypeScript 原始對應正則是 `/^HTML[a-zA-Z]+Element$/`（中間至少有一個英文字母）。當名稱剛好是 `\"HTMLElement\"` 時，切片 `t.symbol.Name[4 : len(t.symbol.Name)-7]` 的長度為 0，迴圈不會執行，導致 `isMiddleAlpha` 仍為 `true`，等同於匹配了 `*` 而非 `+`。",
+     "suggestion": "可在迴圈前取出中間子字串並檢查其長度是否大於 0：\n```go\nmiddle := t.symbol.Name[4 : len(t.symbol.Name)-7]\nif len(middle) == 0 {\n    return false\n}\nfor _, r := range middle {\n    if !('a' <= r && r <= 'z') && !('A' <= r && r <= 'Z') {\n        return false\n    }\n}\nreturn true\n```"
+    }
+   ],
+   "filename": "internal/checker/checker.go"
+  },
+  {
+   "summary": "更新了 missingDomElements 測試的 baseline 錯誤訊息輸出，將未引入 dom lib 時的錯誤代碼更新為 TS2812 並附帶修正建議，變更內容符合預期。",
+   "issues": [],
+   "filename": "testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt"
+  },
+  {
+   "summary": "刪除不再需要的 baseline 測試差異檔，無邏輯問題。",
+   "issues": [],
+   "filename": "testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt.diff"
+  }
+ ],
+ "n_files": 3,
+ "elapsed_s": 59.6,
+ "calls": 3,
+ "input_tokens": 3384,
+ "output_tokens": 610,
+ "call_input_tokens": [
+  734,
+  1664,
+  986
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

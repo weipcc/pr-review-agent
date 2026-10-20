@@ -1,0 +1,142 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 19,
+  "findings": [
+   {
+    "file": "e2e/src/web/specs/photo-viewer.e2e-spec.ts",
+    "start": 24,
+    "end": 24,
+    "category": "bug",
+    "comment": "在移除 `await page.goto('/photos')` 之後，頁面尚未進行任何導航（處於 about:blank），此時呼叫 `await page.waitForLoadState('networkidle')` 沒有實質作用，或者可能會產生無意義的等待與非預期行為。"
+   },
+   {
+    "file": "web/eslint.config.js",
+    "start": 61,
+    "end": 61,
+    "category": "bug",
+    "comment": "在 ESLint Flat Config 機制中，當 ignores 與 rules、languageOptions 等欄位同處一個配置物件時，僅對該特定物件生效（局部忽略），無法完全排除檔案的檢查。前方的 recommended 配置與其他設定仍會對 service-worker 進行 lint。"
+   },
+   {
+    "file": "web/src/lib/components/assets/thumbnail/image-thumbnail.svelte",
+    "start": 70,
+    "end": 70,
+    "category": "performance",
+    "comment": "當圖片已經成功載入（`loaded === true`）時，在元件銷毀（例如使用者滾動列表離開可視區）時仍會呼叫 `cancelImageUrl(url)`，這會產生不必要的 Service Worker 通訊開銷，甚至可能干擾已完成請求的後續處理或快取行為。此外，若父層更新了 `url` prop，目前的 action 無法監聽變更並取消前一個 URL 的載入。"
+   },
+   {
+    "file": "web/src/lib/utils/sw-messaging.ts",
+    "start": 1,
+    "end": 1,
+    "category": "bug",
+    "comment": "在模組頂層直接實例化 `new BroadcastChannel('immich')`。如果此模組在 SSR（例如 SvelteKit 伺服器端渲染）或未提供 `BroadcastChannel` 的測試環境中被匯入，可能會導致 ReferenceError 或非預期行為。"
+   },
+   {
+    "file": "web/src/lib/utils/sw-messaging.ts",
+    "start": 6,
+    "end": 6,
+    "category": "style",
+    "comment": "函式 `cancelImageUrl` 與 `preloadImageUrl` 之間缺少空行，不符合常見的程式碼排版風格規範。"
+   },
+   {
+    "file": "web/src/service-worker/index.ts",
+    "start": 37,
+    "end": 37,
+    "category": "bug",
+    "comment": "deleteOldCaches 會遍歷並刪除所有名稱不等於 CACHE 的快取。若同網域有其他功能或函式庫建立的快取，會被無差別清除。"
+   },
+   {
+    "file": "web/src/service-worker/index.ts",
+    "start": 51,
+    "end": 51,
+    "category": "bug",
+    "comment": "在 fetch 事件中僅傳入 URL 建立 fetch(url)，會遺失原始 event.request 的 headers（例如 Authorization）、credentials 與 Range 等設定，可能導致需要授權的請求失敗，或破壞影音串流的 Range 請求機制。"
+   },
+   {
+    "file": "web/src/service-worker/index.ts",
+    "start": 54,
+    "end": 54,
+    "category": "bug",
+    "comment": "pendingLoads 以 url.toString() 作為 key。若同一個 URL 同時發起多次請求（例如畫面上多處顯示同一縮圖），後續請求會覆蓋前一個 AbortController，且最先結束的請求會在 finally 中將 key 刪除，使其他進行中的請求失去取消機制。"
+   },
+   {
+    "file": "web/src/service-worker/index.ts",
+    "start": 60,
+    "end": 60,
+    "category": "bug",
+    "comment": "cache.put 回傳 Promise，但此處既沒有 await 也沒有 .catch() 處理。若遇到儲存配額滿（QuotaExceededError）或不可快取的回應（如 206 Partial Content），會造成未捕獲的 Promise 錯誤（unhandled rejection）；且未受 await 或 event.waitUntil 保證時，Service Worker 可能在快取寫入完成前就被系統休眠終止。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "e2e/src/web/specs/photo-viewer.e2e-spec.ts",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "web/eslint.config.js",
+   "matched_gt": [],
+   "reason": "1. No match — Ref 1 advises against completely ignoring the directory and suggests specific rules instead, whereas the Generated Comment explains that the current `ignores` syntax fails to globally ignore files in ESLint flat config.\n2. No match — Ref 2 focuses on glob pattern specificity and directory matching, whereas the Generated Comment addresses ESLint flat config semantics regarding standalone vs. object-scoped `ignores`.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "web/src/lib/components/assets/thumbnail/image-thumbnail.svelte",
+   "matched_gt": [
+    6,
+    7
+   ],
+   "reason": "1. Match — both address the issue that changing the `url` prop does not cancel the previous URL's pending request.\n2. Match — both address calling `cancelImageUrl(url)` unnecessarily on destroy when the image has already loaded.\n\n[1, 2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "web/src/lib/utils/sw-messaging.ts",
+   "matched_gt": [
+    9
+   ],
+   "reason": "1. No match — discusses extracting the channel name to a named constant, whereas the generated comment addresses SSR compatibility.\n2. Match — both identify that instantiating `BroadcastChannel` at the top level causes crashes/errors during SSR (Server-Side Rendering).\n3. No match — discusses TypeScript typing for postMessage payloads, whereas the generated comment addresses SSR compatibility.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 4,
+   "file": "web/src/lib/utils/sw-messaging.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses extracting hardcoded BroadcastChannel name to a constant, generated discusses missing empty line between functions.\n2. No match — ref discusses SSR compatibility issue with BroadcastChannel, generated discusses missing empty line between functions.\n3. No match — ref discusses missing TypeScript type definitions for postMessage, generated discusses missing empty line between functions.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 5,
+   "file": "web/src/service-worker/index.ts",
+   "matched_gt": [],
+   "reason": "1. No match — discusses configurable `useCache`, while generated discusses cache deletion in `deleteOldCaches`.\n2. No match — discusses a redundant comment, while generated discusses indiscriminate cache deletion.\n3. No match — discusses hardcoded regex patterns, while generated discusses cache deletion logic.\n4. No match — discusses swallowed errors in catch block, while generated discusses deleting unrelated caches.\n5. No match — discusses unhandled exceptions during URL construction, while generated discusses cache deletion.\n6. No match — discusses `event.origin` being undefined on BroadcastChannel, while generated discusses cache deletion.\n7. No match — discusses unhandled promise rejection in preload branch, while generated discusses cache deletion.\n8. No match — discusses duplicated URL parsing logic, while generated discusses cache deletion.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 6,
+   "file": "web/src/service-worker/index.ts",
+   "matched_gt": [],
+   "reason": "1. No match — discusses configurable `useCache`, while generated discusses losing request headers/options in `fetch(url)`.\n2. No match — discusses a redundant code comment.\n3. No match — discusses hardcoded regex pattern for URL paths.\n4. No match — discusses error swallowing in a catch block without logging.\n5. No match — discusses error handling for malformed URLs in message handler.\n6. No match — discusses `event.origin` being undefined on BroadcastChannel MessageEvent.\n7. No match — discusses unhandled promise rejection in preload branch.\n8. No match — discusses duplicated URL parsing logic.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 7,
+   "file": "web/src/service-worker/index.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses hardcoded `useCache`, generated discusses race condition / key collision in `pendingLoads`.\n2. No match — ref discusses a redundant comment, generated discusses `pendingLoads` AbortController overwrite issue.\n3. No match — ref discusses extracting hardcoded regex, generated discusses `pendingLoads` key collision.\n4. No match — ref discusses error swallowing/logging in catch block, generated discusses `pendingLoads` concurrency issue.\n5. No match — ref discusses URL construction throwing error on malformed input, generated discusses `pendingLoads` AbortController overwrite.\n6. No match — ref discusses `event.origin` being undefined on BroadcastChannel MessageEvent, generated discusses `pendingLoads` concurrency issue.\n7. No match — ref discusses unhandled rejection in `preload` branch, generated discusses `pendingLoads` key collision and cancellation mechanism.\n8. No match — ref discusses duplicated URL parsing logic, generated discusses `pendingLoads` overwrite issue.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 8,
+   "file": "web/src/service-worker/index.ts",
+   "matched_gt": [],
+   "reason": "1. No match — concerns hardcoded `useCache` configuration, not unhandled `cache.put`.\n2. No match — concerns a redundant code comment, not unhandled promises.\n3. No match — concerns extracting a regex constant, not caching promise handling.\n4. No match — concerns logging swallowed errors in a catch block, not unhandled `cache.put` promises.\n5. No match — concerns URL construction throwing errors in the message handler.\n6. No match — concerns `event.origin` being undefined on BroadcastChannel MessageEvent.\n7. No match — concerns unhandled rejection of `immichAsset(url)` in the preload handler, not `cache.put`.\n8. No match — concerns deduplicating URL parsing logic.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

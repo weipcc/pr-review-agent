@@ -1,0 +1,83 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 9,
+  "findings": [
+   {
+    "file": ".github/scripts/download-translations.js",
+    "start": 7,
+    "end": 7,
+    "category": "style",
+    "comment": "`__filename` is defined using `fileURLToPath(import.meta.url)` along with the `fileURLToPath` import, but neither is ever used in the script."
+   },
+   {
+    "file": ".github/scripts/download-translations.js",
+    "start": 49,
+    "end": 52,
+    "category": "style",
+    "comment": "Comments are written in Turkish while the rest of the codebase and file comments use English."
+   },
+   {
+    "file": ".github/workflows/poeditor-sync.yml",
+    "start": 20,
+    "end": 22,
+    "category": "bug",
+    "comment": "By default, `GITHUB_TOKEN` only has read permissions in modern GitHub repositories unless explicitly granted write permissions. Step `git push` on line 92 will fail with 403 Forbidden without `contents: write` permission declared on the job or workflow."
+   },
+   {
+    "file": ".github/workflows/poeditor-sync.yml",
+    "start": 26,
+    "end": 29,
+    "category": "bug",
+    "comment": "`actions/checkout@v3` (and later) defaults to `fetch-depth: 1`, creating a shallow clone. Pushing commits directly back to the branch from a shallow clone without fetching or checking out the branch ref can result in push rejection or history divergence."
+   },
+   {
+    "file": ".github/workflows/poeditor-sync.yml",
+    "start": 10,
+    "end": 60,
+    "category": "bug",
+    "comment": "Inconsistent language codes are used: `workflow_dispatch.inputs.languages.default` defaults to `tr,en` and `download-translations.js` defaults to `tr,en`, but the fallback in line 60 uses `'tr,gb'` (which is also mentioned in the README). When scheduled via cron, `github.event.inputs.languages` will be empty, triggering `tr,gb` instead of `tr,en`."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": ".github/scripts/download-translations.js",
+   "matched_gt": [],
+   "reason": "1. No match — concerns axios error interceptors, not unused variables/imports.\n2. No match — concerns missing environment variable validation, not unused code.\n3. No match — concerns parsing/sanitizing the `LANGUAGES` string, not unused code.\n4. No match — concerns default language value mismatch with workflow, not unused code.\n5. No match — concerns null safety on API response properties, not unused code.\n6. No match — concerns missing trailing newline, not unused code.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": ".github/scripts/download-translations.js",
+   "matched_gt": [],
+   "reason": "1. No match — concerns axios error interceptors, not comment language.\n2. No match — concerns environment variable validation, not comment language.\n3. No match — concerns parsing whitespace in the LANGUAGES variable, not comment language.\n4. No match — concerns language code default mismatches across files, not comment language.\n5. No match — concerns null safety checks on API responses, not comment language.\n6. No match — concerns trailing newline at end of file, not comment language.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": ".github/workflows/poeditor-sync.yml",
+   "matched_gt": [],
+   "reason": "1. No match — discusses inconsistent default language codes, whereas the generated comment addresses missing `contents: write` permissions for `git push`.\n2. No match — discusses a missing `jq` installation, whereas the generated comment addresses `GITHUB_TOKEN` permissions.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": ".github/workflows/poeditor-sync.yml",
+   "matched_gt": [],
+   "reason": "1. No match — discusses inconsistent default language codes, whereas the generated comment discusses shallow clone issues with checkout.\n2. No match — discusses missing `jq` installation, whereas the generated comment discusses shallow clone and push rejection.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": ".github/workflows/poeditor-sync.yml",
+   "matched_gt": [
+    7
+   ],
+   "reason": "1. Match — both identify the inconsistency between 'tr,en' as the workflow input default and 'tr,gb' as the fallback for scheduled runs.\n2. No match — concerns missing `jq` installation, unrelated to language codes.\n\n[1]",
+   "hit_new_gt": true
+  }
+ ]
+}

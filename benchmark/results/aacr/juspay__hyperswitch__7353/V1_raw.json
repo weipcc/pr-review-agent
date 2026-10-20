@@ -1,0 +1,50 @@
+{
+ "results": [
+  {
+   "summary": "將 url crate 匯入加上 cfg(feature = \"v1\") 條件編譯保護，改動乾淨無問題",
+   "issues": [],
+   "filename": "crates/api_models/src/admin.rs"
+  },
+  {
+   "summary": "將 v1 專用的型別匯入移至 feature gate 區塊內並簡化了 PaymentsResponse 的型別引用，改動良好且乾淨。",
+   "issues": [
+    {
+     "line": 17,
+     "severity": "style",
+     "comment": "在 `crate::{ ... }` 區塊內，匯入 `payment_methods::{self}` 語法較為冗餘，通常可直接簡寫為 `payment_methods`；若後續程式碼並未以 `payment_methods::...` 方式使用該模組，亦可能造成未使用的匯入警告。",
+     "suggestion": "可將 `payment_methods::{self},` 簡寫為 `payment_methods,`，若未直接使用該模組路徑則可考慮移除。"
+    }
+   ],
+   "filename": "crates/api_models/src/events/payment.rs"
+  },
+  {
+   "summary": "將僅在 v1 feature 使用的退款相關型別移至條件編譯 import，改動合理且乾淨。",
+   "issues": [],
+   "filename": "crates/api_models/src/events/refund.rs"
+  },
+  {
+   "summary": "針對條件編譯（feature flags）補齊了對應的 cfg 屬性與 import 限制，改動精確且無問題。",
+   "issues": [],
+   "filename": "crates/api_models/src/payment_methods.rs"
+  },
+  {
+   "summary": "清理並加上 `v1` feature flag 條件編譯與 `#[allow(dead_code)]`，以消除未使用項目的編譯警告，改動安全且符合慣例。",
+   "issues": [],
+   "filename": "crates/api_models/src/payments.rs"
+  }
+ ],
+ "n_files": 5,
+ "elapsed_s": 36.1,
+ "calls": 5,
+ "input_tokens": 9197,
+ "output_tokens": 383,
+ "call_input_tokens": [
+  810,
+  2134,
+  1506,
+  1827,
+  2920
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

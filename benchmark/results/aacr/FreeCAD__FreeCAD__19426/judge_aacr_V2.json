@@ -1,0 +1,69 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 23,
+  "findings": [
+   {
+    "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+    "start": 1092,
+    "end": 1102,
+    "category": "bug",
+    "comment": "sub.data() points into the underlying string without being null-terminated at digits length. std::strtol and std::strtof ignore the digits width and parse until encountering whitespace or an invalid character, which will misparse adjacent columns in fixed-format files. Additionally, std::strtof parses only single-precision floats, discarding double precision."
+   },
+   {
+    "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+    "start": 1224,
+    "end": 1227,
+    "category": "bug",
+    "comment": "Using it != vi.end() with a stride of it += 12 (as well as in lines 282, 449, and 467) causes an infinite loop and buffer overrun if the remaining length is not an exact multiple of 12 (such as when lines have trailing whitespace or CRLF endings in binary mode). it skips right past vi.end() and never equals it."
+   },
+   {
+    "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+    "start": 1228,
+    "end": 1230,
+    "category": "bug",
+    "comment": "points->SetPoint and mapNodes[node] = nodeID++ are executed outside the if (view.rfind(keyCodeCoord, 0) == 0) block. If a line does not start with keyCodeCoord, coords is empty, causing points->SetPoint to dereference coords.data() (nullptr), triggering a crash. nodeID is also erroneously incremented."
+   },
+   {
+    "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+    "start": 1564,
+    "end": 1575,
+    "category": "bug",
+    "comment": "If grids is empty, multiBlock->SetNumberOfBlocks(0) is executed. Then multiBlock->SetBlock(0, grid) is called on index 0 of a dataset with 0 blocks, causing an out-of-bounds error or assertion failure in VTK."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+   "matched_gt": [
+    7
+   ],
+   "reason": "1. No match — ref discusses constness of global maps, generated discusses null-termination and precision loss in parsing.\n2. No match — ref suggests std::array or constexpr for mappings, generated discusses string parsing bugs.\n3. No match — ref addresses missing bounds checking for short lines, generated addresses missing null-termination and precision loss.\n4. No match — ref discusses failure handling/validation in strtol/strtof, generated discusses parsing beyond digits width and precision loss.\n5. No match — ref discusses iterator contiguousness/bounds checking and generic template limitations, generated discusses lack of null-termination causing column bleed and float precision loss.\n6. Match — both identify that using std::strtof causes a loss of precision when double precision is needed.\n7. No match — ref discusses smart pointer creation, generated discusses string parsing bugs.\n8. No match — ref discusses caching map lookup in loop, generated discusses string parsing bugs.\n9. No match — ref discusses enum parameter types, generated discusses string parsing bugs.\n10. No match — ref discusses missing default case in switch, generated discusses string parsing bugs.\n11. No match — ref discusses constexpr and const parameters, generated discusses string parsing bugs.\n12. No match — ref suggests std::find_if, generated discusses string parsing bugs.\n13. No match — ref discusses passing parameter by const reference, generated discusses string parsing bugs.\n14. No match — ref",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses `const`/`constexpr` on global lookup maps.\n2. No match — ref suggests `std::array` instead of `std::map`.\n3. No match — ref concerns bounds checking in `valueFromLine` when creating `string_view`, not the loop termination condition stepping past end.\n4. No match — ref discusses error handling for `strtol`/`strtof`.\n5. No match — ref discusses `valueFromLine` implementation and safety, not the stride loop condition.\n6. No match — ref discusses precision loss with `strtof` vs `strtod`.\n7. No match — ref suggests smart pointers over `New()`.\n8. No match — ref suggests caching map lookups for performance.\n9. No match — ref suggests using an enum for `elemType`.\n10. No match — ref discusses missing `default` case in `fillCell`.\n11. No match — ref suggests `constexpr` and `const&` for helper functions.\n12. No match — ref suggests using `std::find_if`.\n13. No match — ref discusses pass-by-value of `lines`.\n14. No match — ref discusses map key validation for `mapCcxTypeNodes`.\n15. No match — ref discusses removing an unused parameter.\n16. No match — ref discusses validating `dataSetName`.\n17. No match — ref discusses dead code in `nodes` vector.\n18. No match — ref discusses removing commented-out code.\n19. No match — ref discusses performance of `std::find` in an inner loop.\n20. No match — ref discusses missing increment of `countScaPos`, not the `it != vi.end()` infinite loop / out-of-bounds issue.\n21. No match — ref discusses code duplication in setting ",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+   "matched_gt": [],
+   "reason": "1. No match — discusses `const`/`constexpr` on global lookup tables, not logic executed outside a conditional block causing a crash.\n2. No match — discusses container performance optimizations, not control flow and null dereferences.\n3. No match — discusses bounds checking in `string_view` parsing, not logic placed outside an `if` block.\n4. No match — discusses conversion error handling for `strtol`/`strtof`, not missing condition guards for points insertion.\n5. No match — discusses safety and parsing robustness in `valueFromLine`, not misplaced point insertion logic.\n6. No match — discusses precision loss with `std::strtof`, not unhandled branching logic.\n7. No match — discusses smart pointer creation patterns, not logic errors with `SetPoint`.\n8. No match — discusses caching map lookups for performance, not a crash due to empty `coords`.\n9. No match — discusses using an enum for `elemType`, not control flow placement of point creation.\n10. No match — discusses missing `default` case in `fillCell`, not logic misplaced outside a `keyCodeCoord` check.\n11. No match — discusses `constexpr` and const references, not logic bugs in coordinate processing.\n12. No match — discusses using `std::find_if`, not point insertion outside an `if` block.\n13. No match — discusses pass-by-value vs pass-by-const-reference for `lines`, not a crash from accessing empty `coords`.\n14. No match — discusses map lookup safety in `mapCcxTypeNodes`, not logic executed outside the `keyCodeCoord` check.\n15.",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+   "matched_gt": [],
+   "reason": "1. No match — discusses const/constexpr for global maps.\n2. No match — discusses using std::array instead of std::map.\n3. No match — discusses string_view bounds checking in parsing functions.\n4. No match — discusses error handling for string-to-number conversions.\n5. No match — discusses string_view safety and parsing in valueFromLine.\n6. No match — discusses precision loss with std::strtof vs std::strtod.\n7. No match — discusses smart pointers vs New().\n8. No match — discusses caching map lookup results in a loop.\n9. No match — discusses using an enum for elemType.\n10. No match — discusses missing default case in fillCell.\n11. No match — discusses marking helper functions constexpr.\n12. No match — discusses using std::find_if.\n13. No match — discusses passing lines by const reference.\n14. No match — discusses map access bounds checking with mapCcxTypeNodes.\n15. No match — discusses unused function parameter lines.\n16. No match — discusses validating dataSetName.\n17. No match — discusses dead code in nodes vector.\n18. No match — discusses removing commented-out code.\n19. No match — discusses performance of std::find in a loop.\n20. No match — discusses countScaPos increment bug in code2 branch.\n21. No match — discusses refactoring duplicated vector/scalar assignment code.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

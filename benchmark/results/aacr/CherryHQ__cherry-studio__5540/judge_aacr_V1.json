@@ -1,0 +1,251 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 19,
+  "findings": [
+   {
+    "file": "src/renderer/src/i18n/locales/en-us.json",
+    "start": 1391,
+    "end": 1391,
+    "category": "style",
+    "comment": "鍵名 'defaultaides' 使用了全小寫拼接，與同層級其他項目（如 'quickPhrase'、'quickPanel' 採用 camelCase，或 'subscribe_name' 採用 snake_case）的命名慣例不一致，可讀性稍差。"
+   },
+   {
+    "file": "src/renderer/src/i18n/locales/zh-cn.json",
+    "start": 972,
+    "end": 972,
+    "category": "style",
+    "comment": "repo_url_placeholder 與 repo_url 內容完全一致（'助手URL'），未能發揮輸入提示的作用，且可依照中英混排慣例在中文與英文間保留空格。"
+   },
+   {
+    "file": "src/renderer/src/pages/agents/index.ts",
+    "start": 23,
+    "end": 23,
+    "category": "bug",
+    "comment": "在條件判斷式中呼叫 Hook (`useLocalSystemAgents` 與 `useRemoteSystemAgents`)，違反了 React Hooks 規則（Rules of Hooks）。這會造成不同渲染週期中 Hook 呼叫數量與順序不一致，導致 React 拋出執行期錯誤。"
+   },
+   {
+    "file": "src/renderer/src/pages/agents/index.ts",
+    "start": 36,
+    "end": 36,
+    "category": "bug",
+    "comment": "在 `useRemoteSystemAgents` 內的 `useEffect`（第 40 行）之前提前 return，同樣違反了 Hook 不得在條件判斷後呼叫的規則。"
+   },
+   {
+    "file": "src/renderer/src/pages/agents/index.ts",
+    "start": 20,
+    "end": 20,
+    "category": "bug",
+    "comment": "直接使用 `store.getState().settings` 讀取 Redux 狀態，當 store 內部的 `settings` 改變時，該 Hook 與使用它的組件將不會收到通知且不會觸發 re-render。"
+   },
+   {
+    "file": "src/renderer/src/pages/agents/index.ts",
+    "start": 43,
+    "end": 43,
+    "category": "performance",
+    "comment": "在 `loadAgents` 中寫死了 `await new Promise(resolve => setTimeout(resolve, 500))` 人工延遲 500ms，看起來像除錯殘留，會拖慢載入速度與影響使用者體驗。"
+   },
+   {
+    "file": "src/renderer/src/pages/agents/index.ts",
+    "start": 41,
+    "end": 41,
+    "category": "bug",
+    "comment": "`useEffect` 內的非同步 fetch 沒有處理組件卸載（unmount）或 `resourcesPath` 改變時的競態條件（Race Condition）與取消機制。"
+   },
+   {
+    "file": "src/renderer/src/pages/settings/DataSettings/DataSettings.tsx",
+    "start": 35,
+    "end": 35,
+    "category": "style",
+    "comment": "元件與檔名命名採用了 `DefaultaidesSettings`，若按照駝峰命名法（PascalCase）慣例，建議將 `aides` 字首大寫為 `DefaultAidesSettings`，以提升可讀性與一致性。"
+   },
+   {
+    "file": "src/renderer/src/pages/settings/DataSettings/DataSettings.tsx",
+    "start": 70,
+    "end": 70,
+    "category": "style",
+    "comment": "AidesIcon 的 fill 顏色寫死為固定色值 `#FFD700`，與其他圖示（如 JoplinIcon 使用 `var(--color-icon)` 或 iconfont）不同，在不同主題（暗色/亮色）下可能存在對比度或視覺風格不協調的問題。"
+   },
+   {
+    "file": "src/renderer/src/pages/settings/DataSettings/DataSettings.tsx",
+    "start": 73,
+    "end": 73,
+    "category": "style",
+    "comment": "行尾有多餘的分號 `;`，與專案其餘部分的程式碼風格（無分號）不一致。"
+   },
+   {
+    "file": "src/renderer/src/pages/settings/DataSettings/DefaultaidesSettings.tsx",
+    "start": 4,
+    "end": 4,
+    "category": "style",
+    "comment": "action 名稱「setefaultAides」疑似為拼字錯誤（缺少字母 'd'，應為 setDefaultAides）。"
+   },
+   {
+    "file": "src/renderer/src/pages/settings/DataSettings/DefaultaidesSettings.tsx",
+    "start": 5,
+    "end": 5,
+    "category": "style",
+    "comment": "直接引用 antd 內部深層路徑 `antd/es/input/Input` 不符合 antd 官方推薦做法，可能影響打包或樣式引入。"
+   },
+   {
+    "file": "src/renderer/src/pages/settings/DataSettings/DefaultaidesSettings.tsx",
+    "start": 16,
+    "end": 16,
+    "category": "style",
+    "comment": "一般常數或區域變數 `Aides` 使用了大寫駝峰命名，在 React/JavaScript 慣例中大寫開頭多用於元件、類別或型別。"
+   },
+   {
+    "file": "src/renderer/src/store/settings.ts",
+    "start": 459,
+    "end": 459,
+    "category": "bug",
+    "comment": "reducer action 名稱拼字錯誤，漏掉了字母 'D'（setefaultAides 應為 setDefaultAides）。"
+   },
+   {
+    "file": "src/renderer/src/store/settings.ts",
+    "start": 106,
+    "end": 106,
+    "category": "style",
+    "comment": "狀態欄位名稱 `defaultaides` 未遵循專案普遍使用的 camelCase 命名慣例（如上方 `defaultObsidianVault`）。"
+   },
+   {
+    "file": "src/renderer/src/store/settings.ts",
+    "start": 210,
+    "end": 210,
+    "category": "bug",
+    "comment": "初始值設為字串 `'settings.defaultaides'`，這看起來像是 i18n 翻譯鍵值而非智能體的實際識別碼（ID）或預設值；若業務邏輯需要的是 Assistant ID 或 null，此處可能導致查詢失敗。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/renderer/src/i18n/locales/en-us.json",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both identify that the key 'defaultaides' is incorrectly named and inconsistent with the surrounding naming conventions.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "src/renderer/src/i18n/locales/zh-cn.json",
+   "matched_gt": [],
+   "reason": "1. No match — Generated comment discusses translation content/placeholder text and spacing, while reference comment addresses key naming mismatch (`default_aides` vs `defaultaides`).\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "src/renderer/src/pages/agents/index.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref flags `any` typing, while generated flags conditional hook calls violating Rules of Hooks.\n2. No match — ref discusses `store.getState()` vs `useSelector` reactivity, not conditional hook calls.\n3. No match — ref addresses duplicated validation logic, not Rules of Hooks violations.\n4. No match — ref addresses missing cleanup in `useEffect`, not conditional hook calls.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "src/renderer/src/pages/agents/index.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref flags `any` typing, generated flags React Rules of Hooks violation (early return before `useEffect`).\n2. No match — ref suggests `useSelector` instead of `store.getState()`, generated flags early return before Hook.\n3. No match — ref addresses duplicated validation logic, generated flags early return before Hook.\n4. No match — ref concerns missing cleanup function/AbortController in `useEffect`, generated flags conditional execution / early return before Hook.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "src/renderer/src/pages/agents/index.ts",
+   "matched_gt": [
+    6
+   ],
+   "reason": "1. No match — concerns TypeScript typing (`any`), not Redux state reactivity.\n2. Match — both identify using `store.getState()` instead of a reactive hook (`useSelector`) causing components not to re-render when state changes.\n3. No match — concerns duplicated validation logic.\n4. No match — concerns missing cleanup function in `useEffect`.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 5,
+   "file": "src/renderer/src/pages/agents/index.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref flags the use of `any` typing, while generated comment points out a hardcoded delay.\n2. No match — ref discusses using `useSelector` instead of `store.getState()`, unrelated to artificial delay.\n3. No match — ref targets duplicated validation logic, unrelated to artificial delay.\n4. No match — ref concerns missing cleanup on unmount in `useEffect`, unrelated to artificial delay.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 6,
+   "file": "src/renderer/src/pages/agents/index.ts",
+   "matched_gt": [
+    8
+   ],
+   "reason": "1. No match — concerns TypeScript typing with `any`.\n2. No match — concerns using `store.getState()` instead of `useSelector`.\n3. No match — concerns duplicated validation logic.\n4. Match — both address the lack of cleanup/cancellation in `useEffect` when an async fetch is in flight during unmount.\n\n[4]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 7,
+   "file": "src/renderer/src/pages/settings/DataSettings/DataSettings.tsx",
+   "matched_gt": [
+    9
+   ],
+   "reason": "1. Match — both suggest renaming `DefaultaidesSettings` to `DefaultAidesSettings` to follow PascalCase conventions.\n2. No match — discusses declaring components inside another component, which is unrelated.\n3. No match — discusses naming convention for the key `'default_aides'`, not the component name.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 8,
+   "file": "src/renderer/src/pages/settings/DataSettings/DataSettings.tsx",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses component naming convention, generated discusses hardcoded fill color.\n2. No match — ref discusses nested component declaration causing re-renders, generated discusses hardcoded fill color.\n3. No match — ref discusses menu item key naming convention, generated discusses hardcoded fill color.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 9,
+   "file": "src/renderer/src/pages/settings/DataSettings/DataSettings.tsx",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses component naming convention, generated discusses an extra semicolon.\n2. No match — ref discusses defining a component inside another component, generated discusses an extra semicolon.\n3. No match — ref discusses menu key naming convention, generated discusses an extra semicolon.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 10,
+   "file": "src/renderer/src/pages/settings/DataSettings/DefaultaidesSettings.tsx",
+   "matched_gt": [
+    12
+   ],
+   "reason": "1. Match — both identify the typo in action name `setefaultAides` missing the letter 'd' (should be `setDefaultAides`).\n2. No match — reference discusses missing `React` import for `React.ChangeEvent`, whereas generated comment discusses a typo in an action name.\n3. No match — reference discusses formatting/extra blank lines, whereas generated comment discusses a typo in an action name.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 11,
+   "file": "src/renderer/src/pages/settings/DataSettings/DefaultaidesSettings.tsx",
+   "matched_gt": [],
+   "reason": "1. No match — ref flags a typo in an action name, while generated warns against deep importing from `antd/es/input/Input`.\n2. No match — ref addresses missing `React` namespace import for `React.ChangeEvent`, while generated addresses deep antd import path.\n3. No match — ref discusses formatting/extra blank lines, while generated addresses antd import paths.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 12,
+   "file": "src/renderer/src/pages/settings/DataSettings/DefaultaidesSettings.tsx",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses a typo in an action name (`setefaultAides`), while generated comment addresses PascalCase naming convention for variable `Aides`.\n2. No match — ref concerns missing import for `React.ChangeEvent`, unrelated to variable naming conventions.\n3. No match — ref concerns extra blank lines, unrelated to variable naming conventions.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 13,
+   "file": "src/renderer/src/store/settings.ts",
+   "matched_gt": [
+    17
+   ],
+   "reason": "1. No match — concerns a typo in a different property name (`defaultaides`) at L106.\n2. No match — concerns using an i18n translation key as an initial default value at L210.\n3. Match — identical issue flagging the typo in `setefaultAides` and recommending `setDefaultAides` at L459.\n4. No match — refers to a separate setter method instance at L576 rather than the reducer action at L459.\n\n[3]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 14,
+   "file": "src/renderer/src/store/settings.ts",
+   "matched_gt": [
+    15
+   ],
+   "reason": "1. Match — both flag the casing/naming issue on `defaultaides` at L106 and suggest standard camelCase (`defaultAides`).\n2. No match — ref discusses the initial value being an i18n key instead of null/empty string, while generated discusses field naming.\n3. No match — ref discusses typo in reducer function name `setefaultAides`, not the state field name.\n4. No match — ref discusses setter method name `setefaultAides`, not the state field name.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 15,
+   "file": "src/renderer/src/store/settings.ts",
+   "matched_gt": [
+    16
+   ],
+   "reason": "1. No match — discusses a typo in the property name, while the generated comment concerns the initial value being an i18n translation key.\n2. Match — both identify that the initial value `'settings.defaultaides'` looks like an i18n translation key instead of an actual value/identifier (like null).\n3. No match — concerns a typo in the reducer function name `setefaultAides`.\n4. No match — concerns an inconsistent setter method name `setefaultAides`.\n\n[2]",
+   "hit_new_gt": true
+  }
+ ]
+}

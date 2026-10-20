@@ -1,0 +1,32 @@
+{
+ "results": [
+  {
+   "change_intent": "Prevent segfaults by avoiding reuse of potentially invalidated HypercoreInfo across table_open calls, introducing hypercore_open_compressed helper and scoping info fetches after relation opening.",
+   "summary": "The refactoring introduces hypercore_open_compressed to centralize opening chunk compressed tables safely, but ignores the LOCKMODE parameter and always opens relations with AccessShareLock.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 106,
+     "end_line": 110,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "static Relation\nhypercore_open_compressed(Relation relation, LOCKMODE mode)\n{\n\tHypercoreInfo *hcinfo = RelationGetHypercoreInfo(relation);\n\treturn table_open(hcinfo->compressed_relid, AccessShareLock);\n}",
+     "comment": "The mode parameter is accepted by hypercore_open_compressed but ignored; table_open is unconditionally called with AccessShareLock. Multiple callers pass exclusive lock modes such as RowExclusiveLock (e.g., in hypercore_tuple_delete and hypercore_index_delete_tuples), RowShareLock (in hypercore_tuple_lock), and AccessExclusiveLock (in compress_and_swap_heap). Hardcoding AccessShareLock leads to lock downgrade and insufficient concurrency protection.",
+     "suggestion": "Pass mode instead of AccessShareLock to table_open.",
+     "suggested_code": "static Relation\nhypercore_open_compressed(Relation relation, LOCKMODE mode)\n{\n\tHypercoreInfo *hcinfo = RelationGetHypercoreInfo(relation);\n\treturn table_open(hcinfo->compressed_relid, mode);\n}"
+    }
+   ],
+   "filename": "tsl/src/hypercore/hypercore_handler.c"
+  }
+ ],
+ "n_files": 1,
+ "elapsed_s": 32.5,
+ "calls": 1,
+ "input_tokens": 29747,
+ "output_tokens": 411,
+ "call_input_tokens": [
+  29747
+ ],
+ "mode": "per-file",
+ "routing_tokens": 25361
+}

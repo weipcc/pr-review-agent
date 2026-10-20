@@ -1,0 +1,56 @@
+{
+ "results": [
+  {
+   "change_intent": "Implement containerSeemsToBeEmptyDomElement without regex and add helper everyContainedType.",
+   "summary": "The implementation of containerSeemsToBeEmptyDomElement has potential bugs regarding lib name matching and empty slice indexing in name checking.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 10829,
+     "end_line": 10831,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "if c.compilerOptions.Lib == nil || slices.Contains(c.compilerOptions.Lib, \"lib.dom.d.ts\") {",
+     "comment": "c.compilerOptions.Lib contains target lib names as specified in tsconfig/compiler options (e.g. \"dom\" or case-insensitive variants like \"dom\", or filenames), not necessarily \"lib.dom.d.ts\". In TypeScript's original implementation, this checks whether 'dom' is included in the resolved libs (or whether the lib options contain 'dom'). Furthermore, if options.Lib is nil, TypeScript's default libs depend on `target` and often include `dom` (e.g., target ES5/ES6 default includes DOM if lib is omitted). Checking `c.compilerOptions.Lib == nil` causes this to return `false` when `lib` is unspecified, whereas TS may or may not include dom by default depending on target/settings. Even when specified, users typically write `\"lib\": [\"es2020\"]` or `[\"dom\"]`, not `\"lib.dom.d.ts\"`.",
+     "suggestion": "Check how lib options or resolved library files are verified elsewhere in the checker (such as checking if 'dom' is in options.lib or using a helper that checks whether DOM is included in the program/lib), and account for case-insensitivity or default library options.",
+     "suggested_code": null
+    },
+    {
+     "start_line": 10840,
+     "end_line": 10846,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "if !(strings.HasPrefix(t.symbol.Name, \"HTML\") && strings.HasSuffix(t.symbol.Name, \"Element\")) {\n\t\t\treturn false\n\t\t}\n\n\t\tisMiddleAlpha := true\n\t\tfor _, r := range t.symbol.Name[4 : len(t.symbol.Name)-7] {",
+     "comment": "If t.symbol.Name is exactly \"HTMLElement\", strings.HasPrefix(..., \"HTML\") and strings.HasSuffix(..., \"Element\") are both true because \"HTMLElement\" starts with \"HTML\" and ends with \"Element\". However, len(\"HTMLElement\") is 11, so t.symbol.Name[4 : len(t.symbol.Name)-7] is t.symbol.Name[4:4], which is an empty slice. While the loop won't panic, this means \"HTMLElement\" has no middle characters and returns isMiddleAlpha = true. However, in TypeScript (regex `/^HTML[A-Za-z]+Element$/`), at least one ASCII letter (`+`) is required between `HTML` and `Element`, meaning `HTMLElement` itself should NOT match this pattern (it is handled separately or by its own name check if intended, or in TS `HTMLElement` is explicitly listed or matched). If `HTMLElement` was already handled or intended to match, verify whether `HTMLElement` itself is supposed to match this branch or if the pattern required at least 1 character. In TS: `/^HTML[A-Za-z]+Element$/` requires len(middle) >= 1. Furthermore, if len(t.symbol.Name) < 11, strings.HasPrefix(\"HTML\") and HasSuffix(\"Element\") would overlap if len < 11 was possible (though min len here is 11), but if middle length is 0, this accepts names with 0 middle chars.",
+     "suggestion": "Ensure the middle slice has at least one character (`len(middle) > 0`) to accurately reflect the TypeScript regex `/^HTML[A-Za-z]+Element$/` (and check if `HTMLElement` was meant to be included in the exact match list alongside `Element`, `Node`, `EventTarget`).",
+     "suggested_code": "\t\tif !(strings.HasPrefix(t.symbol.Name, \"HTML\") && strings.HasSuffix(t.symbol.Name, \"Element\")) {\n\t\t\treturn false\n\t\t}\n\n\t\tmiddle := t.symbol.Name[4 : len(t.symbol.Name)-7]\n\t\tif len(middle) == 0 {\n\t\t\treturn false\n\t\t}\n\n\t\tfor _, r := range middle {\n\t\t\tif !('a' <= r && r <= 'z') && !('A' <= r && r <= 'Z') {\n\t\t\t\treturn false\n\t\t\t}\n\t\t}\n\n\t\treturn true"
+    }
+   ],
+   "filename": "internal/checker/checker.go"
+  },
+  {
+   "change_intent": "Update reference baselines for missing DOM elements test.",
+   "summary": "Test baseline updates reflect the new diagnostic TS2812.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt"
+  },
+  {
+   "change_intent": "Remove baseline diff file as results now match expectations.",
+   "summary": "Baseline diff removal looks good.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt.diff"
+  }
+ ],
+ "n_files": 3,
+ "elapsed_s": 14.4,
+ "calls": 1,
+ "input_tokens": 6935,
+ "output_tokens": 1238,
+ "call_input_tokens": [
+  6935
+ ],
+ "mode": "batch",
+ "routing_tokens": 2867
+}

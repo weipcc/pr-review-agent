@@ -1,0 +1,127 @@
+{
+ "results": [
+  {
+   "summary": "新增 USE_RDMA 條件式鏈結，但兩處 macro 皆額外鏈結了 valkey::valkey，可能存在重複鏈結或模組依賴錯誤。",
+   "issues": [
+    {
+     "line": 94,
+     "severity": "style",
+     "comment": "在 valkey_build_and_install_bin 中，第 86 行已執行過 target_link_libraries(${target} valkey::valkey)，此處再次指定 valkey::valkey 顯得冗餘。",
+     "suggestion": "如果 valkey::valkey_rdma 依賴 valkey::valkey，應在定義 valkey::valkey_rdma 目標時透過 PUBLIC/INTERFACE 傳遞；在此處只需保留 target_link_libraries(${target} valkey::valkey_rdma)。"
+    },
+    {
+     "line": 127,
+     "severity": "bug",
+     "comment": "valkey_build_and_install_module 建立的是 SHARED module。在沒有 USE_RDMA 的情況下（如第 119-123 行），module 並不會鏈結 valkey::valkey。若在開啟 RDMA 時為 shared module 鏈結 valkey::valkey，可能導致 Valkey 核心代碼被打包進模組庫中，引起符號重複或運行時未預期的行為。",
+     "suggestion": "確認 module 是否真的需要鏈結 valkey::valkey，若僅需 RDMA 相關符號，應僅鏈結 valkey::valkey_rdma（即移除 valkey::valkey），並透過正確設定 target 的依賴傳遞來管理。"
+    }
+   ],
+   "filename": "cmake/Modules/ValkeySetup.cmake"
+  },
+  {
+   "summary": "新增 USE_RDMA 判斷以傳遞 ENABLE_RDMA 選項至 libvalkey，整體改動符合既有的 TLS 設定慣例且無重大問題。",
+   "issues": [
+    {
+     "line": 23,
+     "severity": "style",
+     "comment": "CACHE 變數的描述文字「Should we test RDMA connections」看起來是由上方 TLS 複製修改而來，但 libvalkey 的 ENABLE_RDMA 選項用途通常是啟用 RDMA 支援而非測試連線，描述稍顯不精準。",
+     "suggestion": "建議可將描述調整為更貼切的內容，例如「Build support for RDMA connections」或「Enable RDMA support in libvalkey」。"
+    }
+   ],
+   "filename": "deps/CMakeLists.txt"
+  },
+  {
+   "summary": "新增對 BUILD_RDMA 設定的支援，以傳遞 USE_RDMA=1 給 libvalkey 編譯選項，寫法與既有 TLS 設定一致且無明顯問題。",
+   "issues": [],
+   "filename": "deps/Makefile"
+  },
+  {
+   "summary": "本次改動主要為 RDMA client 程式庫補上連結相依，但存在誤將 RDMA 函式庫連結至 TLS 模組以及函式庫旗標重複加入的問題。",
+   "issues": [
+    {
+     "line": 344,
+     "severity": "style",
+     "comment": "前一行 (第 343 行) 已經有 `FINAL_LIBS += $(RDMA_LIBS)`，此處又加入 `$(RDMA_LIBS)`，導致連結旗標重複。",
+     "suggestion": "移除第 343 行的 `FINAL_LIBS += $(RDMA_LIBS)`，僅保留第 344 行 `FINAL_LIBS += ../deps/libvalkey/lib/libvalkey_rdma.a $(RDMA_LIBS)` 即可。"
+    },
+    {
+     "line": 519,
+     "severity": "bug",
+     "comment": "`valkey-tls.so` 為獨立的 TLS 模組，不應連結 RDMA 的客戶端函式庫 `$(RDMA_CLIENT_LIBS)`，這會造成不必要的符號依賴與動態函式庫載入相依性。",
+     "suggestion": "移除 `$(TLS_MODULE_NAME)` 規則中的 `$(RDMA_CLIENT_LIBS)`，回復為 `$(QUIET_CC)$(CC) -o $@ tls.c -shared -fPIC $(TLS_MODULE_CFLAGS) $(TLS_CLIENT_LIBS)`。"
+    }
+   ],
+   "filename": "src/Makefile"
+  },
+  {
+   "summary": "新增對 RDMA 連線的支援，但在未編譯 USE_RDMA 時傳入 rdma 參數會導致 options 未設定連線端點。",
+   "issues": [
+    {
+     "line": 435,
+     "severity": "bug",
+     "comment": "如果程式編譯時未開啟 `USE_RDMA`（即沒有定義 `USE_RDMA`），但呼叫端傳入 `rdma = 1`，則 `VALKEY_OPTIONS_SET_RDMA` 不會被編譯，導致 `options` 中沒有設定任何 endpoint/connection type。隨後呼叫 `valkeyConnectWithOptions(&options)` 會因配置不完整而失敗，或行為不如預期。",
+     "suggestion": "應在 `#ifndef USE_RDMA` 的情況下處理不支援 RDMA 的情境，例如回傳錯誤、印出不支援訊息，或是 `#ifndef USE_RDMA` 時若傳入 `rdma != 0` 則回傳 NULL，抑或是編譯期檢查。"
+    }
+   ],
+   "filename": "src/cli_common.c"
+  },
+  {
+   "summary": "在 valkeyConnectWrapper 函式宣告中新增 rdma 參數，改動簡潔且無問題。",
+   "issues": [],
+   "filename": "src/cli_common.h"
+  },
+  {
+   "summary": "本次改動為 valkey-benchmark 增加了 RDMA 支援，但在 cluster 模式的連線處理與 fcall 測試腳本載入處存在 rdma 參數不一致的問題。",
+   "issues": [
+    {
+     "line": 661,
+     "severity": "bug",
+     "comment": "在 Cluster 模式下（is_cluster_client 為真），局部變數 rdma 未被賦值而維持 0，導致建立的是普通 TCP 連線；然而在 resetClient（第 395 行）與 createClient 後續（第 833 行）中，卻依據全域的 config.rdma 來決定不註冊 AE_WRITABLE 事件，這會導致 TCP 連線的客戶端事件處理異常。若 RDMA 不支援 Cluster 模式，應明確禁止兩者同時使用；若支援，Cluster 客戶端也應啟用 RDMA。",
+     "suggestion": "若支援 Cluster RDMA，可直接將 rdma = config.rdma 移至 if-else 外層統一賦值；若目前不支援，應在 parseOptions 中檢查 `--cluster` 與 `--rdma` 同時存在時輸出錯誤並退出。"
+    },
+    {
+     "line": 2079,
+     "severity": "bug",
+     "comment": "在執行 fcall 測試前載入函式腳本時，getValkeyContext 的 rdma 參數被硬編碼傳入 0。當使用者指定 --rdma 且伺服器僅接受 RDMA 連線時，此處會因嘗試以 TCP 建立連線而失敗。",
+     "suggestion": "將 getValkeyContext(config.conn_info.hostip, config.conn_info.hostport, NULL, 0) 中的第 4 個參數改為 config.rdma。"
+    }
+   ],
+   "filename": "src/valkey-benchmark.c"
+  },
+  {
+   "summary": "新增 RDMA 支援與 --rdma 命令列選項，並在連線封裝函式中傳入 RDMA 設定。",
+   "issues": [
+    {
+     "line": 2832,
+     "severity": "style",
+     "comment": "在 parseOptions() 迴圈內部直接呼叫 valkeyInitiateRdma() 存在潛在副作用：如果命令列中重複出現 --rdma 會導致重複初始化；此外，若參數包含 --help 等選項時也會先執行 RDMA 初始化。",
+     "suggestion": "建議在 parseOptions 裡僅設定 `config.rdma = 1;`，並在參數解析完成後（或實際建立連線前）統一執行一次 `valkeyInitiateRdma()` 初始化檢查。"
+    },
+    {
+     "line": 2963,
+     "severity": "style",
+     "comment": "英文文法問題：RDMA 開頭發音為母音（/ɑːr/），不定冠詞應使用 'an' 而非 'a'。",
+     "suggestion": "將 \"Establish a RDMA connection.\" 改為 \"Establish an RDMA connection.\"。"
+    }
+   ],
+   "filename": "src/valkey-cli.c"
+  }
+ ],
+ "n_files": 8,
+ "elapsed_s": 90.6,
+ "calls": 8,
+ "input_tokens": 47977,
+ "output_tokens": 1978,
+ "call_input_tokens": [
+  2065,
+  838,
+  2206,
+  5643,
+  2321,
+  1063,
+  21255,
+  12586
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

@@ -1,0 +1,89 @@
+{
+ "results": [
+  {
+   "change_intent": "Add a Node.js script to download translation files from the POEditor API and save them as JSON in a temporary directory.",
+   "summary": "The script handles POEditor download and normalization, but has unused imports and non-English comments.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 7,
+     "end_line": 7,
+     "category": "style",
+     "confidence": "high",
+     "evidence": "const __filename = fileURLToPath(import.meta.url);",
+     "comment": "`__filename` is defined using `fileURLToPath(import.meta.url)` along with the `fileURLToPath` import, but neither is ever used in the script.",
+     "suggestion": "Remove the unused `__filename` variable and the `fileURLToPath` import from `url`.",
+     "suggested_code": null
+    },
+    {
+     "start_line": 49,
+     "end_line": 52,
+     "category": "style",
+     "confidence": "medium",
+     "evidence": "      // POEditor'den dönen veri formatını kontrol et ve gerekirse dönüştür\n      let formattedTranslations = translations;\n\n      // Eğer dizi formatında geldiyse, key-value formatına dönüştür",
+     "comment": "Comments are written in Turkish while the rest of the codebase and file comments use English.",
+     "suggestion": "Translate comments to English for consistency across the codebase.",
+     "suggested_code": "      // Check POEditor response format and transform if necessary\n      let formattedTranslations = translations;\n\n      // If data is in array format, convert to key-value format"
+    }
+   ],
+   "filename": ".github/scripts/download-translations.js"
+  },
+  {
+   "change_intent": "Document the POEditor translation synchronization workflow, required settings, and manual execution options.",
+   "summary": "Documentation accurately reflects workflow behavior, though default language mentions are slightly inconsistent across files.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": ".github/workflows/README.md"
+  },
+  {
+   "change_intent": "Add a GitHub Actions workflow to periodically or manually download POEditor translations and push changes back to the repository.",
+   "summary": "The workflow will fail on push due to missing write permissions and checkout depth, and has an inconsistency in language defaults.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 20,
+     "end_line": 22,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "jobs:\n  sync-translations:\n    runs-on: ubuntu-latest",
+     "comment": "By default, `GITHUB_TOKEN` only has read permissions in modern GitHub repositories unless explicitly granted write permissions. Step `git push` on line 92 will fail with 403 Forbidden without `contents: write` permission declared on the job or workflow.",
+     "suggestion": "Add explicit `permissions: { contents: write }` to the job or workflow.",
+     "suggested_code": "jobs:\n  sync-translations:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write"
+    },
+    {
+     "start_line": 26,
+     "end_line": 29,
+     "category": "bug",
+     "confidence": "medium",
+     "evidence": "- name: Checkout code\n        uses: actions/checkout@v3\n        with:\n          token: ${{ secrets.GITHUB_TOKEN }}",
+     "comment": "`actions/checkout@v3` (and later) defaults to `fetch-depth: 1`, creating a shallow clone. Pushing commits directly back to the branch from a shallow clone without fetching or checking out the branch ref can result in push rejection or history divergence.",
+     "suggestion": "Specify `fetch-depth: 0` in `actions/checkout` or ensure the target branch is explicitly checked out before committing and pushing.",
+     "suggested_code": "      - name: Checkout code\n        uses: actions/checkout@v3\n        with:\n          token: ${{ secrets.GITHUB_TOKEN }}\n          fetch-depth: 0"
+    },
+    {
+     "start_line": 10,
+     "end_line": 60,
+     "category": "bug",
+     "confidence": "medium",
+     "evidence": "default: \"tr,en\"\n...\nLANGUAGES: ${{ github.event.inputs.languages || 'tr,gb' }}",
+     "comment": "Inconsistent language codes are used: `workflow_dispatch.inputs.languages.default` defaults to `tr,en` and `download-translations.js` defaults to `tr,en`, but the fallback in line 60 uses `'tr,gb'` (which is also mentioned in the README). When scheduled via cron, `github.event.inputs.languages` will be empty, triggering `tr,gb` instead of `tr,en`.",
+     "suggestion": "Align the default language code fallback across the workflow, documentation, and download script (e.g. consistently use `en` or `gb`).",
+     "suggested_code": "          LANGUAGES: ${{ github.event.inputs.languages || 'tr,en' }}"
+    }
+   ],
+   "filename": ".github/workflows/poeditor-sync.yml"
+  }
+ ],
+ "n_files": 3,
+ "input_tokens": 9538,
+ "output_tokens": 1289,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 12.0,
+ "mode": "batch",
+ "routing_tokens": 4773,
+ "call_input_tokens": [
+  9538
+ ],
+ "model": "gemini-3.8-flash"
+}

@@ -1,0 +1,72 @@
+{
+ "results": [
+  {
+   "filename": "src/Servers/HttpSys/src/NativeMethods.txt",
+   "summary": "在 CsWin32 程式碼產生配置中新增 SOCKADDR_IN 與 SOCKADDR_IN6 結構，無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "src/Servers/IIS/IIS/src/NativeMethods.txt",
+   "summary": "新增 SOCKADDR_IN 與 SOCKADDR_IN6 供 CsWin32 代碼生成，改動簡潔且無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs",
+   "summary": "重構為強型別 SOCKADDR 結構體封裝，但 GetPort 在處理大於 32767 的 Port 時會因 short 符號擴展而回傳負數。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 40,
+     "end_line": 40,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "IPAddress.NetworkToHostOrder((short)...) 的回傳型別為 short。當 Port 數值大於 32767 時（常見於 client 的 ephemeral port，範圍通常為 49152~65535），轉型為 short 會變為負數，隱式轉換為 int 回傳時會發生符號擴展（例如 Port 50000 會變成 -15536）。"
+    },
+    {
+     "start_line": 62,
+     "end_line": 62,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "同 IPv4 實作，IPAddress.NetworkToHostOrder((short)...) 會使大於 32767 的 Port 在回傳為 int 時變成負數。"
+    },
+    {
+     "start_line": 20,
+     "end_line": 20,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "若傳入的 pSockaddr 指標為 null，直接解引用 pSockaddr->sa_family 會引發 AccessViolationException 或 NullReferenceException。"
+    }
+   ]
+  },
+  {
+   "filename": "src/Shared/HttpSys/RequestProcessing/NativeRequestContext.cs",
+   "summary": "將指標型別轉換從 IntPtr 調整為強型別 SOCKADDR*，符合 Win32 API 簽名，改動正確無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "src/Shared/test/Shared.Tests/NativeMethods.txt",
+   "summary": "新增 CsWin32 的 SOCKADDR_IN 與 SOCKADDR_IN6 結構產生設定，改動簡潔無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  }
+ ],
+ "n_files": 5,
+ "input_tokens": 5827,
+ "output_tokens": 660,
+ "calls": 5,
+ "tool_calls": null,
+ "elapsed_s": 36.7,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  861,
+  452,
+  2469,
+  1763,
+  282
+ ],
+ "model": "gemini-3.8-flash"
+}

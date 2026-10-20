@@ -1,0 +1,51 @@
+{
+ "results": [
+  {
+   "filename": "internal/checker/checker.go",
+   "summary": "實作 containerSeemsToBeEmptyDomElement 判斷，但 lib 選項的比對方式及 HTML 元素名稱的正則比對邏輯存在偏差。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 10829,
+     "end_line": 10829,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在 TypeScript 中，`compilerOptions.lib` 的設定通常為 `\"dom\"` 或 `\"DOM\"`，且原始比對邏輯為不分大小寫檢查是否包含 `\"dom\"`（`lib.some(l => l.toLowerCase() === \"dom\")`）。直接使用 `slices.Contains` 比對 `\"lib.dom.d.ts\"` 會導致大小寫不一致或設定為 `\"dom\"` 時比對失敗。"
+    },
+    {
+     "start_line": 10844,
+     "end_line": 10844,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "TypeScript 原始對應正則是 `/^HTML[a-zA-Z]+Element$/`（中間至少有一個英文字母）。當名稱剛好是 `\"HTMLElement\"` 時，切片 `t.symbol.Name[4 : len(t.symbol.Name)-7]` 的長度為 0，迴圈不會執行，導致 `isMiddleAlpha` 仍為 `true`，等同於匹配了 `*` 而非 `+`。"
+    }
+   ]
+  },
+  {
+   "filename": "testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt",
+   "summary": "更新了 missingDomElements 測試的 baseline 錯誤訊息輸出，將未引入 dom lib 時的錯誤代碼更新為 TS2812 並附帶修正建議，變更內容符合預期。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "testdata/baselines/reference/submodule/compiler/missingDomElements.errors.txt.diff",
+   "summary": "刪除不再需要的 baseline 測試差異檔，無邏輯問題。",
+   "recommendation": "n/a",
+   "issues": []
+  }
+ ],
+ "n_files": 3,
+ "input_tokens": 3384,
+ "output_tokens": 610,
+ "calls": 3,
+ "tool_calls": null,
+ "elapsed_s": 59.6,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  734,
+  1664,
+  986
+ ],
+ "model": "gemini-3.8-flash"
+}

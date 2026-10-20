@@ -1,0 +1,83 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 23,
+  "findings": [
+   {
+    "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+    "start": 1095,
+    "end": 1095,
+    "category": "bug",
+    "comment": "std::strtol 與 std::strtof 需要以 null-terminated 字串做結尾，然而 std::string_view::data() 並不保證在 digits 長度處有 '\\0'，這會導致 strtol/strtof 讀取超過欄位寬度甚至越界讀取；此外 double 特化使用了單精度的 std::strtof，會造成數值精度損失。"
+   },
+   {
+    "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+    "start": 1243,
+    "end": 1243,
+    "category": "bug",
+    "comment": "在 readNodes 中，如果讀到的行不符合 keyCodeCoord 前綴，coords 向量將為空，但程式仍會執行 points->SetPoint(nodeID, coords.data()) 與 mapNodes[node] = nodeID++。SetPoint 期望一個指向 3 個 double 的指標，傳入空向量的 data() 會導致未定義行為或崩潰。"
+   },
+   {
+    "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+    "start": 1395,
+    "end": 1395,
+    "category": "bug",
+    "comment": "在讀取 -5 實體資訊時，sub 的截取固定為 4 * 5 = 20 字元，且指標移動為 it1 += 5，但 valueFromLine 傳入的長度卻是 digits。當 indicator == 1 時 digits 為 10，步長與讀取寬度不一致，會導致欄位解析錯誤甚至迭代器越界。"
+   },
+   {
+    "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+    "start": 1460,
+    "end": 1460,
+    "category": "bug",
+    "comment": "在 readResults 中，前面 try 區塊若拋出 std::out_of_range 代表 node 不存在於 mapNodes 中並已被 catch 警告；但隨後在填入 vecArray / scaArrays 時又直接呼叫了 mapNodes.at(node)，未做任何異常處理，將導致 std::out_of_range 未被捕獲而引發崩潰。"
+   },
+   {
+    "file": "src/Mod/Fem/App/FemVTKTools.h",
+    "start": 75,
+    "end": 75,
+    "category": "style",
+    "comment": "類別中其他靜態函式上方皆有註解說明其用途與參數行為，但 frdToVTK 缺少對應的註解說明（例如輸入格式、輸出為何、是否會產生同名檔案等）。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+   "matched_gt": [
+    7
+   ],
+   "reason": "1. No match — discusses constness/constexpr for global map definitions.\n2. No match — discusses using std::array or constexpr functions for lookup tables.\n3. No match — discusses bounds checking when creating string_view, not null-termination or strtof precision.\n4. No match — discusses error handling and return validation for strtol/strtof.\n5. No match — discusses bounds checking for string_view creation and general refactoring suggestions.\n6. Match — directly matches the concern that using `std::strtof` for `double` causes loss of precision and should be `std::strtod`.\n7. No match — discusses smart pointer creation with make_unique/make_shared.\n8. No match — discusses caching map lookups in a loop.\n9. No match — discusses using an enum for `elemType`.\n10. No match — discusses missing default case in switch statement.\n11. No match — discusses constexpr and const references for utility functions.\n12. No match — discusses using std::find_if.\n13. No match — discusses passing string by const reference.\n14. No match — discusses out-of-bounds map access.\n15. No match — discusses unused function parameter.\n16. No match — discusses validating extracted string name.\n17. No match — discusses dead/unused vector.\n18. No match — discusses removing commented-out code.\n19. No match — discusses algorithmic complexity of std::find in loop.\n20. No match — discusses missing counter increment in continuation line loop.\n21. No match — discusses code duplication for vector and scalar handling.\n\n[",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+   "matched_gt": [],
+   "reason": "1. No match — discusses const/constexpr for global maps, whereas generated discusses empty coords passed to SetPoint in readNodes.\n2. No match — discusses performance optimization of global lookup tables.\n3. No match — discusses buffer overflow in string_view creation.\n4. No match — discusses conversion error handling in strtol/strtof.\n5. No match — discusses safety and parsing in valueFromLine.\n6. No match — discusses precision loss with std::strtof.\n7. No match — discusses smart pointer creation vs New().\n8. No match — discusses caching map lookup in a loop.\n9. No match — discusses using an enum for elemType in fillCell.\n10. No match — discusses missing default case in fillCell.\n11. No match — discusses constexpr and const references for utility functions.\n12. No match — discusses simplifying a loop with std::find_if.\n13. No match — discusses passing string by const reference.\n14. No match — discusses map lookup without key validation in fillCell/readElements.\n15. No match — discusses an unused parameter.\n16. No match — discusses validating dataSetName.\n17. No match — discusses dead code in nodes vector.\n18. No match — discusses removing commented-out code.\n19. No match — discusses performance of std::find in inner loop.\n20. No match — discusses countScaPos not incremented in code2 branch.\n21. No match — discusses refactoring duplicated code for setting values.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+   "matched_gt": [],
+   "reason": "1. No match — discusses `const`/`constexpr` on global maps.\n2. No match — discusses container choice (`std::array` vs `std::map`).\n3. No match — discusses bounds checking inside `valueFromLine`, not the inconsistent step size and `digits` logic in `-5` entity parsing.\n4. No match — discusses conversion error handling in string parsing functions.\n5. No match — discusses implementation and signature safety of `valueFromLine`.\n6. No match — discusses precision loss with `std::strtof` vs `std::strtod`.\n7. No match — discusses smart pointer creation methods.\n8. No match — discusses caching map lookups in a loop.\n9. No match — discusses converting `elemType` parameter to an enum.\n10. No match — discusses missing `default` case in `fillCell`.\n11. No match — discusses `constexpr` and `const` reference qualifiers on helper functions.\n12. No match — discusses simplifying a loop with `std::find_if`.\n13. No match — discusses passing string parameter by const reference.\n14. No match — discusses validating map key existence before access.\n15. No match — discusses removing an unused parameter.\n16. No match — discusses validating `dataSetName`.\n17. No match — discusses dead code in the `nodes` vector.\n18. No match — discusses removing commented-out code.\n19. No match — discusses performance of `std::find` in an inner loop.\n20. No match — discusses missing `countScaPos` increments in the `code2` branch.\n21. No match — discusses refactoring duplicated code for scalar and vector value assignmen",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "src/Mod/Fem/App/FemVTKTools.cpp",
+   "matched_gt": [],
+   "reason": "1. No match — discusses `const`/`constexpr` on global maps, while the generated comment concerns an unhandled exception in `readResults`.\n2. No match — discusses container selection for mappings, while the generated comment concerns an unhandled exception.\n3. No match — discusses buffer overflow in `string_view`, while the generated comment concerns map access exception handling.\n4. No match — discusses string conversion error checking, while the generated comment concerns uncaught `std::out_of_range` from `mapNodes.at()`.\n5. No match — discusses string parsing safety in `valueFromLine`, while the generated comment concerns map access exception handling.\n6. No match — discusses precision loss with `strtof`, while the generated comment concerns map access exception handling.\n7. No match — discusses smart pointer creation, while the generated comment concerns map access exception handling.\n8. No match — discusses caching map lookups for performance, while the generated comment concerns an uncaught exception.\n9. No match — discusses using an enum for `elemType`, while the generated comment concerns an unhandled exception in `readResults`.\n10. No match — discusses missing default case in `fillCell`, while the generated comment concerns `mapNodes.at(node)` in `readResults`.\n11. No match — discusses `constexpr` and parameter constness, while the generated comment concerns an unhandled exception.\n12. No match — discusses using `std::find_if`, while the generated comment concerns an ",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "src/Mod/Fem/App/FemVTKTools.h",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

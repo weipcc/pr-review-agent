@@ -1,0 +1,107 @@
+{
+ "results": [
+  {
+   "change_intent": "Update the linter suppression comment on the synchronous LLM connection test call.",
+   "summary": "Updates a noqa comment on the LLM sanity check; no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "browser_use/agent/service.py"
+  },
+  {
+   "change_intent": "Allow configuring a custom Chrome remote debugging port in BrowserConfig and update Chrome launching to use asyncio.create_subprocess_exec.",
+   "summary": "The PR correctly addresses subprocess launching and custom port configuration, but has a typing bug where `chrome_remote_debugging_port` allows `None` which causes runtime errors, along with overly verbose string formatting.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 111,
+     "end_line": 111,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "chrome_remote_debugging_port: int | None = CHROME_DEBUG_PORT",
+     "comment": "The field is typed as `int | None`, but `None` is not supported in the implementation. If `None` is provided, `_setup_builtin_browser` will crash with `TypeError: an integer is required (got type NoneType)` inside `socket.connect_ex(('localhost', self.config.chrome_remote_debugging_port))`, and `_setup_user_provided_browser` will attempt HTTP calls to `http://localhost:None/...`. If disabling the port with `None` is not supported, the field should be typed strictly as `int`.",
+     "suggestion": "Change the type annotation from `int | None` to `int` so that Pydantic rejects `None` during configuration validation.",
+     "suggested_code": "\tchrome_remote_debugging_port: int = CHROME_DEBUG_PORT"
+    },
+    {
+     "start_line": 220,
+     "end_line": 220,
+     "category": "refactor",
+     "confidence": "high",
+     "evidence": "CHROME_DEBUGGING_ARG % {'chrome_remote_debugging_port': self.config.chrome_remote_debugging_port},",
+     "comment": "Using `%`-formatting with `CHROME_DEBUGGING_ARG` and a single-item dictionary is unnecessarily verbose and inconsistent with line 292, which directly uses an f-string (`f'--remote-debugging-port={self.config.chrome_remote_debugging_port}'`).",
+     "suggestion": "Format the argument using an f-string directly instead of the dictionary `%`-formatting helper.",
+     "suggested_code": "\t\t\t\tf'--remote-debugging-port={self.config.chrome_remote_debugging_port}',"
+    },
+    {
+     "start_line": 234,
+     "end_line": 234,
+     "category": "nitpick",
+     "confidence": "high",
+     "evidence": "shell=False,",
+     "comment": "Passing `shell=False` to `asyncio.create_subprocess_exec` is redundant, as `create_subprocess_exec` already executes the command directly without a shell.",
+     "suggestion": "Remove `shell=False` from the `asyncio.create_subprocess_exec` invocation.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "browser_use/browser/browser.py"
+  },
+  {
+   "change_intent": "Extract the remote debugging port argument out of static CHROME_ARGS into a parameterized template to allow dynamic port configuration.",
+   "summary": "The remote debugging argument was successfully made configurable without issues in this file.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "browser_use/browser/chrome.py"
+  },
+  {
+   "change_intent": "Remove redundant parentheses around the awaited file object in the async with statement.",
+   "summary": "Minor syntax simplification removing unnecessary parentheses; looks good.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "examples/custom-functions/file_upload.py"
+  },
+  {
+   "change_intent": "Add a unit test verifying that a user-provided browser binary launches with the specified custom Chrome remote debugging port.",
+   "summary": "The test correctly checks subprocess launch arguments, but it mocks `requests.get` instead of `httpx.AsyncClient.get`, resulting in unmocked network calls and an avoidable 5-second sleep in the test suite.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 171,
+     "end_line": 180,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "monkeypatch.setattr(requests, 'get', dummy_get)",
+     "comment": "`Browser._setup_user_provided_browser` uses `httpx.AsyncClient.get` to check the Chrome debugging endpoint, not `requests.get`. Patching `requests.get` has no effect, so real HTTP requests are attempted against `localhost:9223`. Consequently, the post-launch retry loop in `browser.py` fails all 10 attempts and sleeps for 0.5s each iteration, adding a 5-second delay to the test run.",
+     "suggestion": "Mock `httpx.AsyncClient.get` instead of `requests.get`. Ensure the initial check simulates no existing browser (to reach `create_subprocess_exec`), and the subsequent polling checks return a 200 response so the retry loop exits immediately without sleeping.",
+     "suggested_code": null
+    },
+    {
+     "start_line": 189,
+     "end_line": 191,
+     "category": "nitpick",
+     "confidence": "high",
+     "evidence": "f'Chrome must be started with with --remote-debugging-port={custom_chrome_remote_debugging_port} argument'",
+     "comment": "Duplicated word 'with with' in the assertion failure message.",
+     "suggestion": "Remove the duplicated word 'with'.",
+     "suggested_code": "\t\tassert f'--remote-debugging-port={custom_chrome_remote_debugging_port}' in args, (\n\t\t\tf'Chrome must be started with --remote-debugging-port={custom_chrome_remote_debugging_port} argument'\n\t\t)"
+    }
+   ],
+   "filename": "tests/test_browser.py"
+  }
+ ],
+ "n_files": 5,
+ "input_tokens": 59264,
+ "output_tokens": 1443,
+ "calls": 5,
+ "tool_calls": null,
+ "elapsed_s": 168.2,
+ "mode": "per-file",
+ "routing_tokens": 19761,
+ "call_input_tokens": [
+  9726,
+  17181,
+  12565,
+  9967,
+  9825
+ ],
+ "model": "gemini-3.8-flash"
+}

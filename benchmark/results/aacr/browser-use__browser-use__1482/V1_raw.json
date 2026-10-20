@@ -1,0 +1,77 @@
+{
+ "results": [
+  {
+   "summary": "將 noqa 抑制碼從 ASYNC 改為 RUF006，但 RUF006 是針對 asyncio.create_task 的規則，在此處並不適用且可能造成 unused noqa 警告。",
+   "issues": [
+    {
+     "line": 1225,
+     "severity": "style",
+     "comment": "RUF006 是 Ruff 用於檢查未保留 `asyncio.create_task` 回傳值引用的規則（asyncio-dangling-task）。此處為同步的 `self.llm.invoke` 呼叫並已指派給 `response` 變數，與 RUF006 完全無關，此註解很可能是誤用，且若開啟了 RUF100（unused noqa directive）可能會導致 lint 檢查失敗。",
+     "suggestion": "請確認此處實際需要忽略的 linter 規則代碼（若是針對同步阻塞呼叫，可能是 ASYNC 相關規則）；若此處本就不會觸發任何 lint 錯誤，建議直接移除 `# noqa: RUF006`。"
+    }
+   ],
+   "filename": "browser_use/agent/service.py"
+  },
+  {
+   "summary": "將 Chrome remote debugging port 參數化並改用 `create_subprocess_exec`，但型別標註允許 None 且缺乏相應處理，另外 set 移除元素時存在潛在 KeyError 風險。",
+   "issues": [
+    {
+     "line": 111,
+     "severity": "bug",
+     "comment": "型別定義為 `int | None`，但後續程式碼（包含 socket 連線檢查與 URL 組合）並未處理 `None` 的狀況。若傳入 `None`，`s.connect_ex(('localhost', None))` 將引發 `TypeError`，且 HTTP 請求會發往 `http://localhost:None/...`。",
+     "suggestion": "若此欄位為必填的 port，建議型別改為 `int` 並可用 `Field(default=CHROME_DEBUG_PORT, ge=1, le=65535)` 進行範圍驗證；若允許關閉除錯埠（即 None），則應在相關邏輯中增加 `if self.config.chrome_remote_debugging_port is not None:` 判斷。"
+    },
+    {
+     "line": 292,
+     "severity": "style",
+     "comment": "使用 `chrome_args.remove(...)` 在元素不存在於 set 中時會拋出 `KeyError`。雖然上面有新增該參數，但直接依賴字串比對進行 remove 較為脆弱。",
+     "suggestion": "建議改用 `chrome_args.discard(f'--remote-debugging-port={self.config.chrome_remote_debugging_port}')`，避免在元素不存在時引發異常。"
+    }
+   ],
+   "filename": "browser_use/browser/browser.py"
+  },
+  {
+   "summary": "將寫死的 remote debugging port 自預設參數中移除，改為定義常數供外部動態注入，改動方向合理。",
+   "issues": [
+    {
+     "line": 97,
+     "severity": "style",
+     "comment": "使用了舊式的 %-formatting 佔位符 `%(chrome_remote_debugging_port)s`。若專案其他部分慣用 `str.format()` 或 f-string，此格式可能不一致，且如果調用端誤用 `.format()` 替換將無法正常運作。",
+     "suggestion": "如果外部呼叫端支援，建議使用現代 Python 慣例的格式化方式，如 `'{chrome_remote_debugging_port}'` 或直接提供輔助函式/格式字串。"
+    }
+   ],
+   "filename": "browser_use/browser/chrome.py"
+  },
+  {
+   "summary": "移除了 `async with await` 表達式中多餘的括號，語法正確且符合 Python 慣用語，無其他問題。",
+   "issues": [],
+   "filename": "examples/custom-functions/file_upload.py"
+  },
+  {
+   "summary": "新增針對自訂 Chrome remote debugging port 的單元測試，整體結構與既有測試一致且邏輯正確。",
+   "issues": [
+    {
+     "line": 190,
+     "severity": "style",
+     "comment": "斷言訊息中出現重複字詞「with with」。",
+     "suggestion": "將「with with」修正為單個「with」：f'Chrome must be started with --remote-debugging-port={custom_chrome_remote_debugging_port} argument'"
+    }
+   ],
+   "filename": "tests/test_browser.py"
+  }
+ ],
+ "n_files": 5,
+ "elapsed_s": 50.4,
+ "calls": 5,
+ "input_tokens": 20622,
+ "output_tokens": 1016,
+ "call_input_tokens": [
+  1484,
+  10652,
+  4417,
+  1711,
+  2358
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

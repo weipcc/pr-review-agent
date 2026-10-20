@@ -1,0 +1,62 @@
+{
+ "results": [
+  {
+   "summary": "在 CsWin32 程式碼產生配置中新增 SOCKADDR_IN 與 SOCKADDR_IN6 結構，無問題。",
+   "issues": [],
+   "filename": "src/Servers/HttpSys/src/NativeMethods.txt"
+  },
+  {
+   "summary": "新增 SOCKADDR_IN 與 SOCKADDR_IN6 供 CsWin32 代碼生成，改動簡潔且無問題。",
+   "issues": [],
+   "filename": "src/Servers/IIS/IIS/src/NativeMethods.txt"
+  },
+  {
+   "summary": "重構為強型別 SOCKADDR 結構體封裝，但 GetPort 在處理大於 32767 的 Port 時會因 short 符號擴展而回傳負數。",
+   "issues": [
+    {
+     "line": 40,
+     "severity": "bug",
+     "comment": "IPAddress.NetworkToHostOrder((short)...) 的回傳型別為 short。當 Port 數值大於 32767 時（常見於 client 的 ephemeral port，範圍通常為 49152~65535），轉型為 short 會變為負數，隱式轉換為 int 回傳時會發生符號擴展（例如 Port 50000 會變成 -15536）。",
+     "suggestion": "請轉型為 ushort 以避免符號擴展，例如：return (ushort)IPAddress.NetworkToHostOrder((short)_sockaddr.sin_port); 或使用 System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(_sockaddr.sin_port);"
+    },
+    {
+     "line": 62,
+     "severity": "bug",
+     "comment": "同 IPv4 實作，IPAddress.NetworkToHostOrder((short)...) 會使大於 32767 的 Port 在回傳為 int 時變成負數。",
+     "suggestion": "請轉型為 ushort 以避免符號擴展，例如：return (ushort)IPAddress.NetworkToHostOrder((short)_sockaddr.sin6_port); 或使用 System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(_sockaddr.sin6_port);"
+    },
+    {
+     "line": 20,
+     "severity": "bug",
+     "comment": "若傳入的 pSockaddr 指標為 null，直接解引用 pSockaddr->sa_family 會引發 AccessViolationException 或 NullReferenceException。",
+     "suggestion": "建議在 switch 前加入 null 檢查：if (pSockaddr == null) { return null; }"
+    }
+   ],
+   "filename": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs"
+  },
+  {
+   "summary": "將指標型別轉換從 IntPtr 調整為強型別 SOCKADDR*，符合 Win32 API 簽名，改動正確無問題。",
+   "issues": [],
+   "filename": "src/Shared/HttpSys/RequestProcessing/NativeRequestContext.cs"
+  },
+  {
+   "summary": "新增 CsWin32 的 SOCKADDR_IN 與 SOCKADDR_IN6 結構產生設定，改動簡潔無問題。",
+   "issues": [],
+   "filename": "src/Shared/test/Shared.Tests/NativeMethods.txt"
+  }
+ ],
+ "n_files": 5,
+ "elapsed_s": 36.7,
+ "calls": 5,
+ "input_tokens": 5827,
+ "output_tokens": 660,
+ "call_input_tokens": [
+  861,
+  452,
+  2469,
+  1763,
+  282
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

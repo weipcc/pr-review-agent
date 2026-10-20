@@ -1,0 +1,39 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 5,
+  "findings": [
+   {
+    "file": "packages/svelte/src/compiler/phases/2-analyze/index.js",
+    "start": 441,
+    "end": 441,
+    "category": "bug",
+    "comment": "`module.scope.references` is a Map. `Map.prototype.keys()` returns a MapIterator, which does not have a `.some()` method in Node.js 18 or 20 (Iterator helpers were added in Node.js 22). Invoking this will throw `TypeError: module.scope.references.keys(...).some is not a function`. Furthermore, membership checks on a Map can be done directly in O(1) with `.has()`."
+   },
+   {
+    "file": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-let/_config.js",
+    "start": 12,
+    "end": 12,
+    "category": "question",
+    "comment": "Should this test assert '0' instead of '1'? According to the PR description and the scope check added in 2-analyze/index.js, 'export let' (including `let x; export { x }`) is intended to be treated as an explicit legacy mode indicator that sets `maybe_runes` to false. In `legacy-runes-ambiguous-explicit-false`, explicit legacy mode means external rune changes do not trigger fine-grained template updates, resulting in '0'. Asserting '1' here suggests either the assertion was copied from `legacy-runes-ambiguous-export-const` or the export-let check did not actually put the component in legacy mode."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "packages/svelte/src/compiler/phases/2-analyze/index.js",
+   "matched_gt": [],
+   "reason": "1. No match — Generated comment flags calling `.some()` on a MapIterator (TypeError), while Reference 1 addresses the logic of `maybe_runes` handling `$:` reactive statements.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-let/_config.js",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

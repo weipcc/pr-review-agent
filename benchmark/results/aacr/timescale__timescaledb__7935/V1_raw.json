@@ -1,0 +1,32 @@
+{
+ "results": [
+  {
+   "summary": "重構封裝 hypercore_open_compressed 時發生嚴重鎖定層級錯誤（寫死 AccessShareLock 而忽略傳入的 mode 參數），並在索引路徑掃描中存在不必要的重複快取呼叫。",
+   "issues": [
+    {
+     "line": 109,
+     "severity": "bug",
+     "comment": "函數 hypercore_open_compressed 接收了 mode 參數，但在呼叫 table_open 時卻寫死了 AccessShareLock，導致 mode 參數完全被忽略。這會造成需要 RowExclusiveLock 或 AccessExclusiveLock（例如 hypercore_tuple_delete 或 compress_and_swap_heap）的地方只拿到 AccessShareLock，引發嚴重的並行競爭與鎖定安全問題。",
+     "suggestion": "將 table_open(hcinfo->compressed_relid, AccessShareLock) 改為 table_open(hcinfo->compressed_relid, mode)。"
+    },
+    {
+     "line": 3899,
+     "severity": "performance",
+     "comment": "在 for 迴圈內重複呼叫 RelationGetHypercoreInfo(rel)。迴圈內部並無任何可能使 rd_amcache 失效的呼叫，每次迭代重複呼叫造成不必要的效能開銷。",
+     "suggestion": "將 const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel); 移至 for 迴圈之外（放在 relation_open 之後、for 迴圈之前）。"
+    }
+   ],
+   "filename": "tsl/src/hypercore/hypercore_handler.c"
+  }
+ ],
+ "n_files": 1,
+ "elapsed_s": 14.6,
+ "calls": 1,
+ "input_tokens": 25597,
+ "output_tokens": 347,
+ "call_input_tokens": [
+  25597
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

@@ -1,0 +1,139 @@
+{
+ "results": [
+  {
+   "change_intent": "Add a prod-down Makefile target to stop and remove production docker containers.",
+   "summary": "Clean and idiomatic addition of the prod-down target matching existing dev-down patterns.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "Makefile"
+  },
+  {
+   "change_intent": "Remove the unused `body` property from the destructured response in an OAuth test.",
+   "summary": "The change cleans up an unused variable in an e2e test assertion without altering test behavior.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "e2e/src/api/specs/oauth.e2e-spec.ts"
+  },
+  {
+   "change_intent": "Remove redundant navigation from the test setup and delete the photo viewer loading spinner test.",
+   "summary": "The change cleanly removes unnecessary test steps and navigation with no newly added code to review.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "e2e/src/web/specs/photo-viewer.e2e-spec.ts"
+  },
+  {
+   "change_intent": "Remove the expectation waiting for the 'DOWNLOADING' text indicator during shared link download e2e test.",
+   "summary": "The test change only removes an assertion/wait step and contains no added code to review.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "e2e/src/web/specs/shared-link.e2e-spec.ts"
+  },
+  {
+   "change_intent": "Exclude service worker files from the type-checked ESLint configuration.",
+   "summary": "Adds an ignore pattern for service worker files to the main TypeScript/Svelte ESLint configuration block.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "web/eslint.config.js"
+  },
+  {
+   "change_intent": "Preload and cancel photo viewer asset loading via service worker messaging instead of in-memory Image elements.",
+   "summary": "The changes integrate service worker-based image preloading and cancellation on unmount cleanly, with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "web/src/lib/components/asset-viewer/photo-viewer.svelte"
+  },
+  {
+   "change_intent": "Cancel pending image loads via service worker messaging when the thumbnail element is unmounted.",
+   "summary": "The cancellation logic works as intended for in-flight requests, but it should avoid posting cancel messages when the thumbnail has already loaded.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 70,
+     "end_line": 70,
+     "category": "performance",
+     "confidence": "medium",
+     "evidence": "destroy: () => cancelImageUrl(url),",
+     "comment": "When virtual scrolling unmounts thumbnails that have already loaded successfully, this still dispatches a cancel message over BroadcastChannel to the service worker for each element. In addition to unnecessary IPC overhead during fast scrolling, if another component is currently loading the same URL, this could abort that request.",
+     "suggestion": "Check whether the image is still pending before canceling the request (e.g. check !loaded).",
+     "suggested_code": "destroy: () => {\n        if (!loaded) {\n          cancelImageUrl(url);\n        }\n      },"
+    }
+   ],
+   "filename": "web/src/lib/components/assets/thumbnail/image-thumbnail.svelte"
+  },
+  {
+   "change_intent": "Provide helper functions to post preload and cancel image messages to the service worker via BroadcastChannel.",
+   "summary": "Clean and concise implementation of BroadcastChannel messaging for service worker image loading control.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "web/src/lib/utils/sw-messaging.ts"
+  },
+  {
+   "change_intent": "Implement a service worker to cache, preload, and cancel in-flight image requests for Immich assets.",
+   "summary": "The service worker introduces network cancellation and preloading, but relies on `event.origin` in BroadcastChannel which can cause runtime errors, discards request headers like `Range` by passing a URL to `fetch()` instead of `event.request`, and has concurrency issues in `pendingLoads`.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 78,
+     "end_line": 78,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "const url = new URL(urlstring, event.origin);",
+     "comment": "On a BroadcastChannel MessageEvent, `event.origin` is often an empty string (\"\") or undefined because BroadcastChannel is strictly same-origin. When `urlstring` is a relative path (such as `/api/assets/...`), `new URL(urlstring, \"\")` throws a `TypeError: Invalid base URL`, causing the message handler to fail. The same issue exists on line 87.",
+     "suggestion": "Use `self.location.origin` as the base URL instead of `event.origin`.",
+     "suggested_code": "const url = new URL(urlstring, self.location.origin);"
+    },
+    {
+     "start_line": 51,
+     "end_line": 53,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "const request = fetch(url, {\n      signal: cancelToken.signal,\n    });",
+     "comment": "Calling `fetch(url, ...)` instead of forwarding `event.request` discards all incoming request headers, such as `Range` (crucial for video streaming or partial content under `/original`) and `Authorization` / conditional headers. Additionally, intercepting `/original` and saving the entire response to `CacheStorage` via `cache.put()` can quickly exceed storage quotas on large photos and videos.",
+     "suggestion": "Forward `event.request` to `fetch()` when responding to a fetch event so headers like `Range` are preserved, and consider skipping `CacheStorage` for large `/original` assets.",
+     "suggested_code": null
+    },
+    {
+     "start_line": 54,
+     "end_line": 66,
+     "category": "bug",
+     "confidence": "medium",
+     "evidence": "pendingLoads.set(url.toString(), cancelToken);\n    response = await request;\n    if (!(response instanceof Response)) {\n      throw new TypeError('invalid response from fetch');\n    }\n    if (response.status === 200) {\n      cache.put(url, response.clone());\n    }\n    return response;\n  } catch {\n    return Response.error();\n  } finally {\n    pendingLoads.delete(url.toString());",
+     "comment": "`pendingLoads` maps `url.toString()` to a single `AbortController`. If the same URL is requested concurrently (e.g. preloading an asset while viewing it, or rendering the same image in two components), the subsequent request overwrites the controller in the map. When the earlier request finishes, the `finally` block deletes the URL from `pendingLoads` while the second request is still running, leaving it untracked and un-cancellable.",
+     "suggestion": "Track controllers in a set or reference count active requests per URL so concurrent requests do not overwrite or prematurely delete each other's cancellation tokens.",
+     "suggested_code": null
+    },
+    {
+     "start_line": 59,
+     "end_line": 61,
+     "category": "bug",
+     "confidence": "medium",
+     "evidence": "if (response.status === 200) {\n      cache.put(url, response.clone());\n    }",
+     "comment": "`cache.put()` returns a Promise that is not awaited and has no `.catch()` handler. If caching fails (for example, due to a `QuotaExceededError` on large assets), this results in an unhandled promise rejection in the service worker.",
+     "suggestion": "Attach a `.catch()` handler to `cache.put()` to handle cache write failures gracefully.",
+     "suggested_code": "if (response.status === 200) {\n      cache.put(url, response.clone()).catch(() => {});\n    }"
+    }
+   ],
+   "filename": "web/src/service-worker/index.ts"
+  }
+ ],
+ "n_files": 9,
+ "input_tokens": 81982,
+ "output_tokens": 1776,
+ "calls": 9,
+ "tool_calls": null,
+ "elapsed_s": 408.4,
+ "mode": "per-file",
+ "routing_tokens": 18967,
+ "call_input_tokens": [
+  8758,
+  12750,
+  8137,
+  8859,
+  8379,
+  10706,
+  8763,
+  7351,
+  8279
+ ],
+ "model": "gemini-3.8-flash"
+}

@@ -1,0 +1,69 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 2,
+  "findings": [
+   {
+    "file": "browser_use/agent/service.py",
+    "start": 261,
+    "end": 261,
+    "category": "refactor",
+    "comment": "Synchronizing Browser configuration attributes inside Agent.__init__ mutates an injected browser instance's context config (even if a custom browser_context was already provided, or if new_context_config was explicitly configured). Additionally, this synchronization will not take effect when Browser is used independently of Agent."
+   },
+   {
+    "file": "browser_use/browser/browser.py",
+    "start": 283,
+    "end": 283,
+    "category": "bug",
+    "comment": "Hardcoding channel='chrome' causes two issues: 1) It will raise a runtime error when self.config.browser_class is 'firefox' or 'webkit' because neither supports the 'chrome' channel. 2) Unlike bundled Chromium installed via 'playwright install chromium', channel='chrome' requires a system installation of Google Chrome and will fail if Chrome is not installed in the environment (such as in Docker or CI)."
+   },
+   {
+    "file": "browser_use/browser/context.py",
+    "start": 414,
+    "end": 416,
+    "category": "bug",
+    "comment": "When self.browser.config.headless is False, neither viewport nor no_viewport is added to kwargs. Previously, no_viewport=True was passed unconditionally. In headed mode, Playwright/Patchright falls back to its default viewport (1280x720), ignoring self.config.browser_window_size (1280x1100) and preventing the viewport from matching the browser window. In addition, the existing self.config.no_viewport attribute is never respected."
+   },
+   {
+    "file": "pyproject.toml",
+    "start": 19,
+    "end": 19,
+    "category": "question",
+    "comment": "All imports across the codebase have been migrated from `playwright` to `patchright`. Since `patchright` serves as a drop-in replacement, retaining `playwright>=1.51.0` in `dependencies` appears redundant and will cause both packages to be installed."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "browser_use/agent/service.py",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "browser_use/browser/browser.py",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both identify that hardcoding `channel='chrome'` causes runtime errors for non-Chromium browsers like Firefox and WebKit.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "browser_use/browser/context.py",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "pyproject.toml",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

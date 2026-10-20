@@ -1,0 +1,57 @@
+{
+ "results": [
+  {
+   "summary": "新增手動測試（manualTests）清單過濾機制以避免覆蓋手動維護的測試，但存在未使用的變數及測試名稱比對格式潛在不一致的問題。",
+   "issues": [
+    {
+     "line": 17,
+     "severity": "style",
+     "comment": "定義了 manualOutputDir 且在 main() 中呼叫了 fs.mkdirSync(manualOutputDir)，但後續未在任何地方使用該目錄，屬於未使用的死代碼。",
+     "suggestion": "若不需要由腳本輸出檔案至 manualOutputDir，建議移除 manualOutputDir 變數及其 fs.mkdirSync 呼叫；若是有後續輸出規劃，請補齊相關邏輯。"
+    },
+    {
+     "line": 72,
+     "severity": "bug",
+     "comment": "比對 manualTests.has(testName) 時，testName 僅將檔名字首轉為大寫（如 'FooBar'），沒有 'Test' 前綴。但參考 getFailingTests 中對 failingTests.txt 做了 substring(4) 處理（通常是為了去除 Go 測試的 'Test' 前綴），若 manualTests.txt 內記錄的是標準 Go 測試名稱（如 'TestFooBar'），此處比對將會失敗導致過濾無效。",
+     "suggestion": "建議在讀取 manualTests.txt 時進行正規化（例如若以 'Test' 開頭則去除前綴），或在比對時同時支援：manualTests.has(testName) || manualTests.has(`Test${testName}`)。"
+    }
+   ],
+   "filename": "internal/fourslash/_scripts/convertFourslash.mts"
+  },
+  {
+   "summary": "腳本邏輯清晰簡潔，但缺乏參數用法提示，且覆寫已存在的 manual 測試時未做保護或防呆。",
+   "issues": [
+    {
+     "line": 12,
+     "severity": "style",
+     "comment": "當使用者未提供引數時直接退出，沒有印出任何使用方式或錯誤提示，降低 CLI 易用性。",
+     "suggestion": "在 process.exit(1) 前印出提示，例如：console.error(\"Usage: makeManual.mts <testName>\");"
+    },
+    {
+     "line": 30,
+     "severity": "bug",
+     "comment": "如果 manual 目錄下已經存在同名測試檔案，fs.renameSync 會直接將其覆蓋，可能導致先前手工維護的測試內容遺失。",
+     "suggestion": "在移動檔案前檢查 manualTestFile 是否已存在（fs.existsSync(manualTestFile)），若存在則警告或阻止覆寫。"
+    }
+   ],
+   "filename": "internal/fourslash/_scripts/makeManual.mts"
+  },
+  {
+   "summary": "新增 makemanual npm script，風格與呼叫方式皆與既有的 fourslash 腳本一致，無明顯問題。",
+   "issues": [],
+   "filename": "package.json"
+  }
+ ],
+ "n_files": 3,
+ "elapsed_s": 37.5,
+ "calls": 3,
+ "input_tokens": 6599,
+ "output_tokens": 656,
+ "call_input_tokens": [
+  4321,
+  1246,
+  1032
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

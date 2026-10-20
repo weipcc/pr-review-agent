@@ -1,0 +1,59 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 8,
+  "findings": [
+   {
+    "file": "src/gpu/vulkan/SDL_gpu_vulkan.c",
+    "start": 10607,
+    "end": 10776,
+    "category": "bug",
+    "comment": "renderer->defragInProgress is set to 1 at the beginning of VULKAN_INTERNAL_DefragmentMemory, but it is never reset back to 0 on any return path (neither on allocation failure nor on successful completion). Because VULKAN_Submit checks '!renderer->defragInProgress' before calling defragmentation, defragmentation will run at most once during the renderer's entire lifetime and will permanently block subsequent defragmentations."
+   },
+   {
+    "file": "src/gpu/vulkan/SDL_gpu_vulkan.c",
+    "start": 5878,
+    "end": 5885,
+    "category": "bug",
+    "comment": "In VULKAN_INTERNAL_CycleActiveTexture, VULKAN_INTERNAL_TextureTransitionToDefaultUsage is called with texture before checking if texture is NULL. If VULKAN_INTERNAL_CreateTexture fails (for example due to out-of-memory), texture will be NULL, causing a null pointer dereference inside VULKAN_INTERNAL_TextureTransitionToDefaultUsage."
+   },
+   {
+    "file": "src/gpu/vulkan/SDL_gpu_vulkan.c",
+    "start": 10701,
+    "end": 10701,
+    "category": "nitpick",
+    "comment": "The error message says 'Failed to allocate defrag buffer!' in the texture creation failure path."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/gpu/vulkan/SDL_gpu_vulkan.c",
+   "matched_gt": [
+    6
+   ],
+   "reason": "1. No match — concerns code style/brace placement.\n2. No match — concerns NULL check ordering for texture creation.\n3. No match — primarily concerns error handling and command buffer submission when defragmentation fails, rather than the missing flag reset itself.\n4. No match — concerns code style/brace placement.\n5. No match — concerns thread synchronization and race conditions with allocatorLock.\n6. No match — concerns potential out-of-bounds/underflow array access.\n7. Match — addresses the same core bug that `renderer->defragInProgress` is not reset to 0 on failure, permanently blocking subsequent defragmentation attempts.\n8. No match — concerns an inaccurate error log message.\n\n[7]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "src/gpu/vulkan/SDL_gpu_vulkan.c",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. No match — discusses brace placement style, not a null pointer dereference.\n2. Match — both identify that `VULKAN_INTERNAL_TextureTransitionToDefaultUsage` is called before checking if `texture` is NULL, risking a null pointer dereference.\n3. No match — discusses error handling and flag resetting during defragmentation.\n4. No match — discusses code formatting style.\n5. No match — discusses race conditions and synchronization in cleanup loops.\n6. No match — discusses potential buffer underflow from negative array indexing.\n7. No match — discusses unreset defragmentation flag on allocation failure.\n8. No match — discusses a misleading error log message.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "src/gpu/vulkan/SDL_gpu_vulkan.c",
+   "matched_gt": [
+    7
+   ],
+   "reason": "1. No match — concerns brace formatting, not an incorrect error message.\n2. No match — concerns order of operations / null dereference before null check.\n3. No match — concerns state cleanup (`renderer->defragInProgress`) upon allocation failure.\n4. No match — concerns brace formatting.\n5. No match — concerns race conditions and lack of synchronization.\n6. No match — concerns potential buffer underflow from array index access.\n7. No match — concerns resetting `defragInProgress` on buffer allocation failure.\n8. Match — both identify that the error message says 'Failed to allocate defrag buffer!' instead of referring to a texture in the texture allocation failure path.\n\n[8]",
+   "hit_new_gt": true
+  }
+ ]
+}

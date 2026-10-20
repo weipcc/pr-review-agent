@@ -1,0 +1,43 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 13,
+  "findings": [
+   {
+    "file": ".github/workflows/release-publish.yml",
+    "start": 106,
+    "end": 106,
+    "category": "bug",
+    "comment": "GitHub Actions action inputs under `with:` are evaluated by GitHub Actions workflow expressions, not inside a shell. The command substitution `$(date ...)` will not be executed; instead, the literal string `'$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")'` will be passed as the build argument value. In the application, `Date.parse()` will fail to parse this literal string, causing `N8N_RELEASE_DATE` to be undefined and disabling expiration tracking."
+   },
+   {
+    "file": "packages/core/src/errors/error-reporter.ts",
+    "start": 89,
+    "end": 92,
+    "category": "bug",
+    "comment": "Node.js uses a 32-bit signed integer for `setTimeout` delays (max value: 2,147,483,647 ms, ~24.8 days). Because `SIX_WEEKS_IN_MS` is 3,628,800,000 ms (42 days), any release newer than ~17 days will have `releaseExpiresInMs > 2147483647`. Node.js emits a `TimeoutOverflowWarning` and sets the delay to 1 ms, causing the timer to fire immediately and disabling error reporting right after startup. In addition, an active timer without `.unref()` would keep short-lived CLI command processes from exiting."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": ".github/workflows/release-publish.yml",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both flag that shell command substitution `$(date ...)` inside action inputs will not be executed and will be passed as a literal string.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "packages/core/src/errors/error-reporter.ts",
+   "matched_gt": [
+    12
+   ],
+   "reason": "1. No match — concerns code maintainability and extracting time utility constants.\n2. No match — concerns process crash behavior and `uncaughtException` handling.\n3. No match — concerns missing input validation for `releaseDate`.\n4. No match — concerns setting `this.enabled` when a release is already expired.\n5. Match — both identify that `SIX_WEEKS_IN_MS` exceeds Node's 32-bit integer limit for `setTimeout`, causing it to fire immediately and disable error tracking prematurely.\n\n[5]",
+   "hit_new_gt": true
+  }
+ ]
+}

@@ -1,0 +1,146 @@
+{
+ "results": [
+  {
+   "filename": "Makefile",
+   "summary": "新增 prod-down 目標以停止生產環境的 docker-compose 容器，符合專案現有的命令慣例且無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "e2e/src/api/specs/oauth.e2e-spec.ts",
+   "summary": "清理測試案例中未使用的變數，改動簡潔且無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "e2e/src/web/specs/photo-viewer.e2e-spec.ts",
+   "summary": "移除了冗餘的頁面跳轉與 loading spinner 測試案例，但 beforeEach 中保留的 waitForLoadState('networkidle') 在沒有導航的情況下無效。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 24,
+     "end_line": 24,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在移除 `await page.goto('/photos')` 之後，頁面尚未進行任何導航（處於 about:blank），此時呼叫 `await page.waitForLoadState('networkidle')` 沒有實質作用，或者可能會產生無意義的等待與非預期行為。"
+    }
+   ]
+  },
+  {
+   "filename": "e2e/src/web/specs/shared-link.e2e-spec.ts",
+   "summary": "移除了等待 DOWNLOADING 提示文字的步驟，改動乾淨且無引入新的問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "web/eslint.config.js",
+   "summary": "在 ESLint Flat Config 中，將 ignores 放在包含 rules 的物件內僅會局部生效，無法達到全域忽略 service-worker 的效果。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 61,
+     "end_line": 61,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在 ESLint Flat Config 機制中，當 ignores 與 rules、languageOptions 等欄位同處一個配置物件時，僅對該特定物件生效（局部忽略），無法完全排除檔案的檢查。前方的 recommended 配置與其他設定仍會對 service-worker 進行 lint。"
+    }
+   ]
+  },
+  {
+   "filename": "web/src/lib/components/asset-viewer/photo-viewer.svelte",
+   "summary": "改用 Service Worker 訊息機制來處理圖片預載（preloadImageUrl）與卸載時的取消請求（cancelImageUrl），改動簡潔且符合規範。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "web/src/lib/components/assets/thumbnail/image-thumbnail.svelte",
+   "summary": "在圖片元件銷毀時加入取消圖片請求的機制，但未確認圖片是否已完成載入，且未處理 url prop 變更的情境。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 70,
+     "end_line": 70,
+     "category": "performance",
+     "confidence": "n/a",
+     "comment": "當圖片已經成功載入（`loaded === true`）時，在元件銷毀（例如使用者滾動列表離開可視區）時仍會呼叫 `cancelImageUrl(url)`，這會產生不必要的 Service Worker 通訊開銷，甚至可能干擾已完成請求的後續處理或快取行為。此外，若父層更新了 `url` prop，目前的 action 無法監聽變更並取消前一個 URL 的載入。"
+    }
+   ]
+  },
+  {
+   "filename": "web/src/lib/utils/sw-messaging.ts",
+   "summary": "新增了用於與 Service Worker 通訊的 BroadcastChannel 輔助函式，但需注意在 SSR 或不支援 BroadcastChannel 的環境下的容錯性。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 1,
+     "end_line": 1,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在模組頂層直接實例化 `new BroadcastChannel('immich')`。如果此模組在 SSR（例如 SvelteKit 伺服器端渲染）或未提供 `BroadcastChannel` 的測試環境中被匯入，可能會導致 ReferenceError 或非預期行為。"
+    },
+    {
+     "start_line": 6,
+     "end_line": 6,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "函式 `cancelImageUrl` 與 `preloadImageUrl` 之間缺少空行，不符合常見的程式碼排版風格規範。"
+    }
+   ]
+  },
+  {
+   "filename": "web/src/service-worker/index.ts",
+   "summary": "新增了用於快取、預載及取消資源載入的 Service Worker，但在原始請求屬性傳遞、快取 Promise 例外處理、舊快取清除範圍與同 URL 併發控制上有潛在缺陷。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 37,
+     "end_line": 37,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "deleteOldCaches 會遍歷並刪除所有名稱不等於 CACHE 的快取。若同網域有其他功能或函式庫建立的快取，會被無差別清除。"
+    },
+    {
+     "start_line": 51,
+     "end_line": 51,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在 fetch 事件中僅傳入 URL 建立 fetch(url)，會遺失原始 event.request 的 headers（例如 Authorization）、credentials 與 Range 等設定，可能導致需要授權的請求失敗，或破壞影音串流的 Range 請求機制。"
+    },
+    {
+     "start_line": 54,
+     "end_line": 54,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "pendingLoads 以 url.toString() 作為 key。若同一個 URL 同時發起多次請求（例如畫面上多處顯示同一縮圖），後續請求會覆蓋前一個 AbortController，且最先結束的請求會在 finally 中將 key 刪除，使其他進行中的請求失去取消機制。"
+    },
+    {
+     "start_line": 60,
+     "end_line": 60,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "cache.put 回傳 Promise，但此處既沒有 await 也沒有 .catch() 處理。若遇到儲存配額滿（QuotaExceededError）或不可快取的回應（如 206 Partial Content），會造成未捕獲的 Promise 錯誤（unhandled rejection）；且未受 await 或 event.waitUntil 保證時，Service Worker 可能在快取寫入完成前就被系統休眠終止。"
+    }
+   ]
+  }
+ ],
+ "n_files": 9,
+ "input_tokens": 20498,
+ "output_tokens": 1676,
+ "calls": 9,
+ "tool_calls": null,
+ "elapsed_s": 127.0,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  1788,
+  5811,
+  1373,
+  1894,
+  1358,
+  3932,
+  1956,
+  351,
+  2035
+ ],
+ "model": "gemini-3.8-flash"
+}

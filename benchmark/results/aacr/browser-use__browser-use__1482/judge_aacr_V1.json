@@ -1,0 +1,83 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 2,
+  "findings": [
+   {
+    "file": "browser_use/agent/service.py",
+    "start": 1225,
+    "end": 1225,
+    "category": "style",
+    "comment": "RUF006 是 Ruff 用於檢查未保留 `asyncio.create_task` 回傳值引用的規則（asyncio-dangling-task）。此處為同步的 `self.llm.invoke` 呼叫並已指派給 `response` 變數，與 RUF006 完全無關，此註解很可能是誤用，且若開啟了 RUF100（unused noqa directive）可能會導致 lint 檢查失敗。"
+   },
+   {
+    "file": "browser_use/browser/browser.py",
+    "start": 111,
+    "end": 111,
+    "category": "bug",
+    "comment": "型別定義為 `int | None`，但後續程式碼（包含 socket 連線檢查與 URL 組合）並未處理 `None` 的狀況。若傳入 `None`，`s.connect_ex(('localhost', None))` 將引發 `TypeError`，且 HTTP 請求會發往 `http://localhost:None/...`。"
+   },
+   {
+    "file": "browser_use/browser/browser.py",
+    "start": 292,
+    "end": 292,
+    "category": "style",
+    "comment": "使用 `chrome_args.remove(...)` 在元素不存在於 set 中時會拋出 `KeyError`。雖然上面有新增該參數，但直接依賴字串比對進行 remove 較為脆弱。"
+   },
+   {
+    "file": "browser_use/browser/chrome.py",
+    "start": 97,
+    "end": 97,
+    "category": "style",
+    "comment": "使用了舊式的 %-formatting 佔位符 `%(chrome_remote_debugging_port)s`。若專案其他部分慣用 `str.format()` 或 f-string，此格式可能不一致，且如果調用端誤用 `.format()` 替換將無法正常運作。"
+   },
+   {
+    "file": "tests/test_browser.py",
+    "start": 190,
+    "end": 190,
+    "category": "style",
+    "comment": "斷言訊息中出現重複字詞「with with」。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "browser_use/agent/service.py",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "browser_use/browser/browser.py",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. No match — ref identifies a typo, generated discusses unhandled `None` in port configuration.\n2. Match — both flag that `chrome_remote_debugging_port` typed as `int | None` causes a `TypeError` in `socket.connect_ex` when `None`.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "browser_use/browser/browser.py",
+   "matched_gt": [],
+   "reason": "1. No match — ref flags a typo in documentation, generated discusses potential KeyError with `chrome_args.remove`.\n2. No match — ref addresses a potential TypeError with `chrome_remote_debugging_port` being None, generated discusses `chrome_args.remove`.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "browser_use/browser/chrome.py",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "tests/test_browser.py",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

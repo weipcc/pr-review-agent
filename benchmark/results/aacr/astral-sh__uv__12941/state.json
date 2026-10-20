@@ -1,0 +1,28 @@
+{
+ "owner": "astral-sh",
+ "repo": "uv",
+ "full": "astral-sh/uv",
+ "pr_number": 12941,
+ "title": "Add test for install from remote requirements.txt",
+ "body": "Closes #2593.\r\n",
+ "base_sha": "041c7a5e63d5559ce5571a30e177c072b1b357b2",
+ "review_sha": "61b521f4e9a1e8bdba760394740814f25cc108c2",
+ "head_now": "bce4b7ff80f142ad00351928dbe4f91f9d47883c",
+ "raw_diff": "diff --git a/Cargo.lock b/Cargo.lock\nindex b52e9b4204f..4b79295c259 100644\n--- a/Cargo.lock\n+++ b/Cargo.lock\n@@ -4661,6 +4661,7 @@ dependencies = [\n  \"version-ranges\",\n  \"walkdir\",\n  \"which\",\n+ \"wiremock\",\n  \"zip\",\n ]\n \ndiff --git a/crates/uv/Cargo.toml b/crates/uv/Cargo.toml\nindex 7405ce3ba18..8ff4c0e9a2f 100644\n--- a/crates/uv/Cargo.toml\n+++ b/crates/uv/Cargo.toml\n@@ -123,6 +123,7 @@ reqwest = { workspace = true, features = [\"blocking\"], default-features = false\n similar = { version = \"2.6.0\" }\n tar = { workspace = true }\n tempfile = { workspace = true }\n+wiremock = { workspace = true }\n zip = { workspace = true }\n \n [target.'cfg(unix)'.dependencies]\ndiff --git a/crates/uv/tests/it/pip_install.rs b/crates/uv/tests/it/pip_install.rs\nindex c07d319898b..4d2ef23dd65 100644\n--- a/crates/uv/tests/it/pip_install.rs\n+++ b/crates/uv/tests/it/pip_install.rs\n@@ -10,6 +10,10 @@ use fs_err::File;\n use indoc::indoc;\n use predicates::prelude::predicate;\n use url::Url;\n+use wiremock::{\n+    matchers::{basic_auth, method, path},\n+    Mock, MockServer, ResponseTemplate,\n+};\n \n #[cfg(feature = \"git\")]\n use crate::common::{self, decode_token};\n@@ -482,6 +486,110 @@ fn install_requirements_txt() -> Result<()> {\n     Ok(())\n }\n \n+/// Install a package from a remote `requirements.txt` into a virtual environment.\n+#[tokio::test]\n+async fn install_remote_requirements_txt() -> Result<()> {\n+    let context = TestContext::new(\"3.12\");\n+    let filters = context\n+        .filters()\n+        .into_iter()\n+        .chain([(r\"127\\.0\\.0\\.1[^\\r\\n]*\", \"[LOCALHOST]\")])\n+        .collect::<Vec<_>>();\n+\n+    let server = MockServer::start().await;\n+    let username = \"user\";\n+    let password = \"password\";\n+    let requirements_txt = \"Flask\";\n+\n+    Mock::given(method(\"GET\"))\n+        .and(path(\"/requirements.txt\"))\n+        .and(basic_auth(username, password))\n+        .respond_with(ResponseTemplate::new(200).set_body_string(requirements_txt))\n+        .mount(&server)\n+        .await;\n+\n+    Mock::given(method(\"GET\"))\n+        .and(path(\"/requirements.txt\"))\n+        .respond_with(ResponseTemplate::new(401))\n+        .mount(&server)\n+        .await;\n+\n+    let mut requirements_url = Url::parse(&format!(\"{}/requirements.txt\", &server.uri()))?;\n+\n+    // Should fail without credentials\n+    uv_snapshot!(filters, context.pip_install()\n+        .arg(\"-r\")\n+        .arg(requirements_url.as_str())\n+        .arg(\"--strict\"), @r###\"\n+    success: false\n+    exit_code: 2\n+    ----- stdout -----\n+\n+    ----- stderr -----\n+    error: Error while accessing remote requirements file: `http://[LOCALHOST]\n+    \"###\n+    );\n+\n+    let _ = requirements_url.set_username(username);\n+    let _ = requirements_url.set_password(Some(password));\n+\n+    // Should succeed with credentials\n+    uv_snapshot!(context.pip_install()\n+        .arg(\"-r\")\n+        .arg(requirements_url.as_str())\n+        .arg(\"--strict\"), @r###\"\n+    success: true\n+    exit_code: 0\n+    ----- stdout -----\n+\n+    ----- stderr -----\n+    Resolved 7 packages in [TIME]\n+    Prepared 7 packages in [TIME]\n+    Installed 7 packages in [TIME]\n+     + blinker==1.7.0\n+     + click==8.1.7\n+     + flask==3.0.2\n+     + itsdangerous==2.1.2\n+     + jinja2==3.1.3\n+     + markupsafe==2.1.5\n+     + werkzeug==3.0.1\n+    \"###\n+    );\n+\n+    context.assert_command(\"import flask\").success();\n+\n+    let requirements_txt = \"Jinja2\";\n+\n+    // Update the mock server to serve the new requirements.txt\n+    Mock::given(method(\"GET\"))\n+        .and(path(\"/requirements.txt\"))\n+        .and(basic_auth(username, password))\n+        .respond_with(\n+            ResponseTemplate::new(200)\n+                .set_body_string(requirements_txt)\n+                .insert_header(\"content-type\", \"text/plain\"),\n+        )\n+        .mount(&server)\n+        .await;\n+\n+    uv_snapshot!(context.pip_install()\n+        .arg(\"-r\")\n+        .arg(requirements_url.as_str())\n+        .arg(\"--strict\"), @r###\"\n+    success: true\n+    exit_code: 0\n+    ----- stdout -----\n+\n+    ----- stderr -----\n+    Audited 1 package in [TIME]\n+    \"###\n+    );\n+\n+    context.assert_command(\"import flask\").success();\n+\n+    Ok(())\n+}\n+\n /// Warn (but don't fail) when unsupported flags are set in the `requirements.txt`.\n #[test]\n fn install_unsupported_flag() -> Result<()> {\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "Cargo.lock",
+   "body": "Wiremock is typically used for testing/mocking HTTP servers and should ideally be a dev-dependency rather than a regular dependency to avoid including it in production binaries.\n",
+   "from_line": 4664,
+   "to_line": 4664,
+   "category": "Security Vulnerability",
+   "context": "Repo Level",
+   "diff_hunk": "@@ -4661,6 +4661,7 @@ dependencies = [\n  \"version-ranges\",\n  \"walkdir\",\n  \"which\",\n+ \"wiremock\",\n  \"zip\",\n ]",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "Rust"
+}

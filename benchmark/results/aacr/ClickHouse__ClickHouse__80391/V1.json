@@ -1,0 +1,66 @@
+{
+ "results": [
+  {
+   "filename": "src/Common/CurrentMetrics.cpp",
+   "summary": "新增了 ReadonlyDisks 與 BrokenDisks 兩個計量指標，改動邏輯正確，僅有少許文件描述風格上的格式瑕疵。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 400,
+     "end_line": 400,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "說明文字中的括號前缺少空格，且句末未遵循現有 metric 描述的慣例加上句號（例如 'thread(if enabled)'）。"
+    },
+    {
+     "start_line": 401,
+     "end_line": 401,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "說明文字中的括號前缺少空格，且句末未遵循現有 metric 描述的慣例加上句號（例如 'thread(if enabled)'）。"
+    }
+   ]
+  },
+  {
+   "filename": "src/Disks/DiskLocal.cpp",
+   "summary": "將 logger 名稱附加磁碟名稱以增強日誌可追溯性，改動簡潔無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "src/Disks/DiskLocalCheckThread.cpp",
+   "summary": "新增了磁碟狀態的 CurrentMetrics 指標統計與啟動日誌，但輔助函式未限定內部連結，且無狀態改變時仍會執行不必要的原子更新操作。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 41,
+     "end_line": 41,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "輔助函式 diskStatusChange 僅在該翻譯單元（TU）內使用，但未宣告為 static 也未置於匿名命名空間（anonymous namespace），具有外部連結（external linkage），可能造成全域符號污染或 ODR 潛在衝突。"
+    },
+    {
+     "start_line": 83,
+     "end_line": 83,
+     "category": "performance",
+     "confidence": "n/a",
+     "comment": "當磁碟狀態未變更時，diskStatusChange 會回傳 0，此時仍直接呼叫 CurrentMetrics::add 進行無意義的原子操作（fetch_add(0)），在背景定時任務中會產生額外的快取同步開銷。"
+    }
+   ]
+  }
+ ],
+ "n_files": 3,
+ "input_tokens": 4922,
+ "output_tokens": 638,
+ "calls": 3,
+ "tool_calls": null,
+ "elapsed_s": 45.4,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  1560,
+  1361,
+  2001
+ ],
+ "model": "gemini-3.8-flash"
+}

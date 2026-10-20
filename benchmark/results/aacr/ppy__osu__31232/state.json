@@ -1,0 +1,41 @@
+{
+ "owner": "ppy",
+ "repo": "osu",
+ "full": "ppy/osu",
+ "pr_number": 31232,
+ "title": "Add \"Also fail when missing a slider tail\" option in Sudden Death mod",
+ "body": "![Image of the \"Also fail when missing a slider tail\" option enabled in the Sudden Death mod](https://github.com/user-attachments/assets/db2a3a37-bcaf-45a5-8bce-0e4f1318e3a8)\r\n\r\nCurrently in the Sudden Death mod, there is no option to trigger a fail when you miss on a slider tail (a.k.a no option to force the user to PFC). This PR adds an option to trigger a fail when a miss on a slider tail happens.\r\n\r\n## Example\r\n\r\nWith the option:\r\n\r\nhttps://github.com/user-attachments/assets/83de056d-8d14-45ee-a122-bc7ef71ab069\r\n\r\nWithout the option:\r\n\r\nhttps://github.com/user-attachments/assets/fc81e244-1ee8-4f08-91c2-0e4b7309ea46\r\n\r\n",
+ "base_sha": "605979e790eb0aabdf5e8d6c8a182974697bc3a9",
+ "review_sha": "87697a72e333d1468a35d4a3fec388319cc16e2a",
+ "head_now": "2d8e35be32a923049c717b3ae5906804097d67b6",
+ "raw_diff": "diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs b/osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs\nindex e661610fe773..3a65ba3b10f7 100644\n--- a/osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs\n+++ b/osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs\n@@ -3,7 +3,12 @@\n \n using System;\n using System.Linq;\n+using osu.Framework.Bindables;\n+using osu.Game.Configuration;\n+using osu.Game.Rulesets.Judgements;\n using osu.Game.Rulesets.Mods;\n+using osu.Game.Rulesets.Osu.Objects;\n+using osu.Game.Rulesets.Scoring;\n \n namespace osu.Game.Rulesets.Osu.Mods\n {\n@@ -13,5 +18,16 @@ public class OsuModSuddenDeath : ModSuddenDeath\n         {\n             typeof(OsuModTargetPractice),\n         }).ToArray();\n+\n+        [SettingSource(\"PFC mode\", \"Fail when missing on a slider tail\")]\n+        public BindableBool SliderTailMiss { get; } = new BindableBool();\n+\n+        protected override bool FailCondition(HealthProcessor healthProcessor, JudgementResult result)\n+        {\n+            if (SliderTailMiss.Value && result.HitObject is SliderTailCircle && result.Type == HitResult.IgnoreMiss)\n+                return true;\n+\n+            return result.Type.AffectsCombo() && !result.IsHit;\n+        }\n     }\n }\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs",
+   "body": "The current implementation only fails on HitResult.IgnoreMiss for slider tails. Consider aligning with the existing OsuHealthProcessor logic which treats any non-hit (!result.IsHit) on slider tails as significant. This ensures consistency and prevents unexpected behavior where certain types of slider tail misses might not trigger sudden death.\n",
+   "from_line": 27,
+   "to_line": 28,
+   "category": "Code Defect",
+   "context": "Repo Level",
+   "diff_hunk": "@@ -13,5 +18,16 @@ public class OsuModSuddenDeath : ModSuddenDeath\n         {\n             typeof(OsuModTargetPractice),\n         }).ToArray();\n+\n+        [SettingSource(\"PFC mode\", \"Fail when missing on a slider tail\")]\n+        public BindableBool SliderTailMiss { get; } = new BindableBool();\n+\n+        protected override bool FailCondition(HealthProcessor healthProcessor, JudgementResult result)\n+        {\n+            if (SliderTailMiss.Value && result.HitObject is SliderTailCircle && result.Type == HitResult.IgnoreMiss)\n+                return true;\n+\n+            return result.Type.AffectsCombo() && !result.IsHit;\n+        }\n     }\n }",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 1,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs",
+   "body": "The `FailCondition` override duplicates the base class failure logic instead of calling `base.FailCondition`, creating unnecessary code duplication and maintenance risk. Replace the custom implementation `result.Type.AffectsCombo() && !result.IsHit` with `base.FailCondition(healthProcessor, result)`.",
+   "from_line": 30,
+   "to_line": 30,
+   "category": "Maintainability and Readability",
+   "context": "File Level",
+   "diff_hunk": "@@ -13,5 +18,16 @@ public class OsuModSuddenDeath : ModSuddenDeath\n         {\n             typeof(OsuModTargetPractice),\n         }).ToArray();\n+\n+        [SettingSource(\"PFC mode\", \"Fail when missing on a slider tail\")]\n+        public BindableBool SliderTailMiss { get; } = new BindableBool();\n+\n+        protected override bool FailCondition(HealthProcessor healthProcessor, JudgementResult result)\n+        {\n+            if (SliderTailMiss.Value && result.HitObject is SliderTailCircle && result.Type == HitResult.IgnoreMiss)\n+                return true;\n+\n+            return result.Type.AffectsCombo() && !result.IsHit;\n+        }\n     }\n }",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "C#"
+}

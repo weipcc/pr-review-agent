@@ -1,0 +1,28 @@
+{
+ "owner": "symfony",
+ "repo": "symfony",
+ "full": "symfony/symfony",
+ "pr_number": 60956,
+ "title": "[TypeInfo] Fix `Type::fromValue` incorrectly setting object type instead of enum",
+ "body": "| Q             | A\r\n| ------------- | ---\r\n| Branch?       | 7.3\r\n| Bug fix?      | no\r\n| New feature?  | no\r\n| Deprecations? | no\r\n| Issues        | Fix #...\r\n| License       | MIT\r\n\r\nTried to apply https://github.com/symfony/symfony/pull/60820#discussion_r2156719402 comment, but found some failing cases",
+ "base_sha": "e06b10c4f0088e2966c510d335531f7daed61915",
+ "review_sha": "647870557cf275de666557e552e11e9a295b9d4a",
+ "head_now": "a0cdd3fecb7b1a7309e859179bc3f6d6da94e925",
+ "raw_diff": "diff --git a/src/Symfony/Component/TypeInfo/Tests/TypeFactoryTest.php b/src/Symfony/Component/TypeInfo/Tests/TypeFactoryTest.php\nindex 6a9aaf4cfe25b..fafad79a9a371 100644\n--- a/src/Symfony/Component/TypeInfo/Tests/TypeFactoryTest.php\n+++ b/src/Symfony/Component/TypeInfo/Tests/TypeFactoryTest.php\n@@ -254,6 +254,8 @@ public static function createFromValueProvider(): iterable\n         yield [Type::object(\\DateTimeImmutable::class), new \\DateTimeImmutable()];\n         yield [Type::object(), new \\stdClass()];\n         yield [Type::list(Type::object()), [new \\stdClass(), new \\DateTimeImmutable()]];\n+        yield [Type::enum(DummyEnum::class), DummyEnum::ONE];\n+        yield [Type::enum(DummyBackedEnum::class), DummyBackedEnum::ONE];\n \n         // collection\n         $arrayAccess = new class implements \\ArrayAccess {\ndiff --git a/src/Symfony/Component/TypeInfo/TypeFactoryTrait.php b/src/Symfony/Component/TypeInfo/TypeFactoryTrait.php\nindex b922c2749ba5d..40915bb588898 100644\n--- a/src/Symfony/Component/TypeInfo/TypeFactoryTrait.php\n+++ b/src/Symfony/Component/TypeInfo/TypeFactoryTrait.php\n@@ -412,6 +412,7 @@ public static function fromValue(mixed $value): Type\n         }\n \n         $type = match (true) {\n+            \\is_object($value) && is_subclass_of($value::class, \\UnitEnum::class) => Type::enum($value::class),\n             \\is_object($value) => \\stdClass::class === $value::class ? self::object() : self::object($value::class),\n             \\is_array($value) => self::builtin(TypeIdentifier::ARRAY),\n             default => null,\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "src/Symfony/Component/TypeInfo/TypeFactoryTrait.php",
+   "body": "Potential performance impact from `is_subclass_of` call in enum detection, which must execute for every object and cannot be moved lower without breaking enum handling logic.",
+   "from_line": 415,
+   "to_line": 415,
+   "category": "Performance",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -412,6 +412,7 @@ public static function fromValue(mixed $value): Type\n         }\n \n         $type = match (true) {\n+            \\is_object($value) && is_subclass_of($value::class, \\UnitEnum::class) => Type::enum($value::class),\n             \\is_object($value) => \\stdClass::class === $value::class ? self::object() : self::object($value::class),\n             \\is_array($value) => self::builtin(TypeIdentifier::ARRAY),\n             default => null,",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "PHP"
+}

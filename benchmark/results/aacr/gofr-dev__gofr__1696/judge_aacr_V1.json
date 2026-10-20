@@ -1,0 +1,141 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 4,
+  "findings": [
+   {
+    "file": "pkg/gofr/handler.go",
+    "start": 73,
+    "end": 73,
+    "category": "bug",
+    "comment": "直接修改共享的 h.container.Logger 會導致嚴重的並發資料競爭 (Data Race)。HTTP 請求是並發處理的，多個 goroutine 同時修改與還原 h.container.Logger 不僅會互相覆蓋並破壞原始 logger，還會導致 trace ID 在不同請求間交叉污染。此外，當請求逾時退出觸發 defer 還原時，背景仍執行的 goroutine 存取 h.container.Logger 也會造成 race condition。"
+   },
+   {
+    "file": "pkg/gofr/handler.go",
+    "start": 154,
+    "end": 154,
+    "category": "style",
+    "comment": "函式註解中依然寫著「with traceID and errorMessage」，但此次修改已將 traceID 參數及 ErrorLogEntry 中的 TraceID 欄位移除。"
+   },
+   {
+    "file": "pkg/gofr/logging/ctx_logger.go",
+    "start": 38,
+    "end": 38,
+    "category": "bug",
+    "comment": "在所有格式化日誌方法（Debugf, Logf, Infof, Noticef, Warnf, Errorf, Fatalf）中，withTraceInfo 會在 args 後方附加一個 map 元素。但 format string (f) 中並沒有對應的格式化佔位符（如 %v），這會導致底層在執行 fmt.Sprintf/Printf 時產生「%!(EXTRA ...)」格式錯誤輸出。"
+   },
+   {
+    "file": "pkg/gofr/logging/ctx_logger.go",
+    "start": 16,
+    "end": 16,
+    "category": "style",
+    "comment": "在結構體中保存 context.Context 違反 Go 官方慣例（Do not store Contexts inside a struct type），可能導致 Context 被不當跨函式或跨 goroutine 共享，延長生命週期或未能正確反映 cancellation。"
+   },
+   {
+    "file": "pkg/gofr/logging/ctx_logger_test.go",
+    "start": 72,
+    "end": 72,
+    "category": "bug",
+    "comment": "go.opentelemetry.io/otel/trace 套件中並不存在 ContextWithSpanContext 函式，這會導致測試檔案無法編譯。otel/trace 注入 SpanContext 的對應函式為 ContextWithRemoteSpanContext。"
+   },
+   {
+    "file": "pkg/gofr/logging/ctx_logger_test.go",
+    "start": 58,
+    "end": 58,
+    "category": "style",
+    "comment": "函式註解中寫的是 mockTracerProvider，但實際函式名稱為 mockTracedContext，註解與實作名稱不符。"
+   },
+   {
+    "file": "pkg/gofr/logging/ctx_logger_test.go",
+    "start": 23,
+    "end": 23,
+    "category": "style",
+    "comment": "mockLogger 的所有格式化方法（Debugf, Infof, Errorf 等）皆將變數參數以 `_ ...any` 丟棄，僅保留 format 字串，若後續測試需要驗證帶有 trace 資訊或參數的格式化日誌時將無法正確反映。"
+   },
+   {
+    "file": "pkg/gofr/logging/logger.go",
+    "start": 253,
+    "end": 253,
+    "category": "performance",
+    "comment": "每次呼叫日誌輸出時，extractTraceIDAndFilterArgs 都會重新配置一個長度為 len(args) 的 slice。在多數日誌未傳入 trace ID 的情況下，這會帶來額外且不必要的堆疊記憶體分配（heap allocation）與 GC 負擔。"
+   },
+   {
+    "file": "pkg/gofr/logging/logger.go",
+    "start": 256,
+    "end": 256,
+    "category": "bug",
+    "comment": "若傳入的 map[string]any 除了 __trace_id__ 之外還包含其他鍵值對，該 map 會因 continue 被整包過濾掉，導致其他資料遺失。此外，若使用者本身正常業務資料中恰好包含同名 key，也會非預期地被當作 trace ID 移除。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "pkg/gofr/handler.go",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both identify concurrent modification of the shared container logger leading to data races and trace ID leakage across requests.\n2. No match — Ref 2 addresses a specific downstream call site that should use a local logger instance, rather than the mutation itself.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "pkg/gofr/handler.go",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses race conditions and trace ID leakage on the shared logger, while generated comment addresses an outdated docstring.\n2. No match — ref discusses using the local logger instead of container logger, while generated comment addresses an outdated docstring.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "pkg/gofr/logging/ctx_logger.go",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. Match — both identify that appending trace info to formatted logging functions causes format string mismatch and `%!(EXTRA ...)` errors.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "pkg/gofr/logging/ctx_logger.go",
+   "matched_gt": [],
+   "reason": "1. No match — Reference 1 concerns formatting argument mismatches with trace info injection, while the generated comment concerns storing `context.Context` in a struct.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "pkg/gofr/logging/ctx_logger_test.go",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 5,
+   "file": "pkg/gofr/logging/ctx_logger_test.go",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 6,
+   "file": "pkg/gofr/logging/ctx_logger_test.go",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 7,
+   "file": "pkg/gofr/logging/logger.go",
+   "matched_gt": [],
+   "reason": "1. No match — Generated comment concerns heap allocation and GC overhead from slice allocation, whereas Reference comment discusses type assertion limitations and handling of multiple trace ID arguments.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 8,
+   "file": "pkg/gofr/logging/logger.go",
+   "matched_gt": [],
+   "reason": "1. No match — Reference 1 addresses unsupported map types and filtering behavior across multiple args, whereas the generated comment concerns data loss when a map contains other keys alongside trace ID and key collisions.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

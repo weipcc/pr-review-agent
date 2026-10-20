@@ -1,0 +1,36 @@
+{
+ "results": [
+  {
+   "filename": "src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs",
+   "summary": "透過模式比對安全轉換 CommandContextItemViewModel，避免了非預期型別時引發的 InvalidCastException，改動安全且符合規範。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs",
+   "summary": "透過 pattern matching 取代強制轉型，安全地處理未知的 item 型別並回退至預設模板，改動合理且無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "src/modules/cmdpal/Microsoft.CmdPal.UI/rd.xml",
+   "summary": "新增 Native AOT 執行時期所需的 WinUI 與 ViewModel 反射保留指令，設定正確且無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  }
+ ],
+ "n_files": 3,
+ "input_tokens": 5888,
+ "output_tokens": 134,
+ "calls": 3,
+ "tool_calls": null,
+ "elapsed_s": 25.0,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  4107,
+  834,
+  947
+ ],
+ "model": "gemini-3.8-flash"
+}

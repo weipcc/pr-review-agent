@@ -1,0 +1,80 @@
+{
+ "owner": "lvgl",
+ "repo": "lvgl",
+ "full": "lvgl/lvgl",
+ "pr_number": 8164,
+ "title": "feat(animimage) support set source interfaces with or without parameter of reverse play",
+ "body": "To ensure backwards compatibility of animimage, keep original lv_animimg_set_src function and add lv_animimg_set_src_reverse to support reverse play.",
+ "base_sha": "344ba9fe99b487f7f5164900679d56acf2d8bff2",
+ "review_sha": "9cce37c219f95701fecc44f74595aa9c6effbdba",
+ "head_now": "7d29ce7cac997a5740f7a18bf92d91e1e5763675",
+ "raw_diff": "diff --git a/docs/src/details/widgets/animimg.rst b/docs/src/details/widgets/animimg.rst\nindex be6f3030d169..40229eba4711 100644\n--- a/docs/src/details/widgets/animimg.rst\n+++ b/docs/src/details/widgets/animimg.rst\n@@ -31,7 +31,10 @@ Image sources\n -------------\n \n To set the image animation images sources, use\n-:cpp:expr:`lv_animimg_set_src(animimg, dsc[], num, reverse)`.\n+:cpp:expr:`lv_animimg_set_src(animimg, dsc[], num)`.\n+\n+To set the images source for flip playback of animation image, use\n+:cpp:expr:`lv_animimg_set_src_reverse(animimg, dsc[], num)`.\n \n Using the inner animation\n -------------------------\ndiff --git a/examples/widgets/animimg/lv_example_animimg_1.c b/examples/widgets/animimg/lv_example_animimg_1.c\nindex 2795c3853b1d..8b8d68b471dc 100644\n--- a/examples/widgets/animimg/lv_example_animimg_1.c\n+++ b/examples/widgets/animimg/lv_example_animimg_1.c\n@@ -14,7 +14,7 @@ void lv_example_animimg_1(void)\n {\n     lv_obj_t * animimg0 = lv_animimg_create(lv_screen_active());\n     lv_obj_center(animimg0);\n-    lv_animimg_set_src(animimg0, (const void **) anim_imgs, 3, false);\n+    lv_animimg_set_src(animimg0, (const void **) anim_imgs, 3);\n     lv_animimg_set_duration(animimg0, 1000);\n     lv_animimg_set_repeat_count(animimg0, LV_ANIM_REPEAT_INFINITE);\n     lv_animimg_start(animimg0);\ndiff --git a/src/widgets/animimage/lv_animimage.c b/src/widgets/animimage/lv_animimage.c\nindex 66f04cc42bf3..e593b3372cea 100644\n--- a/src/widgets/animimage/lv_animimage.c\n+++ b/src/widgets/animimage/lv_animimage.c\n@@ -107,18 +107,22 @@ lv_obj_t * lv_animimg_create(lv_obj_t * parent)\n     return obj;\n }\n \n-void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse)\n+void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num)\n {\n     LV_ASSERT_OBJ(obj, MY_CLASS);\n     lv_animimg_t * animimg = (lv_animimg_t *)obj;\n     animimg->dsc = dsc;\n     animimg->pic_count = num;\n-    if(reverse) {\n-        lv_anim_set_values(&animimg->anim, (int32_t)num, 0);\n-    }\n-    else {\n-        lv_anim_set_values(&animimg->anim, 0, (int32_t)num);\n-    }\n+    lv_anim_set_values(&animimg->anim, 0, (int32_t)num);\n+}\n+\n+void lv_animimg_set_src_reverse(lv_obj_t * obj, const void * dsc[], size_t num)\n+{\n+    LV_ASSERT_OBJ(obj, MY_CLASS);\n+    lv_animimg_t * animimg = (lv_animimg_t *)obj;\n+    animimg->dsc = dsc;\n+    animimg->pic_count = num;\n+    lv_anim_set_values(&animimg->anim, (int32_t)num, 0);\n }\n \n void lv_animimg_start(lv_obj_t * obj)\ndiff --git a/src/widgets/animimage/lv_animimage.h b/src/widgets/animimage/lv_animimage.h\nindex 7894e6d3468f..230eca499757 100644\n--- a/src/widgets/animimage/lv_animimage.h\n+++ b/src/widgets/animimage/lv_animimage.h\n@@ -72,9 +72,16 @@ lv_obj_t * lv_animimg_create(lv_obj_t * parent);\n  * @param obj       pointer to an animation image object\n  * @param dsc       pointer to a series images\n  * @param num       images' number\n- * @param reverse   Set the flip playback of the image animation\n  */\n-void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse);\n+void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num);\n+\n+/**\n+ *  Set the images source for flip playback of animation image.\n+ * @param obj       pointer to an animation image object\n+ * @param dsc       pointer to a series images\n+ * @param num       images' number\n+ */\n+void lv_animimg_set_src_reverse(lv_obj_t * obj, const void * dsc[], size_t num);\n \n /**\n  * Startup the image animation.\ndiff --git a/tests/src/test_cases/widgets/test_animimg.c b/tests/src/test_cases/widgets/test_animimg.c\nindex e7897c61b84c..53032d71207e 100644\n--- a/tests/src/test_cases/widgets/test_animimg.c\n+++ b/tests/src/test_cases/widgets/test_animimg.c\n@@ -21,6 +21,7 @@ void setUp(void);\n void tearDown(void);\n void test_animimg_successful_create(void);\n void test_animimg_set_src(void);\n+void test_animimg_set_src_reverse(void);\n void test_animimg_get_src_count(void);\n void test_animimg_set_duration(void);\n void test_animimg_set_repeat_count_infinite(void);\n@@ -44,14 +45,21 @@ void test_animimg_successful_create(void)\n \n void test_animimg_set_src(void)\n {\n-    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3, false);\n+    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3);\n+\n+    TEST_ASSERT_NOT_NULL(animimg);\n+}\n+\n+void test_animimg_set_src_reverse(void)\n+{\n+    lv_animimg_set_src_reverse(animimg, (const void **) anim_imgs, 3);\n \n     TEST_ASSERT_NOT_NULL(animimg);\n }\n \n void test_animimg_get_src(void)\n {\n-    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3, false);\n+    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3);\n \n     const void ** actual_dsc = lv_animimg_get_src(animimg);\n \n@@ -63,7 +71,7 @@ void test_animimg_get_src_count(void)\n {\n     uint8_t expected_count = 3;\n \n-    lv_animimg_set_src(animimg, (const void **) anim_imgs, expected_count, false);\n+    lv_animimg_set_src(animimg, (const void **) anim_imgs, expected_count);\n \n     uint8_t actual_count = lv_animimg_get_src_count(animimg);\n \n@@ -94,7 +102,7 @@ void test_animimg_start(void)\n {\n     // for lv_animimg_start() to actually work,\n     // we need to properly setup the widget beforehand\n-    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3, false);\n+    lv_animimg_set_src(animimg, (const void **) anim_imgs, 3);\n     lv_animimg_set_duration(animimg, 1000);\n     lv_animimg_set_repeat_count(animimg, LV_ANIM_REPEAT_INFINITE);\n \n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "docs/src/details/widgets/animimg.rst",
+   "body": "The doc update matches the new API split, but wording/signature could be more accurate:\n\n1) Naming/behavior: `lv_animimg_set_src_reverse` in code sets animation values from `num` to `0` (reverse direction). The docs currently say “flip playback”, which reads like a mirroring/ping-pong effect. Consider renaming the description to “reverse playback” / “play frames in reverse order” (or explicitly define what “flip playback” means).\n\n2) Signature accuracy: header uses `const void * dsc[]` (array of pointers). The docs use `dsc[]` without type; consider documenting it as `const void * dsc[]` (or the higher-level expected type if there is one) to help users migrating from the old 4-arg API.\n\n```suggestion\n:cpp:expr:`lv_animimg_set_src(animimg, const void * dsc[], num)`.\n\nTo set the image sources for reverse playback of the animation, use\n:cpp:expr:`lv_animimg_set_src_reverse(animimg, const void * dsc[], num)`.\n```",
+   "from_line": 34,
+   "to_line": 37,
+   "category": "Maintainability and Readability",
+   "context": "Repo Level",
+   "diff_hunk": "@@ -31,7 +31,10 @@ Image sources\n -------------\n \n To set the image animation images sources, use\n-:cpp:expr:`lv_animimg_set_src(animimg, dsc[], num, reverse)`.\n+:cpp:expr:`lv_animimg_set_src(animimg, dsc[], num)`.\n+\n+To set the images source for flip playback of animation image, use\n+:cpp:expr:`lv_animimg_set_src_reverse(animimg, dsc[], num)`.\n \n Using the inner animation\n -------------------------",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 1,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "src/widgets/animimage/lv_animimage.c",
+   "body": "Duplicate setup logic in `lv_animimg_set_src` and `lv_animimg_set_src_reverse` functions should be refactored into a private static helper function to eliminate code duplication while maintaining API compatibility.",
+   "from_line": 110,
+   "to_line": 125,
+   "category": "Maintainability and Readability",
+   "context": "File Level",
+   "diff_hunk": "@@ -107,18 +107,22 @@ lv_obj_t * lv_animimg_create(lv_obj_t * parent)\n     return obj;\n }\n \n-void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse)\n+void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num)\n {\n     LV_ASSERT_OBJ(obj, MY_CLASS);\n     lv_animimg_t * animimg = (lv_animimg_t *)obj;\n     animimg->dsc = dsc;\n     animimg->pic_count = num;\n-    if(reverse) {\n-        lv_anim_set_values(&animimg->anim, (int32_t)num, 0);\n-    }\n-    else {\n-        lv_anim_set_values(&animimg->anim, 0, (int32_t)num);\n-    }\n+    lv_anim_set_values(&animimg->anim, 0, (int32_t)num);\n+}\n+\n+void lv_animimg_set_src_reverse(lv_obj_t * obj, const void * dsc[], size_t num)\n+{\n+    LV_ASSERT_OBJ(obj, MY_CLASS);\n+    lv_animimg_t * animimg = (lv_animimg_t *)obj;\n+    animimg->dsc = dsc;\n+    animimg->pic_count = num;\n+    lv_anim_set_values(&animimg->anim, (int32_t)num, 0);\n }\n \n void lv_animimg_start(lv_obj_t * obj)",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 2,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/widgets/animimage/lv_animimage.c",
+   "body": "Buffer/OOB risk from animation range: `lv_anim_set_values(..., 0, (int32_t)num)` allows `idx==num`. `index_change` only clamps `idx >= pic_count` to `pic_count - 1`, so `idx==num` becomes `num-1` (OK) **unless `num==0`**, where it becomes `-1` and then `animimg->dsc[-1]` is accessed. Also in reverse API you start from `(int32_t)num`, which will also become `-1` when `num==0` after clamping. Suggest guarding `num==0` early (set `dsc`, set `pic_count=0`, and return), and ideally use `num-1` as start/end values when `num>0` to avoid ever producing `idx==num`.\n\n```suggestion\nvoid lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num)\n{\n    LV_ASSERT_OBJ(obj, MY_CLASS);\n    lv_animimg_t * animimg = (lv_animimg_t *)obj;\n    animimg->dsc = dsc;\n    animimg->pic_count = num;\n\n    if(num == 0) {\n        /* No frames: avoid idx underflow in index_change */\n        return;\n    }\n\n    lv_anim_set_values(&animimg->anim, 0, (int32_t)num - 1);\n}\n\nvoid lv_animimg_set_src_reverse(lv_obj_t * obj, const void * dsc[], size_t num)\n{\n    LV_ASSERT_OBJ(obj, MY_CLASS);\n    lv_animimg_t * animimg = (lv_animimg_t *)obj;\n    animimg->dsc = dsc;\n    animimg->pic_count = num;\n\n    if(num == 0) {\n        return;\n    }\n\n    lv_anim_set_values(&animimg->anim, (int32_t)num - 1, 0);\n}\n```",
+   "from_line": 110,
+   "to_line": 117,
+   "category": "Security Vulnerability",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -107,18 +107,22 @@ lv_obj_t * lv_animimg_create(lv_obj_t * parent)\n     return obj;\n }\n \n-void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse)\n+void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num)\n {\n     LV_ASSERT_OBJ(obj, MY_CLASS);\n     lv_animimg_t * animimg = (lv_animimg_t *)obj;\n     animimg->dsc = dsc;\n     animimg->pic_count = num;\n-    if(reverse) {\n-        lv_anim_set_values(&animimg->anim, (int32_t)num, 0);\n-    }\n-    else {\n-        lv_anim_set_values(&animimg->anim, 0, (int32_t)num);\n-    }\n+    lv_anim_set_values(&animimg->anim, 0, (int32_t)num);\n+}\n+\n+void lv_animimg_set_src_reverse(lv_obj_t * obj, const void * dsc[], size_t num)\n+{\n+    LV_ASSERT_OBJ(obj, MY_CLASS);\n+    lv_animimg_t * animimg = (lv_animimg_t *)obj;\n+    animimg->dsc = dsc;\n+    animimg->pic_count = num;\n+    lv_anim_set_values(&animimg->anim, (int32_t)num, 0);\n }\n \n void lv_animimg_start(lv_obj_t * obj)",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 3,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/widgets/animimage/lv_animimage.h",
+   "body": "**Breaking API Change - This is NOT backwards compatible**\n\nThe PR description claims to \"ensure backwards compatibility\" but this change breaks the existing API. The original function signature was:\n```c\nvoid lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse);\n```\n\nRemoving the `reverse` parameter means any existing code calling this function with 4 arguments will fail to compile. This is a **breaking change**.\n\n**Suggested Fix:**\nTo maintain true backwards compatibility, you should:\n\n1. Keep the original 4-parameter function and mark it as deprecated, OR\n2. Use a macro/inline wrapper to maintain the old signature\n\nFor example:\n```c\n// New implementation\nvoid lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num);\nvoid lv_animimg_set_src_reverse(lv_obj_t * obj, const void * dsc[], size_t num);\n\n// Backwards compatibility - deprecated\nstatic inline void lv_animimg_set_src_legacy(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse) {\n    if(reverse) {\n        lv_animimg_set_src_reverse(obj, dsc, num);\n    } else {\n        lv_animimg_set_src(obj, dsc, num);\n    }\n}\n```\n\nOr consider if the API design should use a single function with flags/options struct instead of two separate functions.",
+   "from_line": 76,
+   "to_line": 76,
+   "category": "Maintainability and Readability",
+   "context": "Repo Level",
+   "diff_hunk": "@@ -72,9 +72,16 @@ lv_obj_t * lv_animimg_create(lv_obj_t * parent);\n  * @param obj       pointer to an animation image object\n  * @param dsc       pointer to a series images\n  * @param num       images' number\n- * @param reverse   Set the flip playback of the image animation\n  */\n-void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse);\n+void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num);\n+\n+/**\n+ *  Set the images source for flip playback of animation image.\n+ * @param obj       pointer to an animation image object\n+ * @param dsc       pointer to a series images\n+ * @param num       images' number\n+ */\n+void lv_animimg_set_src_reverse(lv_obj_t * obj, const void * dsc[], size_t num);\n \n /**\n  * Startup the image animation.",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 4,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/widgets/animimage/lv_animimage.h",
+   "body": "The term \"flip playback\" is ambiguous and usually implies image mirroring (flipping) rather than playing the animation backwards. \"Reverse playback\" is the standard term and is clearer. \n\nAlso, there are minor grammatical improvements suggested:\n- \"pointer to a series images\" -> \"pointer to a series of images\"\n- \"images' number\" -> \"number of images\"\n",
+   "from_line": 78,
+   "to_line": 84,
+   "category": "Maintainability and Readability",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -72,9 +72,16 @@ lv_obj_t * lv_animimg_create(lv_obj_t * parent);\n  * @param obj       pointer to an animation image object\n  * @param dsc       pointer to a series images\n  * @param num       images' number\n- * @param reverse   Set the flip playback of the image animation\n  */\n-void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num, bool reverse);\n+void lv_animimg_set_src(lv_obj_t * obj, const void * dsc[], size_t num);\n+\n+/**\n+ *  Set the images source for flip playback of animation image.\n+ * @param obj       pointer to an animation image object\n+ * @param dsc       pointer to a series images\n+ * @param num       images' number\n+ */\n+void lv_animimg_set_src_reverse(lv_obj_t * obj, const void * dsc[], size_t num);\n \n /**\n  * Startup the image animation.",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "C"
+}

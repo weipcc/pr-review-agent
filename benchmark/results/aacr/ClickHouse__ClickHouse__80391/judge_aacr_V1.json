@@ -1,0 +1,69 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 7,
+  "findings": [
+   {
+    "file": "src/Common/CurrentMetrics.cpp",
+    "start": 400,
+    "end": 400,
+    "category": "style",
+    "comment": "說明文字中的括號前缺少空格，且句末未遵循現有 metric 描述的慣例加上句號（例如 'thread(if enabled)'）。"
+   },
+   {
+    "file": "src/Common/CurrentMetrics.cpp",
+    "start": 401,
+    "end": 401,
+    "category": "style",
+    "comment": "說明文字中的括號前缺少空格，且句末未遵循現有 metric 描述的慣例加上句號（例如 'thread(if enabled)'）。"
+   },
+   {
+    "file": "src/Disks/DiskLocalCheckThread.cpp",
+    "start": 41,
+    "end": 41,
+    "category": "style",
+    "comment": "輔助函式 diskStatusChange 僅在該翻譯單元（TU）內使用，但未宣告為 static 也未置於匿名命名空間（anonymous namespace），具有外部連結（external linkage），可能造成全域符號污染或 ODR 潛在衝突。"
+   },
+   {
+    "file": "src/Disks/DiskLocalCheckThread.cpp",
+    "start": 83,
+    "end": 83,
+    "category": "performance",
+    "comment": "當磁碟狀態未變更時，diskStatusChange 會回傳 0，此時仍直接呼叫 CurrentMetrics::add 進行無意義的原子操作（fetch_add(0)），在背景定時任務中會產生額外的快取同步開銷。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/Common/CurrentMetrics.cpp",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "src/Common/CurrentMetrics.cpp",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "src/Disks/DiskLocalCheckThread.cpp",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. No match — discusses `formatReadableTime` and `check_period_ms` conversion precision.\n2. No match — discusses omitting disk name parameter in log statements.\n3. No match — discusses marking function parameters as const.\n4. Match — both recommend making `diskStatusChange` static or putting it in an anonymous namespace to prevent external linkage / ODR violations.\n5. No match — discusses including disk name in readonly log message.\n6. No match — discusses keeping disk name in log messages for debuggability.\n7. No match — discusses CurrentMetrics update placement and consistency.\n\n[4]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "src/Disks/DiskLocalCheckThread.cpp",
+   "matched_gt": [],
+   "reason": "1. No match — concerns unit conversion and precision loss in startup logging.\n2. No match — concerns missing disk name parameter in log messages.\n3. No match — concerns adding `const` to function parameters.\n4. No match — concerns scoping (`static`/anonymous namespace) and `constexpr` for `diskStatusChange`.\n5. No match — concerns missing disk name in readonly log message.\n6. No match — concerns debuggability when disk name is omitted from logs.\n7. No match — concerns metrics inconsistency due to exceptions/early returns, whereas the generated comment addresses unnecessary atomic operations when delta is zero.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

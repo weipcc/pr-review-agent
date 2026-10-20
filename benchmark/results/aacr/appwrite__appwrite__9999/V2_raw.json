@@ -1,0 +1,125 @@
+{
+ "results": [
+  {
+   "change_intent": "Fallback to _APP_DOMAIN if _APP_CONSOLE_DOMAIN is not set when resolving the hostname for site templates.",
+   "summary": "Clean and consistent change that matches the rest of the PR's environment variable fallback behavior.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "app/config/templates/site.php"
+  },
+  {
+   "change_intent": "Fall back to _APP_DOMAIN if _APP_CONSOLE_DOMAIN is not set when validating the console domain.",
+   "summary": "The change correctly uses _APP_CONSOLE_DOMAIN with a fallback to _APP_DOMAIN for domain validation, consistent with the rest of the codebase.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "app/controllers/api/console.php"
+  },
+  {
+   "change_intent": "Fall back to _APP_DOMAIN if _APP_CONSOLE_DOMAIN is not set when resolving the main console/host domain.",
+   "summary": "The changes consistently update domain lookups to prefer _APP_CONSOLE_DOMAIN over _APP_DOMAIN with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "app/controllers/general.php"
+  },
+  {
+   "change_intent": "Fall back to _APP_DOMAIN if _APP_CONSOLE_DOMAIN is not set when resolving the hostname for error view links.",
+   "summary": "The change cleanly implements the console domain fallback in the error view and is consistent with the rest of the codebase.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "app/views/general/error.phtml"
+  },
+  {
+   "change_intent": "Fall back to _APP_DOMAIN if _APP_CONSOLE_DOMAIN is not configured when resolving the API hostname for function executions.",
+   "summary": "The change correctly falls back to _APP_DOMAIN when _APP_CONSOLE_DOMAIN is not set, matching the rest of the PR.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Appwrite/Platform/Modules/Functions/Http/Executions/Create.php"
+  },
+  {
+   "change_intent": "Fall back to `_APP_DOMAIN` if `_APP_CONSOLE_DOMAIN` is not set when resolving the hostname for endpoints and VCS status target URLs.",
+   "summary": "The fallback logic is correctly implemented and aligns with identical updates across the codebase.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Appwrite/Platform/Modules/Functions/Workers/Builds.php"
+  },
+  {
+   "change_intent": "Fall back to _APP_DOMAIN only if _APP_CONSOLE_DOMAIN is not set when determining the denied main domain for proxy API rules.",
+   "summary": "The change cleanly implements the fallback logic and matches the implementation across the rest of the codebase.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/API/Create.php"
+  },
+  {
+   "change_intent": "Fall back to _APP_DOMAIN only if _APP_CONSOLE_DOMAIN is not set when determining the main domain to deny.",
+   "summary": "The change correctly implements the fallback logic and is consistent with similar updates across the codebase.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Function/Create.php"
+  },
+  {
+   "change_intent": "Fall back to _APP_DOMAIN only when _APP_CONSOLE_DOMAIN is not configured for the denied main domain list.",
+   "summary": "The change correctly falls back to _APP_DOMAIN if _APP_CONSOLE_DOMAIN is unset, consistent with the rest of the codebase.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Redirect/Create.php"
+  },
+  {
+   "change_intent": "Fall back to _APP_DOMAIN only when _APP_CONSOLE_DOMAIN is not defined when resolving the main domain for denied domain checks.",
+   "summary": "The change correctly checks for _APP_CONSOLE_DOMAIN before falling back to _APP_DOMAIN, consistent with the rest of the codebase.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Site/Create.php"
+  },
+  {
+   "change_intent": "Fall back to _APP_DOMAIN if _APP_CONSOLE_DOMAIN is not set when constructing the function API endpoint.",
+   "summary": "The change correctly updates the domain resolution to prioritize _APP_CONSOLE_DOMAIN before falling back to _APP_DOMAIN, consistent with the rest of the PR.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Appwrite/Platform/Workers/Functions.php"
+  },
+  {
+   "change_intent": "Provide an empty string fallback when resolving _APP_DOMAIN if neither _APP_CONSOLE_DOMAIN nor _APP_DOMAIN is set.",
+   "summary": "The change adds a default empty string fallback to the nested System::getEnv call, keeping it safe and consistent with the rest of the repository.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Appwrite/Vcs/Comment.php"
+  },
+  {
+   "change_intent": "Fall back to `_APP_DOMAIN` if `_APP_CONSOLE_DOMAIN` is not set when setting the host header for runtime execution.",
+   "summary": "The change consistently falls back to `_APP_DOMAIN` when `_APP_CONSOLE_DOMAIN` is not defined, matching changes across the rest of the codebase.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Executor/Executor.php"
+  },
+  {
+   "change_intent": "Update the test to resolve the main domain from _APP_CONSOLE_DOMAIN with fallback to _APP_DOMAIN, matching the proxy rules denied-domain logic.",
+   "summary": "The change consistently updates domain resolution in the test suite and introduces no issues.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "tests/e2e/Services/Projects/ProjectsCustomServerTest.php"
+  }
+ ],
+ "n_files": 14,
+ "elapsed_s": 136.0,
+ "calls": 14,
+ "input_tokens": 138249,
+ "output_tokens": 1134,
+ "call_input_tokens": [
+  8184,
+  10005,
+  12788,
+  8347,
+  8927,
+  9782,
+  10320,
+  10650,
+  10702,
+  10650,
+  8926,
+  11284,
+  8541,
+  9143
+ ],
+ "mode": "per-file",
+ "routing_tokens": 32394
+}

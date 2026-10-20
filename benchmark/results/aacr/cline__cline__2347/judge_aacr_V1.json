@@ -1,0 +1,127 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 9,
+  "findings": [
+   {
+    "file": "package.json",
+    "start": 295,
+    "end": 295,
+    "category": "style",
+    "comment": "jschardet 套件本身並未內建 TypeScript 型別定義（.d.ts）。若專案中直接 import 使用，執行 check-types（tsc --noEmit）時可能會遇到 TS7016 找不到型別宣告檔的錯誤。"
+   },
+   {
+    "file": "src/integrations/editor/DiffViewProvider.ts",
+    "start": 51,
+    "end": 51,
+    "category": "bug",
+    "comment": "jschardet 偵測到的編碼名稱可能不被 iconv-lite 支援，或者 detect() 回傳信心度過低/無效的編碼名稱。若直接傳入 iconv.decode/encode，會拋出例外（Encoding not recognized）導致編輯或儲存失敗。"
+   },
+   {
+    "file": "src/integrations/editor/DiffViewProvider.ts",
+    "start": 237,
+    "end": 237,
+    "category": "bug",
+    "comment": "比對條件 this.fileEncoding.toLowerCase() !== \"utf8\" 存在嚴重缺陷：1. jschardet 通常回傳帶連字號的 \"UTF-8\"，toLowerCase() 後為 \"utf-8\"，比對時會被誤判為非 UTF-8。2. 純英文或空檔案常被偵測為 \"ascii\"，若以 ascii 編碼寫回檔案，模型或使用者新增的非 ASCII 字元（如中文或特殊符號）會被破壞或轉為問號（?）。"
+   },
+   {
+    "file": "src/integrations/editor/DiffViewProvider.ts",
+    "start": 382,
+    "end": 382,
+    "category": "style",
+    "comment": "reset() 方法中未重置 this.fileEncoding 回預設值 \"utf8\"，可能導致重置後在特定邊界情況下殘留上一個檔案的編碼設定。"
+   },
+   {
+    "file": "src/integrations/misc/extract-text.ts",
+    "start": 30,
+    "end": 30,
+    "category": "bug",
+    "comment": "二進位檔案檢查被移至 else 分支。因為 jschardet.detect 對於任意二進位資料（如 images、zip、exe 等）通常仍會猜測一個編碼（例如 windows-1252 或 ISO-8859-1，僅信心度較低），導致程式永遠不會進入 else 呼叫 isBinaryFile，使二進位檔案被當作文字解碼回傳亂碼。"
+   },
+   {
+    "file": "src/integrations/misc/extract-text.ts",
+    "start": 43,
+    "end": 43,
+    "category": "bug",
+    "comment": "chardet 偵測到的編碼名稱可能不被 iconv-lite 支援，若直接傳入不支援的編碼名稱，iconv.decode 可能會拋出例外或無法正確解碼。"
+   },
+   {
+    "file": "src/integrations/misc/extract-text.ts",
+    "start": 60,
+    "end": 60,
+    "category": "bug",
+    "comment": "IPYNB (Jupyter Notebook) 格式標準嚴格規範為 UTF-8 編碼的 JSON。在此使用 chardet 進行猜測容易因誤判而導致 JSON.parse 失敗。"
+   },
+   {
+    "file": "src/integrations/misc/extract-text.ts",
+    "start": 7,
+    "end": 7,
+    "category": "style",
+    "comment": "getFileSizeInKB 已被改為直接檢查 fileBuffer.byteLength，但 import 尚未被移除，成為未使用的引用。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "package.json",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "src/integrations/editor/DiffViewProvider.ts",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. No match — ref suggests adding explanatory code comments, while generated identifies an unsupported/invalid encoding exception risk.\n2. Match — both address the risk of unhandled exceptions caused by encoding detection/decoding failures and the need for safe handling/fallback.\n3. No match — ref focuses specifically on file writing error handling at L237-240.\n4. No match — ref addresses an unnecessary type cast in `fs.writeFile`.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "src/integrations/editor/DiffViewProvider.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref suggests adding documentation comments about encoding detection, whereas generated discusses a logic flaw in encoding comparison and ascii writeback.\n2. No match — ref flags missing error handling (try/catch) for reading/encoding, whereas generated discusses the comparison logic for fileEncoding.\n3. No match — ref flags missing error handling/try-catch for file writing, whereas generated discusses incorrect encoding comparison condition and ascii handling.\n4. No match — ref suggests removing unnecessary double type cast, whereas generated discusses encoding comparison logic bugs.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "src/integrations/editor/DiffViewProvider.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref suggests adding explanatory comments for encoding detection logic, generated discusses missing reset of fileEncoding in reset().\n2. No match — ref concerns error handling for file reading/encoding detection, generated discusses reset() state cleanup.\n3. No match — ref concerns error handling for file writing, generated discusses reset() state cleanup.\n4. No match — ref concerns unnecessary type casting, generated discusses reset() state cleanup.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "src/integrations/misc/extract-text.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref flags an unused import / large file check, generated flags binary file detection logic.\n2. No match — ref addresses memory consumption from reading files before checking size, generated addresses binary file detection logic.\n3. No match — ref suggests extracting duplicate code into a helper function, generated flags binary files being incorrectly treated as text.\n4. No match — ref discusses readability of a nested ternary, generated discusses binary file detection logic.\n5. No match — ref discusses `as any` type safety, generated discusses binary file detection logic.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 5,
+   "file": "src/integrations/misc/extract-text.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses an unused import and file size check, while generated discusses unsupported encoding in iconv-lite.\n2. No match — ref discusses reading entire file into memory, while generated discusses unsupported encoding in iconv-lite.\n3. No match — ref discusses code duplication and extracting a helper function, while generated discusses chardet encoding support in iconv-lite.\n4. No match — ref discusses nested ternary readability, while generated discusses unsupported encoding in iconv-lite.\n5. No match — ref discusses 'as any' type safety, while generated discusses unsupported encoding in iconv-lite.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 6,
+   "file": "src/integrations/misc/extract-text.ts",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses an unused import and file size checks, while generated discusses encoding detection for IPYNB.\n2. No match — ref discusses checking file size before reading into memory, while generated discusses encoding detection for IPYNB.\n3. No match — ref suggests extracting duplicated encoding detection logic into a helper function, while generated argues against using chardet at all for IPYNB files because they are strictly UTF-8.\n4. No match — ref concerns readability of a nested ternary operator, while generated concerns encoding detection correctness.\n5. No match — ref concerns type safety regarding `as any`, while generated concerns encoding detection correctness.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 7,
+   "file": "src/integrations/misc/extract-text.ts",
+   "matched_gt": [
+    4
+   ],
+   "reason": "1. Match — both identify that `getFileSizeInKB` is imported but no longer used in the code.\n2. No match — concerns memory consumption from reading files before checking size, not the unused import.\n3. No match — concerns code duplication in `extractTextFromIPYNB`.\n4. No match — concerns readability of a nested ternary expression.\n5. No match — concerns type safety regarding `as any`.\n\n[1]",
+   "hit_new_gt": true
+  }
+ ]
+}

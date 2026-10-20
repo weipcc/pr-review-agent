@@ -1,0 +1,51 @@
+{
+ "results": [
+  {
+   "filename": "benchmarks/README.md",
+   "summary": "新增 HuggingFace-AIMO 資料集的說明與評測範例，內容整體清楚，但存在格式縮排與參數設定不一致的小問題。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 55,
+     "end_line": 55,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "HTML 表格標籤縮排不一致（多縮排了 2 個空格），且資料集清單中的逗號前方有多餘空格（`...aime</code> , <code>...`）。"
+    },
+    {
+     "start_line": 199,
+     "end_line": 199,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "在 Serving 範例中未加上 `--hf-split train` 參數，但同一份文件中的其他 HF 資料集範例（以及下方對應的 Throughput 範例）皆有明確指定 `--hf-split train`，建議保持一致。"
+    },
+    {
+     "start_line": 301,
+     "end_line": 301,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "腳本呼叫路徑不一致：第 199 行使用 `python3 vllm/benchmarks/benchmark_serving.py`，此處卻使用 `python3 benchmarks/benchmark_throughput.py`，建議在同一份文件中統一使用相同的相對路徑風格。"
+    }
+   ]
+  },
+  {
+   "filename": "benchmarks/benchmark_throughput.py",
+   "summary": "新增 AIMODataset 的支援與對應的參數驗證，改動風格一致且結構清晰。",
+   "recommendation": "n/a",
+   "issues": []
+  }
+ ],
+ "n_files": 2,
+ "input_tokens": 8409,
+ "output_tokens": 621,
+ "calls": 2,
+ "tool_calls": null,
+ "elapsed_s": 28.1,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  5099,
+  3310
+ ],
+ "model": "gemini-3.8-flash"
+}

@@ -1,0 +1,26 @@
+{
+ "results": [
+  {
+   "summary": "將 Redis 測試容器切換至特定 ACR 鏡像與版本 7.4，但 monitor 容器未同步更新使用該映像檔。",
+   "issues": [
+    {
+     "line": 19,
+     "severity": "bug",
+     "comment": "本次改動定義了 `_redisImageName` 並將 Redis 服務容器切換為該鏡像，但第 138 行啟動 monitor 容器時仍硬編碼使用 `redis`（Docker Hub 預設映像檔）。若在有網路限制或 Docker Hub rate limit 的環境下（通常也是使用鏡像倉庫的原因），monitor 容器的拉取仍可能失敗或造成版本不一致。",
+     "suggestion": "建議將第 138 行中的 `redis` 映像檔名稱替換為 `{_redisImageName}`，例如：`$\"run -i --name {_dockerMonitorContainerName} --link {_dockerContainerName}:redis --rm {_redisImageName} redis-cli -h redis -p 6379\"`。"
+    }
+   ],
+   "filename": "src/SignalR/server/StackExchangeRedis/test/Docker.cs"
+  }
+ ],
+ "n_files": 1,
+ "elapsed_s": 18.4,
+ "calls": 1,
+ "input_tokens": 3685,
+ "output_tokens": 249,
+ "call_input_tokens": [
+  3685
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

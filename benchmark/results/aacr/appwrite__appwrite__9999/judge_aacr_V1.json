@@ -1,0 +1,179 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 18,
+  "findings": [
+   {
+    "file": "app/controllers/api/console.php",
+    "start": 46,
+    "end": 46,
+    "category": "style",
+    "comment": "System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', '')) 在第 46 行與第 47 行重複執行，造成巢狀呼叫兩次相同邏輯。"
+   },
+   {
+    "file": "app/controllers/general.php",
+    "start": 451,
+    "end": 451,
+    "category": "bug",
+    "comment": "此處是建立 Function 與 Site 執行時使用的 API Endpoint（APPWRITE_FUNCTION_API_ENDPOINT 等）。若 API 與 Console 網域分離（例如 api.example.com 與 console.example.com），優先使用 _APP_CONSOLE_DOMAIN 會導致 Function 將請求送往控制台網域而非 API 服務網域。"
+   },
+   {
+    "file": "app/controllers/general.php",
+    "start": 812,
+    "end": 812,
+    "category": "bug",
+    "comment": "當同時設定了 _APP_CONSOLE_DOMAIN 與 _APP_DOMAIN 時，請求若發送至主要 API 網域（_APP_DOMAIN），會因為 $host !== $mainDomain 成立而被誤認為外部自訂網域進入 router()，導致一般 API 請求被錯誤處理或阻擋。"
+   },
+   {
+    "file": "app/controllers/general.php",
+    "start": 861,
+    "end": 861,
+    "category": "bug",
+    "comment": "在 SSL 憑證生成檢查中，若將 $envDomain 設定為優先讀取 _APP_CONSOLE_DOMAIN，當主要網域 _APP_DOMAIN 收到請求時會因判定為非主網域而跳過憑證生成，導致主網域無法自動取得 SSL 憑證。"
+   },
+   {
+    "file": "src/Appwrite/Platform/Modules/Functions/Http/Executions/Create.php",
+    "start": 354,
+    "end": 354,
+    "category": "bug",
+    "comment": "1. 語意與邏輯問題：`APPWRITE_FUNCTION_API_ENDPOINT` 是供 Function 執行時呼叫 Appwrite REST API 使用的 endpoint。若使用者或環境設定了獨立的 `_APP_CONSOLE_DOMAIN`（例如分開 API 與後台 Console 域名），此處優先使用 Console 域名會導致 Function 的 API 呼叫導向 Console 服務而非 API 服務，引發路由錯誤或 CORS/連線失敗。 2. 空值處理疑慮：若環境變數中 `_APP_CONSOLE_DOMAIN` 被宣告為空字串（例如 docker-compose 常見的 `_APP_CONSOLE_DOMAIN=`），視 `System::getEnv` 的內部實作（若使用 null 合併而非 falsy 判定），可能會直接取得空字串而無法順利 fallback 到 `_APP_DOMAIN`，導致組出無效的 URL（如 `https:///v1`）。"
+   },
+   {
+    "file": "src/Appwrite/Platform/Modules/Functions/Workers/Builds.php",
+    "start": 597,
+    "end": 597,
+    "category": "bug",
+    "comment": "此處建構的是提供給 Function 呼叫使用的 API 端點（$endpoint 指向 /v1 並傳入 APPWRITE_FUNCTION_API_ENDPOINT），應該使用 API 服務的網域（_APP_DOMAIN）。若優先使用 _APP_CONSOLE_DOMAIN，當 Console 與 API 採用不同網域或子網域時，Function 執行階段向 API 發送請求將會失敗或被導向錯誤的服務。"
+   },
+   {
+    "file": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/API/Create.php",
+    "start": 79,
+    "end": 79,
+    "category": "security",
+    "comment": "使用 System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', '')) 會在設定了 _APP_CONSOLE_DOMAIN 的情況下，使 _APP_DOMAIN 不會被加入 $deniedDomains。這可能導致使用者能夠將主要的 API 網域（_APP_DOMAIN）綁定為自訂代理規則，造成網域劫持或路由衝突的安全性風險。"
+   },
+   {
+    "file": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Function/Create.php",
+    "start": 84,
+    "end": 84,
+    "category": "security",
+    "comment": "使用 fallback 方式取值會導致在設定了 `_APP_CONSOLE_DOMAIN` 的環境下，`_APP_DOMAIN`（主 API 網域）不再被加入 `$deniedDomains`。這可能允許使用者將 Function 自訂網域綁定至 Appwrite 自身的 API 網域，造成路由衝突或潛在的網域劫持風險。"
+   },
+   {
+    "file": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Redirect/Create.php",
+    "start": 87,
+    "end": 87,
+    "category": "security",
+    "comment": "使用 fallback 方式取值會導致當環境設定了 `_APP_CONSOLE_DOMAIN` 時，`_APP_DOMAIN` 就無法被加入 `$deniedDomains` 列表中。這可能允許使用者將平台主要的 API/系統網域（`_APP_DOMAIN`）註冊為重定向規則，造成網域劫持或路由衝突的安全性風險。"
+   },
+   {
+    "file": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Site/Create.php",
+    "start": 84,
+    "end": 84,
+    "category": "security",
+    "comment": "使用 `System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''))` 會在設定了 `_APP_CONSOLE_DOMAIN` 時忽略 `_APP_DOMAIN`。這會導致主服務網域（`_APP_DOMAIN`）沒有被加入 `$deniedDomains` 阻擋清單中，使使用者可能建立指向主網域的 Site Proxy Rule，造成流量劫持或衝突。"
+   },
+   {
+    "file": "src/Appwrite/Platform/Workers/Functions.php",
+    "start": 487,
+    "end": 487,
+    "category": "bug",
+    "comment": "如果環境變數 `_APP_CONSOLE_DOMAIN` 存在但值為空字串（例如在 .env 或 docker-compose 中設定為 `_APP_CONSOLE_DOMAIN=\"\"`），`System::getEnv` 會回傳空字串而非觸發預設值，導致無法順利 fallback 至 `_APP_DOMAIN`，最終使 `$hostname` 變為空字串、產生無效的 `$endpoint`（如 `https:///v1`）。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "app/controllers/api/console.php",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. No match — ref argues against using `_APP_CONSOLE_DOMAIN`, while the generated comment concerns duplicate execution.\n2. Match — both identify the redundant/duplicate lookup of `System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''))` across lines 46 and 47.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "app/controllers/general.php",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. Match — both identify that building function/site runtime API endpoints from `_APP_CONSOLE_DOMAIN` sends API calls to the console domain rather than the API domain.\n2. No match — concerns router failures for `$mainDomain` at L812 rather than function runtime endpoints.\n3. No match — concerns inconsistent environment variable usage at L1094.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "app/controllers/general.php",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. No match — concerns endpoint environment variables for functions/sites at L451-452 rather than routing at L812.\n2. Match — both address the issue at L812 where using `_APP_CONSOLE_DOMAIN` for `$mainDomain` causes router failures when requests hit `_APP_DOMAIN`.\n3. No match — concerns inconsistent environment variable usage at L1094.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "app/controllers/general.php",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses API endpoint construction for functions/sites, while generated discusses SSL certificate generation.\n2. No match — ref concerns routing failures due to changing `$mainDomain`, whereas generated focuses on skipping SSL certificate generation for the main domain.\n3. No match — ref suggests adopting the `_APP_CONSOLE_DOMAIN` pattern for consistency, which is the opposite concern of the generated comment.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "src/Appwrite/Platform/Modules/Functions/Http/Executions/Create.php",
+   "matched_gt": [
+    6
+   ],
+   "reason": "1. Match — both address the risk of an empty hostname causing a malformed endpoint URL like `https:///v1`.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 5,
+   "file": "src/Appwrite/Platform/Modules/Functions/Workers/Builds.php",
+   "matched_gt": [
+    8
+   ],
+   "reason": "1. No match — discusses default values and handling empty hostname, whereas the generated comment concerns using the wrong domain variable.\n2. Match — both identify that using `_APP_CONSOLE_DOMAIN` instead of `_APP_DOMAIN` for `APPWRITE_FUNCTION_API_ENDPOINT` can break function API calls when the console and API domains differ.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 6,
+   "file": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/API/Create.php",
+   "matched_gt": [
+    9
+   ],
+   "reason": "1. Match — both identify that when `_APP_CONSOLE_DOMAIN` is set, `_APP_DOMAIN` is omitted from `$deniedDomains`, risking conflicts or hijacking on the main API domain.\n2. No match — reference 2 addresses handling empty strings and normalization/formatting for `$mainDomain`, not the omission of `_APP_DOMAIN`.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 7,
+   "file": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Function/Create.php",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 8,
+   "file": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Redirect/Create.php",
+   "matched_gt": [
+    12
+   ],
+   "reason": "1. No match — Reference 1 addresses handling empty string values for `_APP_CONSOLE_DOMAIN`, not omitting `_APP_DOMAIN` from denied domains.\n2. Match — Both address the issue that setting `_APP_CONSOLE_DOMAIN` excludes `_APP_DOMAIN` from `$deniedDomains`, risking domain hijacking.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 9,
+   "file": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Site/Create.php",
+   "matched_gt": [],
+   "reason": "1. No match — Generated comment addresses missing `_APP_DOMAIN` in `$deniedDomains` when `_APP_CONSOLE_DOMAIN` is set, whereas reference comment addresses empty string handling for `_APP_CONSOLE_DOMAIN`.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 10,
+   "file": "src/Appwrite/Platform/Workers/Functions.php",
+   "matched_gt": [],
+   "reason": "1. No match — the generated comment addresses empty string values preventing fallback to `_APP_DOMAIN`, whereas the reference comment addresses the lack of validation when neither domain variable is set.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

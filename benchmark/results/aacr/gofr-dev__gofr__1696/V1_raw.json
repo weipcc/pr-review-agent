@@ -1,0 +1,101 @@
+{
+ "results": [
+  {
+   "summary": "本次改動在 ServeHTTP 中就地替換共享的 container.Logger，引發了嚴重的並發 Data Race 與上下文覆蓋問題，需要改進。",
+   "issues": [
+    {
+     "line": 73,
+     "severity": "bug",
+     "comment": "直接修改共享的 h.container.Logger 會導致嚴重的並發資料競爭 (Data Race)。HTTP 請求是並發處理的，多個 goroutine 同時修改與還原 h.container.Logger 不僅會互相覆蓋並破壞原始 logger，還會導致 trace ID 在不同請求間交叉污染。此外，當請求逾時退出觸發 defer 還原時，背景仍執行的 goroutine 存取 h.container.Logger 也會造成 race condition。",
+     "suggestion": "請勿修改共享的 h.container.Logger。建議將建立好的 ctxLogger 綁定在目前請求獨立的 Context 結構中（例如 c.Logger），並在 handler 內部與 logError/panicRecoveryHandler 中傳遞該實例。"
+    },
+    {
+     "line": 154,
+     "severity": "style",
+     "comment": "函式註解中依然寫著「with traceID and errorMessage」，但此次修改已將 traceID 參數及 ErrorLogEntry 中的 TraceID 欄位移除。",
+     "suggestion": "建議更新函式註解為「// Log the error (if any) using the provided logger and appropriate log level.」以保持與程式碼一致。"
+    }
+   ],
+   "filename": "pkg/gofr/handler.go"
+  },
+  {
+   "summary": "新增 ContextLogger 包裝器以自動注入 trace ID，但在所有格式化日誌方法（*f）中直接附加參數會導致格式化字串佔位符不匹配的錯誤。",
+   "issues": [
+    {
+     "line": 38,
+     "severity": "bug",
+     "comment": "在所有格式化日誌方法（Debugf, Logf, Infof, Noticef, Warnf, Errorf, Fatalf）中，withTraceInfo 會在 args 後方附加一個 map 元素。但 format string (f) 中並沒有對應的格式化佔位符（如 %v），這會導致底層在執行 fmt.Sprintf/Printf 時產生「%!(EXTRA ...)」格式錯誤輸出。",
+     "suggestion": "不應直接將 trace ID 作為引數附加到 *f 方法的 args 中。建議改由底層 Logger 提供專屬的 trace/context 注入介面，或在格式化字串結尾相應補上格式或透過結構化欄位記錄。"
+    },
+    {
+     "line": 16,
+     "severity": "style",
+     "comment": "在結構體中保存 context.Context 違反 Go 官方慣例（Do not store Contexts inside a struct type），可能導致 Context 被不當跨函式或跨 goroutine 共享，延長生命週期或未能正確反映 cancellation。",
+     "suggestion": "若此 Logger 嚴格受限於單次請求內生命週期使用，請在型別說明中明確標註生命週期限制；或者可評估是否直接透過方法參數傳入 context。"
+    }
+   ],
+   "filename": "pkg/gofr/logging/ctx_logger.go"
+  },
+  {
+   "summary": "新增 ContextLogger 的單元測試，整體結構清晰，但 mockTracedContext 中使用了不存在的 otel 函式會導致編譯失敗，且部分 mock 與註解有待完善。",
+   "issues": [
+    {
+     "line": 72,
+     "severity": "bug",
+     "comment": "go.opentelemetry.io/otel/trace 套件中並不存在 ContextWithSpanContext 函式，這會導致測試檔案無法編譯。otel/trace 注入 SpanContext 的對應函式為 ContextWithRemoteSpanContext。",
+     "suggestion": "改用 trace.ContextWithRemoteSpanContext(ctx, sc) 或是 trace.ContextWithSpan(ctx, trace.WrapSpanContext(sc))。"
+    },
+    {
+     "line": 58,
+     "severity": "style",
+     "comment": "函式註解中寫的是 mockTracerProvider，但實際函式名稱為 mockTracedContext，註解與實作名稱不符。",
+     "suggestion": "將註解改為 `// mockTracedContext creates a context with a valid trace ID for testing.`。"
+    },
+    {
+     "line": 23,
+     "severity": "style",
+     "comment": "mockLogger 的所有格式化方法（Debugf, Infof, Errorf 等）皆將變數參數以 `_ ...any` 丟棄，僅保留 format 字串，若後續測試需要驗證帶有 trace 資訊或參數的格式化日誌時將無法正確反映。",
+     "suggestion": "建議在各格式化方法中使用 fmt.Sprintf(format, args...) 來組裝訊息並存入 logEntry.Message。"
+    }
+   ],
+   "filename": "pkg/gofr/logging/ctx_logger_test.go"
+  },
+  {
+   "summary": "本次改動在日誌結構與輸出中增加了 trace_id 的支援，並透過過濾 args 擷取追蹤資訊，但存在不必要的記憶體配置與潛在的引數遺失問題。",
+   "issues": [
+    {
+     "line": 253,
+     "severity": "performance",
+     "comment": "每次呼叫日誌輸出時，extractTraceIDAndFilterArgs 都會重新配置一個長度為 len(args) 的 slice。在多數日誌未傳入 trace ID 的情況下，這會帶來額外且不必要的堆疊記憶體分配（heap allocation）與 GC 負擔。",
+     "suggestion": "可以先遍歷檢查 args 中是否存在 trace ID 標記；若無則直接回傳原 args，避免每次 log 呼叫都進行 slice 配置。"
+    },
+    {
+     "line": 256,
+     "severity": "bug",
+     "comment": "若傳入的 map[string]any 除了 __trace_id__ 之外還包含其他鍵值對，該 map 會因 continue 被整包過濾掉，導致其他資料遺失。此外，若使用者本身正常業務資料中恰好包含同名 key，也會非預期地被當作 trace ID 移除。",
+     "suggestion": "建議定義專門的型別（例如 type traceContext struct { TraceID string } 或專屬 context carrier），避免使用通用的 map[string]any 與魔術字串（magic key），或在 map 包含其他欄位時將其餘欄位保留。"
+    }
+   ],
+   "filename": "pkg/gofr/logging/logger.go"
+  },
+  {
+   "summary": "更新 prettyPrint 測試以配合傳入 logEntry 指標型別，改動合理且無問題。",
+   "issues": [],
+   "filename": "pkg/gofr/logging/logger_test.go"
+  }
+ ],
+ "n_files": 5,
+ "elapsed_s": 118.3,
+ "calls": 5,
+ "input_tokens": 20258,
+ "output_tokens": 1522,
+ "call_input_tokens": [
+  3593,
+  2063,
+  6230,
+  4631,
+  3741
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

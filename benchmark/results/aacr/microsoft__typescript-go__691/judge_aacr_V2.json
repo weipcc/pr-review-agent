@@ -1,0 +1,39 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 3,
+  "findings": [
+   {
+    "file": "internal/checker/checker.go",
+    "start": 10829,
+    "end": 10831,
+    "category": "bug",
+    "comment": "c.compilerOptions.Lib contains target lib names as specified in tsconfig/compiler options (e.g. \"dom\" or case-insensitive variants like \"dom\", or filenames), not necessarily \"lib.dom.d.ts\". In TypeScript's original implementation, this checks whether 'dom' is included in the resolved libs (or whether the lib options contain 'dom'). Furthermore, if options.Lib is nil, TypeScript's default libs depend on `target` and often include `dom` (e.g., target ES5/ES6 default includes DOM if lib is omitted). Checking `c.compilerOptions.Lib == nil` causes this to return `false` when `lib` is unspecified, whereas TS may or may not include dom by default depending on target/settings. Even when specified, users typically write `\"lib\": [\"es2020\"]` or `[\"dom\"]`, not `\"lib.dom.d.ts\"`."
+   },
+   {
+    "file": "internal/checker/checker.go",
+    "start": 10840,
+    "end": 10846,
+    "category": "bug",
+    "comment": "If t.symbol.Name is exactly \"HTMLElement\", strings.HasPrefix(..., \"HTML\") and strings.HasSuffix(..., \"Element\") are both true because \"HTMLElement\" starts with \"HTML\" and ends with \"Element\". However, len(\"HTMLElement\") is 11, so t.symbol.Name[4 : len(t.symbol.Name)-7] is t.symbol.Name[4:4], which is an empty slice. While the loop won't panic, this means \"HTMLElement\" has no middle characters and returns isMiddleAlpha = true. However, in TypeScript (regex `/^HTML[A-Za-z]+Element$/`), at least one ASCII letter (`+`) is required between `HTML` and `Element`, meaning `HTMLElement` itself should NOT match this pattern (it is handled separately or by its own name check if intended, or in TS `HTMLElement` is explicitly listed or matched). If `HTMLElement` was already handled or intended to match, verify whether `HTMLElement` itself is supposed to match this branch or if the pattern required at least 1 character. In TS: `/^HTML[A-Za-z]+Element$/` requires len(middle) >= 1. Furthermore, if len(t.symbol.Name) < 11, strings.HasPrefix(\"HTML\") and HasSuffix(\"Element\") would overlap if len < 11 was possible (though min len here is 11), but if middle length is 0, this accepts names with 0 middle chars."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "internal/checker/checker.go",
+   "matched_gt": [],
+   "reason": "1. No match — Ref 1 points out a logically inverted boolean condition, whereas the generated comment addresses using the wrong string identifier (\"lib.dom.d.ts\" vs \"dom\") and handling default libs when `Lib` is nil.\n2. No match — Ref 2 suggests using `stringutil.IsASCIILetter`, unrelated to compiler options lib checking.\n3. No match — Ref 3 addresses an index out of bounds panic in string slicing, unrelated to compiler options lib checking.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "internal/checker/checker.go",
+   "matched_gt": [],
+   "reason": "1. No match — concerns inverted logic in the DOM library check, while the generated comment is about matching 0 middle characters.\n2. No match — suggests using `stringutil.IsASCIILetter`, while the generated comment concerns matching semantics when the middle slice is empty.\n3. No match — flags an out-of-bounds panic for strings under 11 characters, whereas the generated comment addresses the semantic discrepancy with TypeScript's regex requiring at least 1 middle character.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

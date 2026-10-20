@@ -1,0 +1,41 @@
+{
+ "results": [
+  {
+   "change_intent": "Add test cases ensuring Type::fromValue produces enum types for both pure and backed enum values.",
+   "summary": "Well-targeted test cases covering both pure and backed enums.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Symfony/Component/TypeInfo/Tests/TypeFactoryTest.php"
+  },
+  {
+   "change_intent": "Identify enum objects in Type::fromValue and map them to enum types instead of generic object types.",
+   "summary": "Fixes enum detection in Type::fromValue, though the check can be simplified using the instanceof operator.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 415,
+     "end_line": 415,
+     "category": "refactor",
+     "confidence": "high",
+     "evidence": "\\is_object($value) && is_subclass_of($value::class, \\UnitEnum::class) => Type::enum($value::class),",
+     "comment": "The check `\\is_object($value) && is_subclass_of($value::class, \\UnitEnum::class)` can be replaced with `$value instanceof \\UnitEnum`. `instanceof` safely handles non-objects and avoids the overhead of inspecting the class string via `is_subclass_of`. Calling `self::enum(...)` is also more consistent with surrounding branches like `self::object()`.",
+     "suggestion": "Replace `\\is_object($value) && is_subclass_of($value::class, \\UnitEnum::class) => Type::enum($value::class),` with `$value instanceof \\UnitEnum => self::enum($value::class),`.",
+     "suggested_code": "            $value instanceof \\UnitEnum => self::enum($value::class),"
+    }
+   ],
+   "filename": "src/Symfony/Component/TypeInfo/TypeFactoryTrait.php"
+  }
+ ],
+ "n_files": 2,
+ "input_tokens": 9312,
+ "output_tokens": 473,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 36.6,
+ "mode": "batch",
+ "routing_tokens": 5611,
+ "call_input_tokens": [
+  9312
+ ],
+ "model": "gemini-3.8-flash"
+}

@@ -1,0 +1,59 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 6,
+  "findings": [
+   {
+    "file": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs",
+    "start": 40,
+    "end": 40,
+    "category": "bug",
+    "comment": "IPAddress.NetworkToHostOrder((short)...) 的回傳型別為 short。當 Port 數值大於 32767 時（常見於 client 的 ephemeral port，範圍通常為 49152~65535），轉型為 short 會變為負數，隱式轉換為 int 回傳時會發生符號擴展（例如 Port 50000 會變成 -15536）。"
+   },
+   {
+    "file": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs",
+    "start": 62,
+    "end": 62,
+    "category": "bug",
+    "comment": "同 IPv4 實作，IPAddress.NetworkToHostOrder((short)...) 會使大於 32767 的 Port 在回傳為 int 時變成負數。"
+   },
+   {
+    "file": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs",
+    "start": 20,
+    "end": 20,
+    "category": "bug",
+    "comment": "若傳入的 pSockaddr 指標為 null，直接解引用 pSockaddr->sa_family 會引發 AccessViolationException 或 NullReferenceException。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — discusses missing null check on `pSockaddr`, while generated comment is about port sign extension.\n2. No match — discusses IP address byte order in `IPAddress(long)`, while generated comment is about port conversion.\n3. Match — both flag the issue with casting port to `short` for values above 32767.\n4. No match — discusses a temporary workaround for CsWin32 inline array support.\n5. No match — discusses missing IPv6 scope ID handling.\n\n[3]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — ref discusses missing null check on `pSockaddr`, generated discusses port conversion bug.\n2. No match — ref discusses IPv4 address byte order in `IPAddress` constructor, generated discusses port conversion overflow.\n3. Match — both flag the `(short)` port conversion issue for ports greater than 32767.\n4. No match — ref discusses `AsReadOnlySpan()` tracking workaround, generated discusses port overflow.\n5. No match — ref discusses IPv6 scope ID handling, generated discusses port overflow.\n\n[3]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both flag dereferencing `pSockaddr` without a null check leading to an AccessViolationException.\n2. No match — ref addresses IPAddress byte order endianness bug.\n3. No match — ref addresses port conversion cast range.\n4. No match — ref addresses tracking a temporary workaround for CsWin32 inline array support.\n5. No match — ref addresses IPv6 scope ID handling.\n\n[1]",
+   "hit_new_gt": true
+  }
+ ]
+}

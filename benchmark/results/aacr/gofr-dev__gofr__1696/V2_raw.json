@@ -1,0 +1,96 @@
+{
+ "results": [
+  {
+   "change_intent": "Wrap the container logger with a request-scoped ContextLogger in ServeHTTP and remove redundant trace ID formatting from ErrorLogEntry.",
+   "summary": "Mutating the shared container.Logger on every HTTP request introduces a severe race condition across concurrent requests.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 71,
+     "end_line": 75,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "origLogger := h.container.Logger\n\tctxLogger := logging.NewContextLogger(c.Context, origLogger)\n\th.container.Logger = ctxLogger\n\n\tdefer func() { h.container.Logger = origLogger }()",
+     "comment": "`h.container` is a shared singleton accessed concurrently across all incoming HTTP requests. Overwriting `h.container.Logger` per request and restoring it in `defer` causes a severe race condition: concurrent requests will overwrite each other's logger, mix up request contexts/trace IDs, and restore `origLogger` prematurely while another request is still processing.",
+     "suggestion": "Do not mutate `h.container.Logger` globally. Instead, scope the contextual logger to the request's context (e.g. `c.Context` or by setting `c.Logger = ctxLogger` on the request context `c`), or pass `ctxLogger` directly to the request's handlers and helpers without mutating the shared container.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "pkg/gofr/handler.go"
+  },
+  {
+   "change_intent": "Introduce ContextLogger to wrap a base Logger and automatically append trace ID metadata from the context to log arguments.",
+   "summary": "ContextLogger works as intended, but allocating a map[string]any on every log statement creates unnecessary heap allocations and GC overhead on the logging path.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 30,
+     "end_line": 32,
+     "category": "performance",
+     "confidence": "medium",
+     "evidence": "if sc.IsValid() {\n\t\treturn append(args, map[string]any{\"__trace_id__\": sc.TraceID().String()})\n\t}",
+     "comment": "Allocating a map[string]any on every log call introduces heap allocations and GC overhead on the logging path. In addition, using a map with the string key \"__trace_id__\" relies on magic strings and could potentially collide with user-provided map data.",
+     "suggestion": "Define an unexported type within the logging package (for example, type traceID string or a dedicated struct) instead of allocating a map[string]any. This eliminates map allocation and lookup overhead, avoids string key collisions, and allows a direct type assertion in extractTraceIDAndFilterArgs.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "pkg/gofr/logging/ctx_logger.go"
+  },
+  {
+   "change_intent": "Add comprehensive unit and integration tests for ContextLogger and its trace extraction behavior.",
+   "summary": "The test suite thoroughly covers ContextLogger's trace propagation, fallback behavior, and log forwarding without any issues.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "pkg/gofr/logging/ctx_logger_test.go"
+  },
+  {
+   "change_intent": "Update log formatting and entry structures to extract and display OpenTelemetry trace IDs alongside log messages.",
+   "summary": "Trace ID support has been added to logEntry and pretty printing, but argument filtering introduces unnecessary slice allocations on all log calls and relies on an untyped map convention.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 251,
+     "end_line": 267,
+     "category": "performance",
+     "confidence": "high",
+     "evidence": "func extractTraceIDAndFilterArgs(args []any) (traceID string, filtered []any) {\n\tfiltered = make([]any, 0, len(args))\n\n\tfor _, arg := range args {\n\t\tif m, ok := arg.(map[string]any); ok {\n\t\tdif tid, exists := m[\"__trace_id__\"].(string); exists && traceID == \"\" {\n\t\t\t\ttraceID = tid\n\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\n\t\tfiltered = append(filtered, arg)\n\t}\n\n\treturn traceID, filtered\n}",
+     "comment": "extractTraceIDAndFilterArgs allocates a new slice on every single log call even when no trace ID is present in args. For the majority of log calls where no trace ID is injected (such as background tasks, startup, or when tracing is disabled), allocating and copying arguments into filtered adds unnecessary heap allocations to the logging hot path.",
+     "suggestion": "Scan args first. If no trace ID metadata is found, return the original args slice without performing any allocation.",
+     "suggested_code": "func extractTraceIDAndFilterArgs(args []any) (traceID string, filtered []any) {\n\tfor i, arg := range args {\n\t\tif m, ok := arg.(map[string]any); ok {\n\t\t\tif tid, exists := m[\"__trace_id__\"].(string); exists {\n\t\t\t\tfiltered = make([]any, 0, len(args)-1)\n\t\t\t\tfiltered = append(filtered, args[:i]...)\n\t\t\t\tfiltered = append(filtered, args[i+1:]...)\n\n\t\t\t\treturn tid, filtered\n\t\t\t}\n\t\t}\n\t}\n\n\treturn \"\", args\n}"
+    },
+    {
+     "start_line": 255,
+     "end_line": 261,
+     "category": "refactor",
+     "confidence": "medium",
+     "evidence": "if m, ok := arg.(map[string]any); ok {\n\t\t\tif tid, exists := m[\"__trace_id__\"].(string); exists && traceID == \"\" {\n\t\t\t\ttraceID = tid\n\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}",
+     "comment": "Using a generic map[string]any with a magic key \"__trace_id__\" to pass metadata between ContextLogger and logger requires allocating a map on every traced log statement, and risks stripping user data if user code logs a map containing \"__trace_id__\" with other fields. Because both ContextLogger and logger reside in package logging, an unexported type (such as type traceID string) can be used instead.",
+     "suggestion": "Define an unexported type in package logging (e.g. type traceContext string) and type-assert against it rather than inspecting a map[string]any.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "pkg/gofr/logging/logger.go"
+  },
+  {
+   "change_intent": "Update TestPrettyPrint calls to pass a pointer to logEntry to match the updated prettyPrint method signature.",
+   "summary": "The changes correctly update logEntry arguments to pointers and introduce no issues.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "pkg/gofr/logging/logger_test.go"
+  }
+ ],
+ "n_files": 5,
+ "elapsed_s": 269.7,
+ "calls": 5,
+ "input_tokens": 66940,
+ "output_tokens": 1694,
+ "call_input_tokens": [
+  13017,
+  11728,
+  14127,
+  13979,
+  14089
+ ],
+ "mode": "per-file",
+ "routing_tokens": 19422
+}

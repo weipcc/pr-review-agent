@@ -1,0 +1,28 @@
+{
+ "owner": "filamentphp",
+ "repo": "filament",
+ "full": "filamentphp/filament",
+ "pr_number": 15756,
+ "title": "Update pt_BR auth translations",
+ "body": "<!-- FILL OUT ALL RELEVANT SECTIONS, OR THE PULL REQUEST WILL BE CLOSED. -->\r\n\r\n## Description\r\n\r\n<!-- Describe the addressed issue or the need for the new or updated functionality. -->\r\n\r\nFix pt_BR auth translations\r\n\r\n## Visual changes\r\n\r\n<!-- Add screenshots/recordings of before and after. -->\r\n\r\nNo visual changes\r\n\r\n## Functional changes\r\n\r\nNo functional changes",
+ "base_sha": "8b44845f2bfab244f650d38e1b0ac00e733612e7",
+ "review_sha": "912f080f3bf9873c1d059bcb9df485e3d8939220",
+ "head_now": "912f080f3bf9873c1d059bcb9df485e3d8939220",
+ "raw_diff": "diff --git a/packages/panels/resources/lang/pt_BR/pages/auth/login.php b/packages/panels/resources/lang/pt_BR/pages/auth/login.php\nindex f08f96a0f6c..20c7ce52376 100644\n--- a/packages/panels/resources/lang/pt_BR/pages/auth/login.php\n+++ b/packages/panels/resources/lang/pt_BR/pages/auth/login.php\n@@ -10,7 +10,7 @@\n \n         'register' => [\n             'before' => 'ou',\n-            'label' => 'criar uma conta',\n+            'label' => 'crie uma conta',\n         ],\n \n         'request_password_reset' => [\ndiff --git a/packages/panels/resources/lang/pt_BR/pages/auth/password-reset/reset-password.php b/packages/panels/resources/lang/pt_BR/pages/auth/password-reset/reset-password.php\nindex 85136f73b14..8e3f710f406 100644\n--- a/packages/panels/resources/lang/pt_BR/pages/auth/password-reset/reset-password.php\n+++ b/packages/panels/resources/lang/pt_BR/pages/auth/password-reset/reset-password.php\n@@ -14,7 +14,7 @@\n \n         'password' => [\n             'label' => 'Senha',\n-            'validation_attribute' => 'password',\n+            'validation_attribute' => 'senha',\n         ],\n \n         'password_confirmation' => [\ndiff --git a/packages/panels/resources/lang/pt_BR/pages/auth/register.php b/packages/panels/resources/lang/pt_BR/pages/auth/register.php\nindex 8dbd513b173..1131303752b 100644\n--- a/packages/panels/resources/lang/pt_BR/pages/auth/register.php\n+++ b/packages/panels/resources/lang/pt_BR/pages/auth/register.php\n@@ -27,7 +27,7 @@\n \n         'password' => [\n             'label' => 'Senha',\n-            'validation_attribute' => 'password',\n+            'validation_attribute' => 'senha',\n         ],\n \n         'password_confirmation' => [\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "packages/panels/resources/lang/pt_BR/pages/auth/register.php",
+   "body": "The validation_attribute for the password field must retain the field name 'password' as the translation key, not the translated string 'senha', to ensure proper validation error message generation.",
+   "from_line": 30,
+   "to_line": 30,
+   "category": "Code Defect",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -27,7 +27,7 @@\n \n         'password' => [\n             'label' => 'Senha',\n-            'validation_attribute' => 'password',\n+            'validation_attribute' => 'senha',\n         ],\n \n         'password_confirmation' => [",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "PHP"
+}

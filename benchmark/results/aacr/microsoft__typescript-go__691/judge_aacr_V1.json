@@ -1,0 +1,39 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 3,
+  "findings": [
+   {
+    "file": "internal/checker/checker.go",
+    "start": 10829,
+    "end": 10829,
+    "category": "bug",
+    "comment": "在 TypeScript 中，`compilerOptions.lib` 的設定通常為 `\"dom\"` 或 `\"DOM\"`，且原始比對邏輯為不分大小寫檢查是否包含 `\"dom\"`（`lib.some(l => l.toLowerCase() === \"dom\")`）。直接使用 `slices.Contains` 比對 `\"lib.dom.d.ts\"` 會導致大小寫不一致或設定為 `\"dom\"` 時比對失敗。"
+   },
+   {
+    "file": "internal/checker/checker.go",
+    "start": 10844,
+    "end": 10844,
+    "category": "bug",
+    "comment": "TypeScript 原始對應正則是 `/^HTML[a-zA-Z]+Element$/`（中間至少有一個英文字母）。當名稱剛好是 `\"HTMLElement\"` 時，切片 `t.symbol.Name[4 : len(t.symbol.Name)-7]` 的長度為 0，迴圈不會執行，導致 `isMiddleAlpha` 仍為 `true`，等同於匹配了 `*` 而非 `+`。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "internal/checker/checker.go",
+   "matched_gt": [],
+   "reason": "1. No match — ref flags a logical inversion of whether DOM library is available, while generated flags incorrect library name matching (\"lib.dom.d.ts\" vs case-insensitive \"dom\").\n2. No match — ref discusses using `stringutil.IsASCIILetter`, which is unrelated.\n3. No match — ref discusses string slicing index out of bounds panic, which is unrelated.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "internal/checker/checker.go",
+   "matched_gt": [],
+   "reason": "1. No match — discusses the DOM library condition logic, whereas the generated comment addresses the regex matching logic allowing empty middle letters.\n2. No match — suggests using a utility function (`stringutil.IsASCIILetter`) for readability, whereas the generated comment identifies a bug matching zero characters (`*` instead of `+`).\n3. No match — concerns index out-of-bounds panics when string length is less than 11, whereas the generated comment addresses logic failure when length is exactly 11 (`HTMLElement`).\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

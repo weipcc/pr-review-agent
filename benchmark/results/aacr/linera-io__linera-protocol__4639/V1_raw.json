@@ -1,0 +1,38 @@
+{
+ "results": [
+  {
+   "summary": "重新匯出 (re-export) 常數 CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES 供 crate 內部使用，改動單純且無問題。",
+   "issues": [],
+   "filename": "linera-core/src/chain_worker/mod.rs"
+  },
+  {
+   "summary": "限制了 ChainInfo 中 received_log 的單次讀取數量上限，但在 start 大於當前日誌總筆數時會產生無效的 Range。",
+   "issues": [
+    {
+     "line": 1418,
+     "severity": "bug",
+     "comment": "當查詢請求的 start（request_received_log_excluding_first_n）大於 chain.received_log.count() 時，end 會被取為 count()，導致 start > end。傳入反向範圍（start..end）會造成 panic（例如底層資料結構的範圍查詢斷言 range start <= range end）。",
+     "suggestion": "建議在讀取前先檢查 start 是否小於總筆數，或確保 end 不小於 start。例如：\n```rust\nlet count = chain.received_log.count();\nif start < count {\n    let end = start.saturating_add(CHAIN_INFO_MAX_RECEIVED_LOG_ENTRIES).min(count);\n    info.requested_received_log = chain.received_log.read(start..end).await?;\n}\n```"
+    }
+   ],
+   "filename": "linera-core/src/chain_worker/state.rs"
+  },
+  {
+   "summary": "實作了分頁拉取 remote node 的 received certificates log，邏輯清晰且正確處理了分頁邊界情況。",
+   "issues": [],
+   "filename": "linera-core/src/client/mod.rs"
+  }
+ ],
+ "n_files": 3,
+ "elapsed_s": 41.4,
+ "calls": 3,
+ "input_tokens": 5012,
+ "output_tokens": 367,
+ "call_input_tokens": [
+  464,
+  2248,
+  2300
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

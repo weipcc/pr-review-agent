@@ -1,0 +1,73 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 6,
+  "findings": [
+   {
+    "file": "vllm/v1/core/kv_cache_manager.py",
+    "start": 115,
+    "end": 117,
+    "category": "refactor",
+    "comment": "During decode, callers never pass computed blocks and must explicitly pass `[]` on every call (e.g. in scheduler and tests). Making `new_computed_blocks` optional with a default of `None` simplifies the caller interface."
+   },
+   {
+    "file": "vllm/v1/core/kv_cache_manager.py",
+    "start": 140,
+    "end": 140,
+    "category": "nitpick",
+    "comment": "The docstring does not mention that `None` can be returned when blocks cannot be allocated."
+   },
+   {
+    "file": "vllm/v1/core/kv_cache_manager.py",
+    "start": 154,
+    "end": 154,
+    "category": "nitpick",
+    "comment": "Typo in comment: 'cacheing' instead of 'caching'."
+   },
+   {
+    "file": "vllm/v1/core/kv_cache_manager.py",
+    "start": 431,
+    "end": 431,
+    "category": "nitpick",
+    "comment": "Docstring param description for `_untouch` copied from `_touch`: says 'to touch' instead of 'to untouch'."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "vllm/v1/core/kv_cache_manager.py",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both suggest making `new_computed_blocks` optional with a default of `None` to avoid callers having to pass empty lists.\n2. No match — ref addresses a spelling error in a comment.\n3. No match — ref addresses an LRU cache ordering issue in `_untouch`.\n4. No match — ref addresses documentation/wording errors in a docstring.\n5. No match — ref addresses docstring grammar.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "vllm/v1/core/kv_cache_manager.py",
+   "matched_gt": [],
+   "reason": "1. No match — discusses making a parameter optional with default None, not documenting a None return value.\n2. No match — discusses a spelling error in a comment, unrelated to docstring return types.\n3. No match — discusses LRU cache policy violation in `_untouch`, unrelated to docstrings.\n4. No match — discusses grammatical issues in the `_untouch` docstring, not missing return value documentation.\n5. No match — discusses wording improvement in `_untouch` docstring, not missing return value documentation.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "vllm/v1/core/kv_cache_manager.py",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. No match — discusses making a parameter optional with a default value.\n2. Match — both flag the exact same typo ('cacheing' -> 'caching') in the comment.\n3. No match — discusses LRU cache policy violation in `_untouch`.\n4. No match — discusses documentation wording errors in `_untouch`.\n5. No match — discusses grammar/wording in `_untouch` docstring.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "vllm/v1/core/kv_cache_manager.py",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. No match — concerns making `new_computed_blocks` optional, unrelated to docstrings.\n2. No match — concerns a typo in a code comment, unrelated to docstring parameter descriptions.\n3. No match — addresses LRU queue logic in `_untouch`, not documentation.\n4. Match — both flag the docstring parameter description stating \"to touch\" instead of \"to untouch\".\n5. No match — addresses the grammar of the summary sentence, not the parameter description.\n\n[4]",
+   "hit_new_gt": true
+  }
+ ]
+}

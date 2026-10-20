@@ -2,44 +2,53 @@
 
 ## AACR-Bench evaluation (used in the report)
 
-Compares three versions of the reviewer on 10 real pull requests from
+Compares versions of the reviewer on real pull requests from
 [AACR-Bench](https://huggingface.co/datasets/Alibaba-Aone/aacr-bench), each reviewed at the commit the
 reference comments were made on:
 
-| | commit | what it is | code |
-|---|---|---|---|
-| V1 | 6ddb19c | original framework and prompt (baseline) | `_v1_main/` |
-| V2 | 2ed8205 | reworked prompt, few-shot, project context, no tools | `_v2_main/` |
-| V3 | cbe4576 | final system: agent + E2B sandbox (main after PR #9) | `_final_main/` |
+| | commit | what it is | code | evaluated on |
+|---|---|---|---|---|
+| V1 | 6ddb19c | original framework and prompt (baseline) | `_v1_main/` | 50 PRs |
+| V2 | dfb986c | reworked prompt, few-shot, project context, size routing, @mention poller; no tools (review code identical to 2ed8205) | `_v2_main/` | 50 PRs |
+| V3 | cbe4576 | agent + E2B sandbox (main after PR #9) | `_final_main/` | 10 pilot PRs |
 
-The `_v*_main/` folders are `git archive` exports of those commits, so each version runs its own real code.
-Ground truth = every comment in AACR-Bench with `label = 1` (17 human-written + 17 AI-written = 34).
-Matching follows the official AACR-Bench protocol (`alibaba/aacr-bench`, `evaluation/judge.py`, file-level
-semantic coverage): one judge call per finding against the reference comments of the same file, with the official
-judge prompt verbatim (`gemini-3.8-flash`, temperature 0); precision counts a finding only if it covers a
-reference not covered by an earlier finding; balanced score = harmonic mean. The judge has not been checked
-against human labels.
+The `_v*_main/` folders are `git archive` exports of those commits, so each version runs its own real code
+(all with `gemini-3.8-flash`, one run per PR).
+
+**Selection** (`select_aacr.py` -> `data/selection/aacr/selection_100.json`, fixed before any results; seed 20261018):
+eligible = review commit still available, >= 1 valid comment (`label = 1`), <= 20 changed files (171 of 200);
+small = diff at the review commit <= 6,000 tokens (134). The evaluated set (`in_small50`) is the 10 pilot PRs
+(`shortlist_aacr.json`; ClickHouse#85266 was replaced by bitcoin#31886 because its review commit is gone) plus
+40 small PRs drawn at random, stratified by language. A large group (> 6,000 tokens) was selected but not run.
+`select_aacr.py` reads the GitHub web compare diffs of all 200 PRs from a local folder (not committed).
+
+**Ground truth**: every comment with `label = 1` on those PRs (299). **Scoring** follows the official AACR-Bench
+protocol (`alibaba/aacr-bench`, `evaluation/judge.py`, file-level semantic coverage): one judge call per finding
+against the reference comments of the same file, official judge prompt verbatim (`gemini-3.8-flash`,
+temperature 0); precision counts a finding only if it covers a reference not covered by an earlier finding.
+The judge has not been checked against human labels.
 
 ```bash
-# needs GEMINI_API_KEY and E2B_KEY in <repo>/.env (GITHUB_TOKEN recommended: anonymous API = 60 requests/hour)
-# a venv with the final version's requirements (+ requests, pydantic, google-genai) -> benchmark/_final_venv
+# needs GEMINI_API_KEY in <repo>/.env (E2B_KEY only for V3), and GITHUB_TOKEN (anonymous API = 60 requests/hour;
+# _version_worker.py adds it to the old versions' GitHub requests)
 benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py build     # inputs + ground truth, no model calls
-benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py run       # V1/V2/V3 on all 10 PRs (cached; --force reruns)
+benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py run       # V1/V2 on the 50 PRs (cached; stops on 402)
 benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py judge     # LLM judge, AACR-Bench protocol
 benchmark/_final_venv/bin/python benchmark/run_aacr_eval.py summary   # tables -> results/aacr/summary.md
-python benchmark/plot_aacr.py figure.pdf                              # needs matplotlib
+python benchmark/plot_aacr.py figure.pdf                              # report figure, needs matplotlib
+# --set pilot|small50|batch1|all chooses the PRs (default small50); --only V1,V2,V3 the versions
 ```
 
-- `data/selection/aacr/`: AACR-Bench rows (`aacr.json`), the 38 PRs with <= 2 files and a valid human
-  comment (`aacr_ok.json`), the 10 chosen (`shortlist_aacr.json`; ClickHouse#85266 was replaced by
-  bitcoin#31886 because its review commit no longer exists on GitHub) and their diffs.
-- `results/aacr/<owner>__<repo>__<n>/`: `state.json` (input + ground truth), `V?.json` (each version's
-  review, tokens, time, agent tool calls), `judge_aacr_V?.json` (official-protocol verdicts per finding; `judge_V?.json` are the earlier per-reference verdicts, kept for reference). `summary.md` has the tables.
+- `results/aacr/<owner>__<repo>__<n>/`: `state.json` (input + ground truth), `V?.json` (review, tokens, time,
+  V2's routing mode; V3's tool calls), `judge_aacr_V?.json` (official-protocol verdicts per finding; all
+  numbers in the report and in `summary.md` come from these).
+- V2's routing mode for the 10 pilot PRs was recomputed afterwards (`route_backfilled`), with token counting only.
 
-Headline (one run per version): recall V1 10/34, V2 8/34, V3 3/34; precision (lower bound) 10/22, 8/16, 3/5;
-balanced score 0.36 / 0.32 / 0.15;
-mean input tokens 4.5k / 9.9k / 87.8k. V3 used all 10 tool steps on 8 of 10 PRs and 7 of those ended with no
-findings (3 missing files in the output), which the product would show as "Looks Good".
+Headline on the 50 PRs (one run per version): recall V1 79/299 (26%), V2 56/299 (19%); precision (lower bound)
+V1 76/195 (39%), V2 53/119 (45%); mean input tokens 13.9k / 42.5k. V2 reports 39% fewer findings, 97% of them
+on an added line (V1 91%), and 96% of its evidence quotes appear verbatim in the diff. On the 10 pilot PRs V3
+covered 3/34 references (V1 10, V2 8): it used all 10 tool steps on 8 PRs and 7 of those ended with no findings,
+which the product would show as "Looks Good".
 
 ## Earlier snippet-level benchmark (github-codereview)
 

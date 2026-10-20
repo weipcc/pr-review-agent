@@ -1,0 +1,85 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 7,
+  "findings": [
+   {
+    "file": "codex-rs/core/src/client_common.rs",
+    "start": 128,
+    "end": 128,
+    "category": "bug",
+    "comment": "在 ResponsesApiRequest 結構體中僅刪除了註解，未將 `pub(crate) store: bool,` 欄位刪除。但下方單元測試（第 190 行與第 219 行）中已經移除了 `store` 欄位的初始化，導致直接構造 ResponsesApiRequest 時缺少該欄位而無法通過編譯。"
+   },
+   {
+    "file": "codex-rs/core/src/config.rs",
+    "start": 81,
+    "end": 81,
+    "category": "style",
+    "comment": "移除欄位後留下的註解 `// Removed: ...` 夾在不相關的欄位（`user_instructions`）上方，容易造成混淆。Git 歷史已有完整變更紀錄，不需要在程式碼中保留此類 tombstone 註解。"
+   },
+   {
+    "file": "codex-rs/core/src/config.rs",
+    "start": 416,
+    "end": 416,
+    "category": "style",
+    "comment": "移除欄位後留下的註解 `// Removed: ...` 夾在不相關的欄位（`notify`）上方，沒有保留必要。"
+   },
+   {
+    "file": "codex-rs/core/tests/suite/client.rs",
+    "start": 580,
+    "end": 580,
+    "category": "style",
+    "comment": "移除 store 的 assert 之後，變數 `request` 與 `request_body` 未被使用，這會在 Rust 編譯時產生 unused variable 警告（若 CI 開啟了 `-D warnings` 則會導致編譯失敗）。若意圖是驗證 request body 中不包含 `store` 欄位，應進行對應斷言；若不需要，則應移除未使用的變數讀取。"
+   },
+   {
+    "file": "codex-rs/core/tests/suite/client.rs",
+    "start": 661,
+    "end": 661,
+    "category": "style",
+    "comment": "移除 store 的 assert 之後，變數 `request` 與 `request_body` 未被使用，會在編譯時產生 unused variable 警告。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "codex-rs/core/src/client_common.rs",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "codex-rs/core/src/config.rs",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both question the necessity of the explanatory comment left for the removed field at L81.\n2. No match — focuses on doc comment syntax (`///` vs `//`) and generated documentation rather than removing tombstone comments.\n3. No match — concerns a different instance/struct definition at L416.\n4. No match — concerns doc comment syntax (`///` vs `//`) at L416.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "codex-rs/core/src/config.rs",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — addresses the removal comment at line 81 rather than line 416.\n2. No match — discusses retaining doc comments at line 81 rather than deleting the comment.\n3. Match — both state that the removal comment at line 416 is unnecessary/redundant and should be deleted.\n4. No match — suggests keeping the comment as a doc comment instead of removing it.\n\n[3]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "codex-rs/core/tests/suite/client.rs",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "codex-rs/core/tests/suite/client.rs",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

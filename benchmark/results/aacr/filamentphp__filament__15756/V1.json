@@ -1,0 +1,36 @@
+{
+ "results": [
+  {
+   "filename": "packages/panels/resources/lang/pt_BR/pages/auth/login.php",
+   "summary": "葡萄牙語（巴西）本地化文案微調，將註冊動作的動詞形式調整為與其他介面動作一致的命令式，改動正確無誤。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "packages/panels/resources/lang/pt_BR/pages/auth/password-reset/reset-password.php",
+   "summary": "將重設密碼表單中的驗證屬性名稱本地化為葡萄牙語，改動正確無誤。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "packages/panels/resources/lang/pt_BR/pages/auth/register.php",
+   "summary": "將註冊頁面的密碼欄位驗證屬性名稱本地化為葡萄牙文，改動正確無誤。",
+   "recommendation": "n/a",
+   "issues": []
+  }
+ ],
+ "n_files": 3,
+ "input_tokens": 2120,
+ "output_tokens": 137,
+ "calls": 3,
+ "tool_calls": null,
+ "elapsed_s": 11.8,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  764,
+  633,
+  723
+ ],
+ "model": "gemini-3.8-flash"
+}

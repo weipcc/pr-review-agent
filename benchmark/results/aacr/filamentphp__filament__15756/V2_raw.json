@@ -1,0 +1,35 @@
+{
+ "results": [
+  {
+   "change_intent": "Update the registration link label in Brazilian Portuguese to use the imperative verb form consistent with the rest of the page.",
+   "summary": "Clean and accurate translation update with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/panels/resources/lang/pt_BR/pages/auth/login.php"
+  },
+  {
+   "change_intent": "Translate the password validation attribute from English to Brazilian Portuguese.",
+   "summary": "Clean and accurate translation update with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/panels/resources/lang/pt_BR/pages/auth/password-reset/reset-password.php"
+  },
+  {
+   "change_intent": "Translate the password validation attribute from English to Brazilian Portuguese.",
+   "summary": "Clean and accurate translation update with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/panels/resources/lang/pt_BR/pages/auth/register.php"
+  }
+ ],
+ "n_files": 3,
+ "elapsed_s": 5.8,
+ "calls": 1,
+ "input_tokens": 5659,
+ "output_tokens": 205,
+ "call_input_tokens": [
+  5659
+ ],
+ "mode": "batch",
+ "routing_tokens": 1589
+}

@@ -1,0 +1,73 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 13,
+  "findings": [
+   {
+    "file": "internal/fourslash/_scripts/convertFourslash.mts",
+    "start": 17,
+    "end": 17,
+    "category": "style",
+    "comment": "定義了 manualOutputDir 且在 main() 中呼叫了 fs.mkdirSync(manualOutputDir)，但後續未在任何地方使用該目錄，屬於未使用的死代碼。"
+   },
+   {
+    "file": "internal/fourslash/_scripts/convertFourslash.mts",
+    "start": 72,
+    "end": 72,
+    "category": "bug",
+    "comment": "比對 manualTests.has(testName) 時，testName 僅將檔名字首轉為大寫（如 'FooBar'），沒有 'Test' 前綴。但參考 getFailingTests 中對 failingTests.txt 做了 substring(4) 處理（通常是為了去除 Go 測試的 'Test' 前綴），若 manualTests.txt 內記錄的是標準 Go 測試名稱（如 'TestFooBar'），此處比對將會失敗導致過濾無效。"
+   },
+   {
+    "file": "internal/fourslash/_scripts/makeManual.mts",
+    "start": 12,
+    "end": 12,
+    "category": "style",
+    "comment": "當使用者未提供引數時直接退出，沒有印出任何使用方式或錯誤提示，降低 CLI 易用性。"
+   },
+   {
+    "file": "internal/fourslash/_scripts/makeManual.mts",
+    "start": 30,
+    "end": 30,
+    "category": "bug",
+    "comment": "如果 manual 目錄下已經存在同名測試檔案，fs.renameSync 會直接將其覆蓋，可能導致先前手工維護的測試內容遺失。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "internal/fourslash/_scripts/convertFourslash.mts",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — ref discusses missing file check in `getManualTests`, while generated flags an unused directory variable and creation.\n2. No match — ref discusses test name processing inconsistency, while generated flags unused `manualOutputDir`.\n3. Match — both flag that `manualOutputDir` is created/defined but never used anywhere in the code.\n4. No match — ref discusses naming mismatch for manual tests skip logic.\n5. No match — ref discusses empty string index error on `test.name`.\n6. No match — ref discusses whitespace handling in `if (testContent)`.\n7. No match — ref discusses unnecessary `if (testContent)` check.\n\n[3]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "internal/fourslash/_scripts/convertFourslash.mts",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. No match — Ref 1 is about a missing file existence check causing a crash in `getManualTests`.\n2. Match — Both identify that `getFailingTests` strips the `Test` prefix via `substring(4)` while manual tests do not account for this prefix, causing manual test filtering/skip logic to fail.\n3. No match — Ref 3 is about an unused directory `manualOutputDir`.\n4. No match — Ref 4 identifies a mismatch based on `makeManual.mts` storing full filenames (`_test.go`), whereas the generated comment concerns the Go `Test` prefix mismatch compared to `getFailingTests`.\n5. No match — Ref 5 is about an empty string indexing error on `test.name`.\n6. No match — Ref 6 is about whitespace-only strings evaluating to truthy.\n7. No match — Ref 7 argues the truthiness check is redundant because `generateGoTest` returns a string.\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "internal/fourslash/_scripts/makeManual.mts",
+   "matched_gt": [
+    7
+   ],
+   "reason": "1. Match — both address the silent exit without usage instructions or error message when CLI arguments are missing.\n2. No match — concerns path traversal validation, not missing CLI usage/help output.\n3. No match — concerns validating the Go test file extension.\n4. No match — concerns error handling for `renameSync`.\n5. No match — concerns error handling for `manualTests.txt` file operations.\n6. No match — concerns explicit EOL control when formatting `manualTests`.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "internal/fourslash/_scripts/makeManual.mts",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses missing usage/help message when no arguments are given, while generated discusses overwriting existing files in the manual directory.\n2. No match — ref discusses path traversal security validation on testName, while generated discusses overwriting an existing destination file.\n3. No match — ref discusses validating the file extension, while generated discusses destination file overwrite risk.\n4. No match — ref discusses general exception handling for `renameSync` failures (permissions, disk full), while generated specifically warns about silently overwriting existing manual test files.\n5. No match — ref discusses error handling for `manualTests.txt`, while generated discusses destination file overwrite.\n6. No match — ref discusses newline/EOL handling when updating the file list, while generated discusses destination file overwrite.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

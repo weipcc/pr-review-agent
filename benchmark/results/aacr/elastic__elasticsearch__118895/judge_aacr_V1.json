@@ -1,0 +1,155 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 5,
+  "findings": [
+   {
+    "file": "server/src/internalClusterTest/java/org/elasticsearch/search/fetch/subphase/highlight/HighlighterSearchIT.java",
+    "start": 2635,
+    "end": 2635,
+    "category": "style",
+    "comment": "測試方法名稱 testMaxQueryOffsetDefault 中的 MaxQueryOffset 可能是筆誤，對應的設定與 API 名稱皆為 maxAnalyzedOffset（而非 QueryOffset）。命名為 testMaxAnalyzedOffsetDefault 會更符合現有命名慣例與可讀性。"
+   },
+   {
+    "file": "server/src/internalClusterTest/java/org/elasticsearch/search/fetch/subphase/highlight/HighlighterSearchIT.java",
+    "start": 2638,
+    "end": 2638,
+    "category": "style",
+    "comment": "index.highlight.max_analyzed_offset 為整數設定，在 Settings.builder() 中建議直接傳入 int 型別數值 10 而非字串 \"10\"，較符合型別慣例。"
+   },
+   {
+    "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/CustomUnifiedHighlighter.java",
+    "start": 128,
+    "end": 128,
+    "category": "bug",
+    "comment": "如果傳入的 queryMaxAnalyzedOffset 物件本身不為 null，但其內部封裝的值為 null（即查詢未指定 max_analyzed_offset），此處直接呼叫 queryMaxAnalyzedOffset.getNotNull() 會拋出 NullPointerException 或 AssertionError。原本邏輯在未設定該參數時，應比照 index 的 maxAnalyzedOffset 進行檢查並在超長時拋出 IllegalArgumentException，而非直接崩潰。"
+   },
+   {
+    "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java",
+    "start": 12,
+    "end": 12,
+    "category": "style",
+    "comment": "類別的建構子已為 private，外部無法繼承此類別，建議將類別宣告為 final 以明確表達不可繼承的設計意圖。"
+   },
+   {
+    "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java",
+    "start": 16,
+    "end": 16,
+    "category": "style",
+    "comment": "註解「If we have a negative value, grab value for the actual maximum from the index.」所描述的邏輯實際是在 create 工廠方法中實現，放在建構子中顯得位置不符。"
+   },
+   {
+    "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java",
+    "start": 27,
+    "end": 27,
+    "category": "style",
+    "comment": "方法回傳值為 primitive int 本身就無法為 null，方法名稱命名為 getNotNull() 較為不直觀，建議採用標準命名（如 getAsInt() 或 getValue()）。"
+   },
+   {
+    "file": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/AbstractHighlighterBuilder.java",
+    "start": 564,
+    "end": 564,
+    "category": "style",
+    "comment": "Javadoc 註解中描述 'or a negative int'，但程式碼實際限制 maxAnalyzedOffset < -1 會拋出例外，即負數只接受 -1。註解可能造成呼叫端誤以為所有負整數皆合法。"
+   },
+   {
+    "file": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/PlainHighlighter.java",
+    "start": 126,
+    "end": 126,
+    "category": "bug",
+    "comment": "queryMaxAnalyzedOffset 現為 QueryMaxAnalyzedOffset.create(...) 回傳的物件。若該物件非 null 且其 getNotNull() 在未設定 query 參數時 fallback 為 index setting 的 maxAnalyzedOffset，則 `queryMaxAnalyzedOffset == null` 恆為 false，且 `queryMaxAnalyzedOffset.getNotNull() > maxAnalyzedOffset` 亦為 false（即 maxAnalyzedOffset > maxAnalyzedOffset 為 false）。這會導致此條件永遠無法成立，當文件長度超過 index.highlight.max_analyzed_offset 且使用者未設定 query 參數時，原本應拋出 IllegalArgumentException 的安全防護機制將完全失效。"
+   },
+   {
+    "file": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/PlainHighlighter.java",
+    "start": 250,
+    "end": 250,
+    "category": "bug",
+    "comment": "在 wrapAnalyzer 中，`if (maxAnalyzedOffset != null)` 檢查的是 QueryMaxAnalyzedOffset 物件實例。若 create(...) 總是回傳非 null 實例，此條件將永遠為 true，使得無論使用者是否有在 query 指定 max_analyzed_offset，Analyzer 都會被 LimitTokenOffsetAnalyzer 包裝並強制截斷，破壞了原有未設定時不進行額外包裝的行為與語意。"
+   },
+   {
+    "file": "server/src/test/java/org/elasticsearch/search/fetch/subphase/highlight/HighlightBuilderTests.java",
+    "start": 580,
+    "end": 580,
+    "category": "bug",
+    "comment": "錯誤訊息已修改為要求 `[max_analyzed_offset] must be an integer >= -1`，代表 `-1` 與 `0` 現為有效值。但此處測試產生的無效值範圍仍為 `randomIntBetween(-100, 0)`。當隨機抽到 `-1` 或 `0` 時，解析將視為合法而不會拋出預期的異常，導致測試失敗（flaky test）。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "server/src/internalClusterTest/java/org/elasticsearch/search/fetch/subphase/highlight/HighlighterSearchIT.java",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "server/src/internalClusterTest/java/org/elasticsearch/search/fetch/subphase/highlight/HighlighterSearchIT.java",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/CustomUnifiedHighlighter.java",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java",
+   "matched_gt": [],
+   "reason": "1. No match — Ref 1 discusses a documentation/implementation mismatch regarding negative value handling, while the generated comment suggests making the class final.\n2. No match — Ref 2 discusses renaming the `getNotNull()` method, while the generated comment suggests making the class final.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. Match — both identify that the comment regarding negative values does not match the constructor's actual implementation.\n2. No match — discusses method naming for `getNotNull()`, whereas the generated comment addresses a misplaced/mismatched comment.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 5,
+   "file": "server/src/main/java/org/elasticsearch/lucene/search/uhighlight/QueryMaxAnalyzedOffset.java",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — discusses a mismatch between doc comment and constructor implementation.\n2. Match — both point out that `getNotNull()` is a misleading name because primitive `int` cannot be null, and suggest renaming (e.g., to `getValue()`).\n\n[2]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 6,
+   "file": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/AbstractHighlighterBuilder.java",
+   "matched_gt": [],
+   "reason": "1. No match — Generated comment points out misleading Javadoc regarding negative integers, while reference comment addresses code validation improperly allowing 0.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 7,
+   "file": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/PlainHighlighter.java",
+   "matched_gt": [],
+   "reason": "1. No match — the generated comment claims a critical functional bug where the safety check never triggers, whereas the reference comment notes the logic is functionally equivalent and focuses on confusing wrapper semantics and readability.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 8,
+   "file": "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/PlainHighlighter.java",
+   "matched_gt": [],
+   "reason": "1. No match — Reference 1 notes that functionality is fine and focuses on naming/readability, whereas the Generated Comment claims a functional bug where the analyzer is always wrapped.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 9,
+   "file": "server/src/test/java/org/elasticsearch/search/fetch/subphase/highlight/HighlightBuilderTests.java",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

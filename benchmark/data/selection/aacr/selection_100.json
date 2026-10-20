@@ -1,0 +1,1846 @@
+{
+ "batch1_rule": "pilot (10) + 30 small + 10 large, round-robin over languages in a seeded random order",
+ "small50_rule": "final set: only the small group is evaluated: the pilot (10) + the first 40 small PRs of the same round-robin order (rr_rank < 40)",
+ "rule": "1. Eligible: the review commit is still available on GitHub, at least one valid reference comment\n     (label = 1), and at most 20 changed files in the diff between pr_source_commit and pr_target_commit.\n  2. Groups by diff size (characters / 4 of that diff): small <= 6,000 tokens, large > 6,000 tokens\n     (6,000 is V2's routing threshold and V3's size limit).\n  3. Small group: the 10 pull requests of the pilot plus 70 more; large group: 20.\n  4. Within each group: random, stratified by language (allocation proportional to the eligible pool,\n     at least one per language), seeded shuffle over URL-sorted pools.\n  5. Each language keeps the rest of its shuffled list as reserves: if a selected pull request cannot\n     be evaluated, the next reserve of the same group and language replaces it.",
+ "seed": 20261018,
+ "excluded_from_pool": {
+  "more than 20 files": 14,
+  "review commit unavailable": 11,
+  "no valid reference comment": 4
+ },
+ "selected": [
+  {
+   "url": "https://github.com/valkey-io/valkey/pull/1889",
+   "group": "small",
+   "lang": "C",
+   "files": 1,
+   "diff_tok_est": 411,
+   "lines": 52,
+   "gt": 2,
+   "categories": {
+    "Security Vulnerability": 1,
+    "Code Defect": 1
+   },
+   "pilot": true,
+   "batch": 1,
+   "rr_rank": null,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/valkey-io/valkey/pull/2059",
+   "group": "small",
+   "lang": "C",
+   "files": 8,
+   "diff_tok_est": 4992,
+   "lines": 283,
+   "gt": 11,
+   "categories": {
+    "Maintainability and Readability": 8,
+    "Code Defect": 3
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 14,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/lvgl/lvgl/pull/8164",
+   "group": "small",
+   "lang": "C",
+   "files": 5,
+   "diff_tok_est": 1359,
+   "lines": 67,
+   "gt": 5,
+   "categories": {
+    "Maintainability and Readability": 4,
+    "Security Vulnerability": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 4,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/timescale/timescaledb/pull/7935",
+   "group": "small",
+   "lang": "C",
+   "files": 1,
+   "diff_tok_est": 3023,
+   "lines": 188,
+   "gt": 5,
+   "categories": {
+    "Code Defect": 2,
+    "Maintainability and Readability": 2,
+    "Performance": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 34,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/lvgl/lvgl/pull/7602",
+   "group": "small",
+   "lang": "C",
+   "files": 2,
+   "diff_tok_est": 858,
+   "lines": 109,
+   "gt": 2,
+   "categories": {
+    "Maintainability and Readability": 1,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 44,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/libsdl-org/SDL/pull/12718",
+   "group": "small",
+   "lang": "C",
+   "files": 1,
+   "diff_tok_est": 3467,
+   "lines": 161,
+   "gt": 8,
+   "categories": {
+    "Maintainability and Readability": 3,
+    "Code Defect": 5
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 24,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/mpv-player/mpv/pull/16164",
+   "group": "small",
+   "lang": "C",
+   "files": 5,
+   "diff_tok_est": 1372,
+   "lines": 79,
+   "gt": 7,
+   "categories": {
+    "Security Vulnerability": 2,
+    "Maintainability and Readability": 4,
+    "Performance": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 53,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/mpv-player/mpv/pull/16061",
+   "group": "small",
+   "lang": "C",
+   "files": 10,
+   "diff_tok_est": 3349,
+   "lines": 159,
+   "gt": 4,
+   "categories": {
+    "Code Defect": 3,
+    "Maintainability and Readability": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 59,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/dotnet/aspnetcore/pull/62734",
+   "group": "small",
+   "lang": "C#",
+   "files": 1,
+   "diff_tok_est": 261,
+   "lines": 6,
+   "gt": 4,
+   "categories": {
+    "Security Vulnerability": 2,
+    "Code Defect": 1,
+    "Maintainability and Readability": 1
+   },
+   "pilot": true,
+   "batch": 1,
+   "rr_rank": null,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/microsoft/PowerToys/pull/40814",
+   "group": "small",
+   "lang": "C#",
+   "files": 3,
+   "diff_tok_est": 961,
+   "lines": 26,
+   "gt": 3,
+   "categories": {
+    "Maintainability and Readability": 2,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 26,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/dotnet/aspnetcore/pull/61006",
+   "group": "small",
+   "lang": "C#",
+   "files": 5,
+   "diff_tok_est": 1871,
+   "lines": 115,
+   "gt": 6,
+   "categories": {
+    "Code Defect": 5,
+    "Maintainability and Readability": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 16,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/dotnet/aspnetcore/pull/59322",
+   "group": "small",
+   "lang": "C#",
+   "files": 1,
+   "diff_tok_est": 2050,
+   "lines": 226,
+   "gt": 5,
+   "categories": {
+    "Code Defect": 2,
+    "Security Vulnerability": 1,
+    "Performance": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 46,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/dotnet/aspnetcore/pull/62936",
+   "group": "small",
+   "lang": "C#",
+   "files": 1,
+   "diff_tok_est": 393,
+   "lines": 5,
+   "gt": 5,
+   "categories": {
+    "Maintainability and Readability": 4,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 36,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/ppy/osu/pull/31232",
+   "group": "small",
+   "lang": "C#",
+   "files": 1,
+   "diff_tok_est": 302,
+   "lines": 31,
+   "gt": 2,
+   "categories": {
+    "Code Defect": 1,
+    "Maintainability and Readability": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 6,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/bitcoin/bitcoin/pull/31886",
+   "group": "small",
+   "lang": "C++",
+   "files": 1,
+   "diff_tok_est": 497,
+   "lines": 34,
+   "gt": 4,
+   "categories": {
+    "Code Defect": 3,
+    "Maintainability and Readability": 1
+   },
+   "pilot": true,
+   "batch": 1,
+   "rr_rank": null,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/opencv/opencv/pull/27284",
+   "group": "small",
+   "lang": "C++",
+   "files": 10,
+   "diff_tok_est": 3452,
+   "lines": 307,
+   "gt": 14,
+   "categories": {
+    "Performance": 1,
+    "Code Defect": 10,
+    "Security Vulnerability": 1,
+    "Maintainability and Readability": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 40,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/ClickHouse/ClickHouse/pull/80391",
+   "group": "small",
+   "lang": "C++",
+   "files": 3,
+   "diff_tok_est": 982,
+   "lines": 166,
+   "gt": 7,
+   "categories": {
+    "Code Defect": 2,
+    "Maintainability and Readability": 5
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 0,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/electron/electron/pull/46982",
+   "group": "small",
+   "lang": "C++",
+   "files": 8,
+   "diff_tok_est": 4175,
+   "lines": 190,
+   "gt": 5,
+   "categories": {
+    "Code Defect": 1,
+    "Maintainability and Readability": 3,
+    "Performance": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 67,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/FreeCAD/FreeCAD/pull/19426",
+   "group": "small",
+   "lang": "C++",
+   "files": 3,
+   "diff_tok_est": 5662,
+   "lines": 725,
+   "gt": 23,
+   "categories": {
+    "Code Defect": 8,
+    "Performance": 6,
+    "Maintainability and Readability": 7,
+    "Security Vulnerability": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 20,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/FreeCAD/FreeCAD/pull/22235",
+   "group": "small",
+   "lang": "C++",
+   "files": 10,
+   "diff_tok_est": 3653,
+   "lines": 85,
+   "gt": 6,
+   "categories": {
+    "Maintainability and Readability": 6
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 10,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/FreeCAD/FreeCAD/pull/20612",
+   "group": "small",
+   "lang": "C++",
+   "files": 4,
+   "diff_tok_est": 1141,
+   "lines": 80,
+   "gt": 3,
+   "categories": {
+    "Performance": 2,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 60,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/ClickHouse/ClickHouse/pull/80597",
+   "group": "small",
+   "lang": "C++",
+   "files": 3,
+   "diff_tok_est": 919,
+   "lines": 76,
+   "gt": 5,
+   "categories": {
+    "Maintainability and Readability": 3,
+    "Performance": 1,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 64,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/bitcoin/bitcoin/pull/32425",
+   "group": "small",
+   "lang": "C++",
+   "files": 5,
+   "diff_tok_est": 4746,
+   "lines": 254,
+   "gt": 4,
+   "categories": {
+    "Maintainability and Readability": 1,
+    "Code Defect": 3
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 30,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/ClickHouse/ClickHouse/pull/72920",
+   "group": "small",
+   "lang": "C++",
+   "files": 8,
+   "diff_tok_est": 2793,
+   "lines": 71,
+   "gt": 5,
+   "categories": {
+    "Maintainability and Readability": 4,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 69,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/FreeCAD/FreeCAD/pull/20336",
+   "group": "small",
+   "lang": "C++",
+   "files": 5,
+   "diff_tok_est": 1002,
+   "lines": 98,
+   "gt": 8,
+   "categories": {
+    "Maintainability and Readability": 3,
+    "Code Defect": 5
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 55,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/electron/electron/pull/45671",
+   "group": "small",
+   "lang": "C++",
+   "files": 2,
+   "diff_tok_est": 1581,
+   "lines": 82,
+   "gt": 7,
+   "categories": {
+    "Code Defect": 4,
+    "Performance": 1,
+    "Maintainability and Readability": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 49,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/ollama/ollama/pull/9379",
+   "group": "small",
+   "lang": "Go",
+   "files": 2,
+   "diff_tok_est": 2202,
+   "lines": 132,
+   "gt": 5,
+   "categories": {
+    "Code Defect": 2,
+    "Maintainability and Readability": 2,
+    "Security Vulnerability": 1
+   },
+   "pilot": true,
+   "batch": 1,
+   "rr_rank": null,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/gofr-dev/gofr/pull/1355",
+   "group": "small",
+   "lang": "Go",
+   "files": 2,
+   "diff_tok_est": 2137,
+   "lines": 309,
+   "gt": 6,
+   "categories": {
+    "Maintainability and Readability": 3,
+    "Code Defect": 3
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 45,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/gofr-dev/gofr/pull/1696",
+   "group": "small",
+   "lang": "Go",
+   "files": 5,
+   "diff_tok_est": 4350,
+   "lines": 356,
+   "gt": 4,
+   "categories": {
+    "Code Defect": 4
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 25,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/microsoft/typescript-go/pull/1446",
+   "group": "small",
+   "lang": "Go",
+   "files": 3,
+   "diff_tok_est": 1459,
+   "lines": 80,
+   "gt": 13,
+   "categories": {
+    "Code Defect": 9,
+    "Maintainability and Readability": 3,
+    "Security Vulnerability": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 35,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/gofr-dev/gofr/pull/1681",
+   "group": "small",
+   "lang": "Go",
+   "files": 7,
+   "diff_tok_est": 3586,
+   "lines": 217,
+   "gt": 5,
+   "categories": {
+    "Code Defect": 4,
+    "Maintainability and Readability": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 54,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/ollama/ollama/pull/10135",
+   "group": "small",
+   "lang": "Go",
+   "files": 4,
+   "diff_tok_est": 1018,
+   "lines": 132,
+   "gt": 3,
+   "categories": {
+    "Performance": 1,
+    "Code Defect": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 15,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/microsoft/typescript-go/pull/691",
+   "group": "small",
+   "lang": "Go",
+   "files": 3,
+   "diff_tok_est": 2003,
+   "lines": 92,
+   "gt": 3,
+   "categories": {
+    "Code Defect": 2,
+    "Maintainability and Readability": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 5,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/dbeaver/dbeaver/pull/37564",
+   "group": "small",
+   "lang": "Java",
+   "files": 2,
+   "diff_tok_est": 1139,
+   "lines": 22,
+   "gt": 4,
+   "categories": {
+    "Performance": 1,
+    "Maintainability and Readability": 3
+   },
+   "pilot": true,
+   "batch": 1,
+   "rr_rank": null,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/dbeaver/dbeaver/pull/38915",
+   "group": "small",
+   "lang": "Java",
+   "files": 2,
+   "diff_tok_est": 1857,
+   "lines": 130,
+   "gt": 5,
+   "categories": {
+    "Maintainability and Readability": 2,
+    "Code Defect": 3
+   },
+   "pilot": true,
+   "batch": 1,
+   "rr_rank": null,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/dbeaver/dbeaver/pull/36789",
+   "group": "small",
+   "lang": "Java",
+   "files": 5,
+   "diff_tok_est": 4086,
+   "lines": 294,
+   "gt": 11,
+   "categories": {
+    "Maintainability and Readability": 6,
+    "Code Defect": 5
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 52,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/elastic/elasticsearch/pull/118998",
+   "group": "small",
+   "lang": "Java",
+   "files": 3,
+   "diff_tok_est": 2109,
+   "lines": 160,
+   "gt": 1,
+   "categories": {
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 13,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/alibaba/spring-ai-alibaba/pull/869",
+   "group": "small",
+   "lang": "Java",
+   "files": 4,
+   "diff_tok_est": 2686,
+   "lines": 140,
+   "gt": 4,
+   "categories": {
+    "Maintainability and Readability": 2,
+    "Security Vulnerability": 1,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 23,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/keycloak/keycloak/pull/38723",
+   "group": "small",
+   "lang": "Java",
+   "files": 8,
+   "diff_tok_est": 2983,
+   "lines": 83,
+   "gt": 10,
+   "categories": {
+    "Code Defect": 5,
+    "Maintainability and Readability": 5
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 63,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/elastic/elasticsearch/pull/120546",
+   "group": "small",
+   "lang": "Java",
+   "files": 4,
+   "diff_tok_est": 2488,
+   "lines": 142,
+   "gt": 3,
+   "categories": {
+    "Code Defect": 3
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 33,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/elastic/elasticsearch/pull/127697",
+   "group": "small",
+   "lang": "Java",
+   "files": 2,
+   "diff_tok_est": 1965,
+   "lines": 106,
+   "gt": 6,
+   "categories": {
+    "Maintainability and Readability": 3,
+    "Performance": 2,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 58,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/elastic/elasticsearch/pull/118895",
+   "group": "small",
+   "lang": "Java",
+   "files": 12,
+   "diff_tok_est": 5654,
+   "lines": 211,
+   "gt": 5,
+   "categories": {
+    "Maintainability and Readability": 3,
+    "Code Defect": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 3,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/elastic/elasticsearch/pull/133365",
+   "group": "small",
+   "lang": "Java",
+   "files": 7,
+   "diff_tok_est": 5304,
+   "lines": 289,
+   "gt": 10,
+   "categories": {
+    "Code Defect": 6,
+    "Maintainability and Readability": 4
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 43,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/facebook/react/pull/33059",
+   "group": "small",
+   "lang": "JavaScript",
+   "files": 2,
+   "diff_tok_est": 665,
+   "lines": 31,
+   "gt": 1,
+   "categories": {
+    "Code Defect": 1
+   },
+   "pilot": true,
+   "batch": 1,
+   "rr_rank": null,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/mrdoob/three.js/pull/31402",
+   "group": "small",
+   "lang": "JavaScript",
+   "files": 4,
+   "diff_tok_est": 1746,
+   "lines": 210,
+   "gt": 10,
+   "categories": {
+    "Maintainability and Readability": 2,
+    "Code Defect": 8
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 9,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/bluewave-labs/Checkmate/pull/1897",
+   "group": "small",
+   "lang": "JavaScript",
+   "files": 3,
+   "diff_tok_est": 2056,
+   "lines": 224,
+   "gt": 9,
+   "categories": {
+    "Code Defect": 7,
+    "Maintainability and Readability": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 39,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/mrdoob/three.js/pull/30750",
+   "group": "small",
+   "lang": "JavaScript",
+   "files": 1,
+   "diff_tok_est": 778,
+   "lines": 61,
+   "gt": 4,
+   "categories": {
+    "Maintainability and Readability": 2,
+    "Code Defect": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 29,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/sveltejs/svelte/pull/16232",
+   "group": "small",
+   "lang": "JavaScript",
+   "files": 16,
+   "diff_tok_est": 2510,
+   "lines": 326,
+   "gt": 5,
+   "categories": {
+    "Code Defect": 3,
+    "Maintainability and Readability": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 19,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/laravel/framework/pull/56591",
+   "group": "small",
+   "lang": "PHP",
+   "files": 1,
+   "diff_tok_est": 170,
+   "lines": 4,
+   "gt": 1,
+   "categories": {
+    "Maintainability and Readability": 1
+   },
+   "pilot": true,
+   "batch": 1,
+   "rr_rank": null,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/symfony/symfony/pull/60342",
+   "group": "small",
+   "lang": "PHP",
+   "files": 1,
+   "diff_tok_est": 414,
+   "lines": 32,
+   "gt": 4,
+   "categories": {
+    "Maintainability and Readability": 3,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 47,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/filamentphp/filament/pull/15756",
+   "group": "small",
+   "lang": "PHP",
+   "files": 3,
+   "diff_tok_est": 417,
+   "lines": 6,
+   "gt": 1,
+   "categories": {
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 17,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/nextcloud/server/pull/52846",
+   "group": "small",
+   "lang": "PHP",
+   "files": 17,
+   "diff_tok_est": 4487,
+   "lines": 165,
+   "gt": 2,
+   "categories": {
+    "Maintainability and Readability": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 7,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/appwrite/appwrite/pull/9999",
+   "group": "small",
+   "lang": "PHP",
+   "files": 14,
+   "diff_tok_est": 3292,
+   "lines": 46,
+   "gt": 18,
+   "categories": {
+    "Code Defect": 15,
+    "Maintainability and Readability": 2,
+    "Security Vulnerability": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 37,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/symfony/symfony/pull/60956",
+   "group": "small",
+   "lang": "PHP",
+   "files": 2,
+   "diff_tok_est": 387,
+   "lines": 5,
+   "gt": 1,
+   "categories": {
+    "Performance": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 27,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/vllm-project/vllm/pull/24425",
+   "group": "small",
+   "lang": "Python",
+   "files": 1,
+   "diff_tok_est": 245,
+   "lines": 12,
+   "gt": 1,
+   "categories": {
+    "Code Defect": 1
+   },
+   "pilot": true,
+   "batch": 1,
+   "rr_rank": null,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/infiniflow/ragflow/pull/7151",
+   "group": "small",
+   "lang": "Python",
+   "files": 2,
+   "diff_tok_est": 2346,
+   "lines": 207,
+   "gt": 10,
+   "categories": {
+    "Maintainability and Readability": 1,
+    "Code Defect": 7,
+    "Security Vulnerability": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 57,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/infiniflow/ragflow/pull/6553",
+   "group": "small",
+   "lang": "Python",
+   "files": 4,
+   "diff_tok_est": 916,
+   "lines": 37,
+   "gt": 6,
+   "categories": {
+    "Code Defect": 4,
+    "Maintainability and Readability": 1,
+    "Performance": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 51,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/vllm-project/vllm/pull/15998",
+   "group": "small",
+   "lang": "Python",
+   "files": 2,
+   "diff_tok_est": 924,
+   "lines": 55,
+   "gt": 2,
+   "categories": {
+    "Maintainability and Readability": 1,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 22,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/browser-use/browser-use/pull/1482",
+   "group": "small",
+   "lang": "Python",
+   "files": 5,
+   "diff_tok_est": 2740,
+   "lines": 133,
+   "gt": 2,
+   "categories": {
+    "Code Defect": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 32,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/infiniflow/ragflow/pull/5065",
+   "group": "small",
+   "lang": "Python",
+   "files": 3,
+   "diff_tok_est": 1046,
+   "lines": 65,
+   "gt": 5,
+   "categories": {
+    "Maintainability and Readability": 2,
+    "Code Defect": 2,
+    "Performance": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 66,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/comfyanonymous/ComfyUI/pull/6542",
+   "group": "small",
+   "lang": "Python",
+   "files": 3,
+   "diff_tok_est": 566,
+   "lines": 15,
+   "gt": 2,
+   "categories": {
+    "Code Defect": 1,
+    "Maintainability and Readability": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 62,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/langflow-ai/langflow/pull/5896",
+   "group": "small",
+   "lang": "Python",
+   "files": 2,
+   "diff_tok_est": 1269,
+   "lines": 37,
+   "gt": 4,
+   "categories": {
+    "Code Defect": 3,
+    "Maintainability and Readability": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 42,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/browser-use/browser-use/pull/857",
+   "group": "small",
+   "lang": "Python",
+   "files": 11,
+   "diff_tok_est": 2431,
+   "lines": 95,
+   "gt": 2,
+   "categories": {
+    "Code Defect": 1,
+    "Maintainability and Readability": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 2,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/vllm-project/vllm/pull/12608",
+   "group": "small",
+   "lang": "Python",
+   "files": 3,
+   "diff_tok_est": 3688,
+   "lines": 194,
+   "gt": 6,
+   "categories": {
+    "Maintainability and Readability": 4,
+    "Code Defect": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 12,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/astral-sh/uv/pull/12941",
+   "group": "small",
+   "lang": "Rust",
+   "files": 3,
+   "diff_tok_est": 1074,
+   "lines": 122,
+   "gt": 1,
+   "categories": {
+    "Security Vulnerability": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 8,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/linera-io/linera-protocol/pull/4639",
+   "group": "small",
+   "lang": "Rust",
+   "files": 3,
+   "diff_tok_est": 881,
+   "lines": 40,
+   "gt": 6,
+   "categories": {
+    "Maintainability and Readability": 2,
+    "Code Defect": 2,
+    "Performance": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 18,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/juspay/hyperswitch/pull/9130",
+   "group": "small",
+   "lang": "Rust",
+   "files": 10,
+   "diff_tok_est": 3711,
+   "lines": 127,
+   "gt": 6,
+   "categories": {
+    "Maintainability and Readability": 3,
+    "Code Defect": 3
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 48,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/juspay/hyperswitch/pull/7353",
+   "group": "small",
+   "lang": "Rust",
+   "files": 5,
+   "diff_tok_est": 1874,
+   "lines": 94,
+   "gt": 8,
+   "categories": {
+    "Maintainability and Readability": 7,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 28,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/openai/codex/pull/3212",
+   "group": "small",
+   "lang": "Rust",
+   "files": 13,
+   "diff_tok_est": 5628,
+   "lines": 130,
+   "gt": 7,
+   "categories": {
+    "Maintainability and Readability": 4,
+    "Code Defect": 2,
+    "Performance": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 38,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/google-gemini/gemini-cli/pull/9177",
+   "group": "small",
+   "lang": "TypeScript",
+   "files": 2,
+   "diff_tok_est": 855,
+   "lines": 103,
+   "gt": 7,
+   "categories": {
+    "Code Defect": 5,
+    "Maintainability and Readability": 2
+   },
+   "pilot": true,
+   "batch": 1,
+   "rr_rank": null,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/n8n-io/n8n/pull/20188",
+   "group": "small",
+   "lang": "TypeScript",
+   "files": 5,
+   "diff_tok_est": 2080,
+   "lines": 158,
+   "gt": 6,
+   "categories": {
+    "Maintainability and Readability": 3,
+    "Code Defect": 2,
+    "Security Vulnerability": 1
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 68,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/immich-app/immich/pull/17879",
+   "group": "small",
+   "lang": "TypeScript",
+   "files": 10,
+   "diff_tok_est": 4565,
+   "lines": 213,
+   "gt": 9,
+   "categories": {
+    "Maintainability and Readability": 3,
+    "Code Defect": 4,
+    "Performance": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 41,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/immich-app/immich/pull/17124",
+   "group": "small",
+   "lang": "TypeScript",
+   "files": 4,
+   "diff_tok_est": 1682,
+   "lines": 122,
+   "gt": 2,
+   "categories": {
+    "Maintainability and Readability": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 65,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/cline/cline/pull/2347",
+   "group": "small",
+   "lang": "TypeScript",
+   "files": 4,
+   "diff_tok_est": 1309,
+   "lines": 63,
+   "gt": 9,
+   "categories": {
+    "Maintainability and Readability": 4,
+    "Code Defect": 3,
+    "Performance": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 1,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/immich-app/immich/pull/16893",
+   "group": "small",
+   "lang": "TypeScript",
+   "files": 9,
+   "diff_tok_est": 2303,
+   "lines": 125,
+   "gt": 19,
+   "categories": {
+    "Maintainability and Readability": 10,
+    "Code Defect": 7,
+    "Performance": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 21,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/cline/cline/pull/4786",
+   "group": "small",
+   "lang": "TypeScript",
+   "files": 3,
+   "diff_tok_est": 998,
+   "lines": 69,
+   "gt": 7,
+   "categories": {
+    "Maintainability and Readability": 2,
+    "Security Vulnerability": 3,
+    "Code Defect": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 56,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/immich-app/immich/pull/14777",
+   "group": "small",
+   "lang": "TypeScript",
+   "files": 6,
+   "diff_tok_est": 5395,
+   "lines": 312,
+   "gt": 16,
+   "categories": {
+    "Maintainability and Readability": 12,
+    "Code Defect": 4
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 61,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/n8n-io/n8n/pull/13323",
+   "group": "small",
+   "lang": "TypeScript",
+   "files": 7,
+   "diff_tok_est": 2199,
+   "lines": 81,
+   "gt": 13,
+   "categories": {
+    "Code Defect": 11,
+    "Maintainability and Readability": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 31,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/cline/cline/pull/4676",
+   "group": "small",
+   "lang": "TypeScript",
+   "files": 5,
+   "diff_tok_est": 4311,
+   "lines": 179,
+   "gt": 15,
+   "categories": {
+    "Maintainability and Readability": 6,
+    "Code Defect": 2,
+    "Performance": 7
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 50,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/CherryHQ/cherry-studio/pull/5540",
+   "group": "small",
+   "lang": "TypeScript",
+   "files": 9,
+   "diff_tok_est": 2426,
+   "lines": 345,
+   "gt": 19,
+   "categories": {
+    "Code Defect": 10,
+    "Maintainability and Readability": 8,
+    "Performance": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 11,
+   "in_small50": true
+  },
+  {
+   "url": "https://github.com/valkey-io/valkey/pull/1651",
+   "group": "large",
+   "lang": "C",
+   "files": 6,
+   "diff_tok_est": 9243,
+   "lines": 279,
+   "gt": 2,
+   "categories": {
+    "Maintainability and Readability": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 11,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/timescale/timescaledb/pull/7632",
+   "group": "large",
+   "lang": "C",
+   "files": 12,
+   "diff_tok_est": 26530,
+   "lines": 695,
+   "gt": 2,
+   "categories": {
+    "Maintainability and Readability": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 3,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/ClickHouse/ClickHouse/pull/73546",
+   "group": "large",
+   "lang": "C++",
+   "files": 9,
+   "diff_tok_est": 8578,
+   "lines": 498,
+   "gt": 10,
+   "categories": {
+    "Performance": 1,
+    "Code Defect": 6,
+    "Maintainability and Readability": 3
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 12,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/ClickHouse/ClickHouse/pull/80345",
+   "group": "large",
+   "lang": "C++",
+   "files": 9,
+   "diff_tok_est": 7980,
+   "lines": 373,
+   "gt": 11,
+   "categories": {
+    "Maintainability and Readability": 10,
+    "Code Defect": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 4,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/wavetermdev/waveterm/pull/1998",
+   "group": "large",
+   "lang": "Go",
+   "files": 13,
+   "diff_tok_est": 9401,
+   "lines": 792,
+   "gt": 14,
+   "categories": {
+    "Code Defect": 6,
+    "Performance": 4,
+    "Security Vulnerability": 1,
+    "Maintainability and Readability": 3
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 17,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/wavetermdev/waveterm/pull/1793",
+   "group": "large",
+   "lang": "Go",
+   "files": 13,
+   "diff_tok_est": 9720,
+   "lines": 522,
+   "gt": 5,
+   "categories": {
+    "Code Defect": 2,
+    "Security Vulnerability": 2,
+    "Maintainability and Readability": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 9,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/gofr-dev/gofr/pull/1617",
+   "group": "large",
+   "lang": "Go",
+   "files": 4,
+   "diff_tok_est": 6353,
+   "lines": 554,
+   "gt": 5,
+   "categories": {
+    "Maintainability and Readability": 1,
+    "Code Defect": 4
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 14,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/mudler/LocalAI/pull/4577",
+   "group": "large",
+   "lang": "Go",
+   "files": 20,
+   "diff_tok_est": 8061,
+   "lines": 185,
+   "gt": 21,
+   "categories": {
+    "Maintainability and Readability": 6,
+    "Performance": 2,
+    "Code Defect": 12,
+    "Security Vulnerability": 1
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 1,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/elastic/elasticsearch/pull/126376",
+   "group": "large",
+   "lang": "Java",
+   "files": 12,
+   "diff_tok_est": 14432,
+   "lines": 476,
+   "gt": 8,
+   "categories": {
+    "Maintainability and Readability": 5,
+    "Code Defect": 3
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 16,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/kestra-io/kestra/pull/7381",
+   "group": "large",
+   "lang": "Java",
+   "files": 10,
+   "diff_tok_est": 6400,
+   "lines": 200,
+   "gt": 12,
+   "categories": {
+    "Code Defect": 8,
+    "Maintainability and Readability": 2,
+    "Performance": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 8,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/elastic/elasticsearch/pull/132077",
+   "group": "large",
+   "lang": "Java",
+   "files": 18,
+   "diff_tok_est": 15009,
+   "lines": 689,
+   "gt": 9,
+   "categories": {
+    "Code Defect": 2,
+    "Maintainability and Readability": 7
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 13,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/kestra-io/kestra/pull/7191",
+   "group": "large",
+   "lang": "Java",
+   "files": 6,
+   "diff_tok_est": 8668,
+   "lines": 458,
+   "gt": 8,
+   "categories": {
+    "Code Defect": 4,
+    "Maintainability and Readability": 2,
+    "Security Vulnerability": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 0,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/keycloak/keycloak/pull/40283",
+   "group": "large",
+   "lang": "Java",
+   "files": 19,
+   "diff_tok_est": 8483,
+   "lines": 596,
+   "gt": 17,
+   "categories": {
+    "Code Defect": 11,
+    "Maintainability and Readability": 6
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 19,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/bluewave-labs/Checkmate/pull/2883",
+   "group": "large",
+   "lang": "JavaScript",
+   "files": 17,
+   "diff_tok_est": 14456,
+   "lines": 847,
+   "gt": 30,
+   "categories": {
+    "Performance": 3,
+    "Maintainability and Readability": 8,
+    "Code Defect": 19
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 5,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/laravel/framework/pull/54226",
+   "group": "large",
+   "lang": "PHP",
+   "files": 1,
+   "diff_tok_est": 8296,
+   "lines": 556,
+   "gt": 2,
+   "categories": {
+    "Maintainability and Readability": 2
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 6,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/langflow-ai/langflow/pull/6044",
+   "group": "large",
+   "lang": "Python",
+   "files": 20,
+   "diff_tok_est": 12856,
+   "lines": 882,
+   "gt": 9,
+   "categories": {
+    "Code Defect": 9
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 7,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/n8n-io/n8n/pull/20210",
+   "group": "large",
+   "lang": "TypeScript",
+   "files": 15,
+   "diff_tok_est": 10433,
+   "lines": 761,
+   "gt": 21,
+   "categories": {
+    "Performance": 2,
+    "Code Defect": 6,
+    "Maintainability and Readability": 13
+   },
+   "pilot": false,
+   "batch": 1,
+   "rr_rank": 2,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/google-gemini/gemini-cli/pull/4163",
+   "group": "large",
+   "lang": "TypeScript",
+   "files": 13,
+   "diff_tok_est": 7728,
+   "lines": 275,
+   "gt": 3,
+   "categories": {
+    "Code Defect": 1,
+    "Performance": 2
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 18,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/immich-app/immich/pull/17535",
+   "group": "large",
+   "lang": "TypeScript",
+   "files": 19,
+   "diff_tok_est": 16284,
+   "lines": 692,
+   "gt": 28,
+   "categories": {
+    "Maintainability and Readability": 14,
+    "Code Defect": 11,
+    "Performance": 3
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 15,
+   "in_small50": false
+  },
+  {
+   "url": "https://github.com/cline/cline/pull/5524",
+   "group": "large",
+   "lang": "TypeScript",
+   "files": 18,
+   "diff_tok_est": 12228,
+   "lines": 333,
+   "gt": 9,
+   "categories": {
+    "Maintainability and Readability": 3,
+    "Code Defect": 6
+   },
+   "pilot": false,
+   "batch": 2,
+   "rr_rank": 10,
+   "in_small50": false
+  }
+ ],
+ "reserve": {
+  "small": {
+   "C": [
+    "https://github.com/timescale/timescaledb/pull/7915",
+    "https://github.com/mpv-player/mpv/pull/16090",
+    "https://github.com/libsdl-org/SDL/pull/12964",
+    "https://github.com/mpv-player/mpv/pull/15828",
+    "https://github.com/lvgl/lvgl/pull/8129",
+    "https://github.com/valkey-io/valkey/pull/2141"
+   ],
+   "C#": [
+    "https://github.com/microsoft/semantic-kernel/pull/11361",
+    "https://github.com/PowerShell/PowerShell/pull/25780",
+    "https://github.com/PowerShell/PowerShell/pull/24910",
+    "https://github.com/ppy/osu/pull/33423"
+   ],
+   "C++": [
+    "https://github.com/FreeCAD/FreeCAD/pull/22744",
+    "https://github.com/ClickHouse/ClickHouse/pull/74715",
+    "https://github.com/bitcoin/bitcoin/pull/31405",
+    "https://github.com/electron/electron/pull/46660",
+    "https://github.com/ClickHouse/ClickHouse/pull/75218",
+    "https://github.com/electron/electron/pull/47361",
+    "https://github.com/opencv/opencv/pull/26815",
+    "https://github.com/FreeCAD/FreeCAD/pull/20156",
+    "https://github.com/opencv/opencv/pull/27297"
+   ],
+   "Go": [
+    "https://github.com/microsoft/typescript-go/pull/1000",
+    "https://github.com/microsoft/typescript-go/pull/1354",
+    "https://github.com/gofr-dev/gofr/pull/1325",
+    "https://github.com/ollama/ollama/pull/8938"
+   ],
+   "Java": [
+    "https://github.com/kestra-io/kestra/pull/6844",
+    "https://github.com/dbeaver/dbeaver/pull/38239",
+    "https://github.com/elastic/elasticsearch/pull/124403",
+    "https://github.com/elastic/elasticsearch/pull/123744",
+    "https://github.com/elastic/elasticsearch/pull/133945",
+    "https://github.com/alibaba/spring-ai-alibaba/pull/903"
+   ],
+   "JavaScript": [
+    "https://github.com/facebook/react/pull/32499",
+    "https://github.com/sveltejs/svelte/pull/15250",
+    "https://github.com/nodejs/node/pull/57691"
+   ],
+   "PHP": [
+    "https://github.com/filamentphp/filament/pull/15267",
+    "https://github.com/symfony/symfony/pull/61601",
+    "https://github.com/filamentphp/filament/pull/15181",
+    "https://github.com/filamentphp/filament/pull/15217"
+   ],
+   "Python": [
+    "https://github.com/vllm-project/vllm/pull/17425",
+    "https://github.com/langflow-ai/langflow/pull/5388",
+    "https://github.com/browser-use/browser-use/pull/3172",
+    "https://github.com/comfyanonymous/ComfyUI/pull/6033",
+    "https://github.com/infiniflow/ragflow/pull/6691",
+    "https://github.com/vllm-project/vllm/pull/19756",
+    "https://github.com/langflow-ai/langflow/pull/6652"
+   ],
+   "Rust": [
+    "https://github.com/linera-io/linera-protocol/pull/3151",
+    "https://github.com/unionlabs/union/pull/3414",
+    "https://github.com/linera-io/linera-protocol/pull/3075"
+   ],
+   "TypeScript": [
+    "https://github.com/cline/cline/pull/1808",
+    "https://github.com/cline/cline/pull/5177",
+    "https://github.com/google-gemini/gemini-cli/pull/5793",
+    "https://github.com/n8n-io/n8n/pull/15057",
+    "https://github.com/immich-app/immich/pull/14874",
+    "https://github.com/google-gemini/gemini-cli/pull/8154",
+    "https://github.com/cline/cline/pull/5955",
+    "https://github.com/immich-app/immich/pull/18043"
+   ]
+  },
+  "large": {
+   "C": [
+    "https://github.com/timescale/timescaledb/pull/8138",
+    "https://github.com/valkey-io/valkey/pull/1485"
+   ],
+   "C++": [
+    "https://github.com/ClickHouse/ClickHouse/pull/85873",
+    "https://github.com/FreeCAD/FreeCAD/pull/20825",
+    "https://github.com/FreeCAD/FreeCAD/pull/19977"
+   ],
+   "Go": [
+    "https://github.com/microsoft/typescript-go/pull/698",
+    "https://github.com/ollama/ollama/pull/9746",
+    "https://github.com/ollama/ollama/pull/9654"
+   ],
+   "Java": [
+    "https://github.com/elastic/elasticsearch/pull/118183",
+    "https://github.com/elastic/elasticsearch/pull/118626",
+    "https://github.com/elastic/elasticsearch/pull/119759",
+    "https://github.com/elastic/elasticsearch/pull/125732"
+   ],
+   "JavaScript": [],
+   "PHP": [],
+   "Python": [
+    "https://github.com/comfyanonymous/ComfyUI/pull/8446"
+   ],
+   "TypeScript": [
+    "https://github.com/google-gemini/gemini-cli/pull/4828",
+    "https://github.com/google-gemini/gemini-cli/pull/8797",
+    "https://github.com/google-gemini/gemini-cli/pull/5819",
+    "https://github.com/CherryHQ/cherry-studio/pull/5637"
+   ]
+  }
+ }
+}

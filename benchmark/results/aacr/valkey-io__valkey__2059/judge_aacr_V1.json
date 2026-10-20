@@ -1,0 +1,162 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 11,
+  "findings": [
+   {
+    "file": "cmake/Modules/ValkeySetup.cmake",
+    "start": 94,
+    "end": 94,
+    "category": "style",
+    "comment": "在 valkey_build_and_install_bin 中，第 86 行已執行過 target_link_libraries(${target} valkey::valkey)，此處再次指定 valkey::valkey 顯得冗餘。"
+   },
+   {
+    "file": "cmake/Modules/ValkeySetup.cmake",
+    "start": 127,
+    "end": 127,
+    "category": "bug",
+    "comment": "valkey_build_and_install_module 建立的是 SHARED module。在沒有 USE_RDMA 的情況下（如第 119-123 行），module 並不會鏈結 valkey::valkey。若在開啟 RDMA 時為 shared module 鏈結 valkey::valkey，可能導致 Valkey 核心代碼被打包進模組庫中，引起符號重複或運行時未預期的行為。"
+   },
+   {
+    "file": "deps/CMakeLists.txt",
+    "start": 23,
+    "end": 23,
+    "category": "style",
+    "comment": "CACHE 變數的描述文字「Should we test RDMA connections」看起來是由上方 TLS 複製修改而來，但 libvalkey 的 ENABLE_RDMA 選項用途通常是啟用 RDMA 支援而非測試連線，描述稍顯不精準。"
+   },
+   {
+    "file": "src/Makefile",
+    "start": 344,
+    "end": 344,
+    "category": "style",
+    "comment": "前一行 (第 343 行) 已經有 `FINAL_LIBS += $(RDMA_LIBS)`，此處又加入 `$(RDMA_LIBS)`，導致連結旗標重複。"
+   },
+   {
+    "file": "src/Makefile",
+    "start": 519,
+    "end": 519,
+    "category": "bug",
+    "comment": "`valkey-tls.so` 為獨立的 TLS 模組，不應連結 RDMA 的客戶端函式庫 `$(RDMA_CLIENT_LIBS)`，這會造成不必要的符號依賴與動態函式庫載入相依性。"
+   },
+   {
+    "file": "src/cli_common.c",
+    "start": 435,
+    "end": 435,
+    "category": "bug",
+    "comment": "如果程式編譯時未開啟 `USE_RDMA`（即沒有定義 `USE_RDMA`），但呼叫端傳入 `rdma = 1`，則 `VALKEY_OPTIONS_SET_RDMA` 不會被編譯，導致 `options` 中沒有設定任何 endpoint/connection type。隨後呼叫 `valkeyConnectWithOptions(&options)` 會因配置不完整而失敗，或行為不如預期。"
+   },
+   {
+    "file": "src/valkey-benchmark.c",
+    "start": 661,
+    "end": 661,
+    "category": "bug",
+    "comment": "在 Cluster 模式下（is_cluster_client 為真），局部變數 rdma 未被賦值而維持 0，導致建立的是普通 TCP 連線；然而在 resetClient（第 395 行）與 createClient 後續（第 833 行）中，卻依據全域的 config.rdma 來決定不註冊 AE_WRITABLE 事件，這會導致 TCP 連線的客戶端事件處理異常。若 RDMA 不支援 Cluster 模式，應明確禁止兩者同時使用；若支援，Cluster 客戶端也應啟用 RDMA。"
+   },
+   {
+    "file": "src/valkey-benchmark.c",
+    "start": 2079,
+    "end": 2079,
+    "category": "bug",
+    "comment": "在執行 fcall 測試前載入函式腳本時，getValkeyContext 的 rdma 參數被硬編碼傳入 0。當使用者指定 --rdma 且伺服器僅接受 RDMA 連線時，此處會因嘗試以 TCP 建立連線而失敗。"
+   },
+   {
+    "file": "src/valkey-cli.c",
+    "start": 2832,
+    "end": 2832,
+    "category": "style",
+    "comment": "在 parseOptions() 迴圈內部直接呼叫 valkeyInitiateRdma() 存在潛在副作用：如果命令列中重複出現 --rdma 會導致重複初始化；此外，若參數包含 --help 等選項時也會先執行 RDMA 初始化。"
+   },
+   {
+    "file": "src/valkey-cli.c",
+    "start": 2963,
+    "end": 2963,
+    "category": "style",
+    "comment": "英文文法問題：RDMA 開頭發音為母音（/ɑːr/），不定冠詞應使用 'an' 而非 'a'。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "cmake/Modules/ValkeySetup.cmake",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both address the duplicate/redundant linking of `valkey::valkey` at line 94, which was already linked at line 86.\n2. No match — discusses removing the unused `valkey_build_and_install_module` macro.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "cmake/Modules/ValkeySetup.cmake",
+   "matched_gt": [],
+   "reason": "1. No match — ref 1 discusses linking order and documentation at L94, while the generated comment concerns linking `valkey::valkey` into shared modules at L127.\n2. No match — ref 2 recommends removing the unused macro entirely, whereas the generated comment warns about duplicate symbols caused by linking `valkey::valkey` into a shared module.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "deps/CMakeLists.txt",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. Match — both identify that the description string for `ENABLE_RDMA` incorrectly refers to testing connections rather than enabling RDMA support.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "src/Makefile",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. Match — both point out that `$(RDMA_LIBS)` is duplicated in `FINAL_LIBS` because it was already added on the previous line.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 4,
+   "file": "src/Makefile",
+   "matched_gt": [],
+   "reason": "1. No match — ref flags duplicate inclusion of $(RDMA_LIBS) in FINAL_LIBS, while generated flags an unnecessary $(RDMA_CLIENT_LIBS) dependency in valkey-tls.so.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 5,
+   "file": "src/cli_common.c",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 6,
+   "file": "src/valkey-benchmark.c",
+   "matched_gt": [],
+   "reason": "1. No match — ref suggests removing a redundant function parameter for API consistency, whereas generated comment identifies a functional bug/inconsistency where cluster clients fail to enable RDMA while event handling assumes RDMA.\n2. No match — ref asks for documentation about port constraints in valkey.conf, whereas generated comment concerns cluster client RDMA connection logic in benchmark.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 7,
+   "file": "src/valkey-benchmark.c",
+   "matched_gt": [],
+   "reason": "1. No match — ref suggests removing the redundant parameter from the function definition, while generated points out a bug where 0 is hardcoded at a specific call site (fcall script loading).\n2. No match — ref addresses documentation for cluster port constraints, while generated addresses an fcall RDMA connection issue.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 8,
+   "file": "src/valkey-cli.c",
+   "matched_gt": [
+    8,
+    9
+   ],
+   "reason": "1. No match — concerns explicit zero-initialization of `config.rdma`, not calling initialization during option parsing.\n2. Match — both address the issue of `valkeyInitiateRdma()` being called multiple times if `--rdma` is passed repeatedly.\n3. Match — both identify that calling `valkeyInitiateRdma()` during option parsing causes unintended side effects with flags like `--help` and duplicate flags.\n4. No match — concerns a typo/grammar issue in usage text.\n\n[2, 3]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 9,
+   "file": "src/valkey-cli.c",
+   "matched_gt": [
+    10
+   ],
+   "reason": "1. No match — ref discusses uninitialized struct member, generated discusses English grammar/article usage.\n2. No match — ref discusses handling duplicate command-line flags, generated discusses English grammar/article usage.\n3. No match — ref discusses error handling and premature exit during option parsing, generated discusses English grammar/article usage.\n4. Match — both point out using 'an' instead of 'a' before 'RDMA' in the usage text.\n\n[4]",
+   "hit_new_gt": true
+  }
+ ]
+}

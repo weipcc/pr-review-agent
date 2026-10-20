@@ -1,0 +1,172 @@
+{
+ "results": [
+  {
+   "summary": "改動改為優先使用 _APP_CONSOLE_DOMAIN，並以 _APP_DOMAIN 作為 fallback，邏輯清晰且無明顯問題。",
+   "issues": [],
+   "filename": "app/config/templates/site.php"
+  },
+  {
+   "summary": "將 console 變數的網域名稱驗證改為優先讀取 _APP_CONSOLE_DOMAIN，但有重複呼叫環境變數取值的問題可進行優化。",
+   "issues": [
+    {
+     "line": 46,
+     "severity": "style",
+     "comment": "System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', '')) 在第 46 行與第 47 行重複執行，造成巢狀呼叫兩次相同邏輯。",
+     "suggestion": "建議先將取得的 domain 存入區域變數（例如 $domain），再分別傳入 new Domain($domain) 與 !empty($domain)，以提升可讀性並減少重複運算。"
+    }
+   ],
+   "filename": "app/controllers/api/console.php"
+  },
+  {
+   "summary": "將環境變數改為優先讀取 _APP_CONSOLE_DOMAIN 在導向控制台時合理，但在 API Endpoint 設定、外部路由判定與 SSL 憑證生成處會引發嚴重邏輯問題。",
+   "issues": [
+    {
+     "line": 451,
+     "severity": "bug",
+     "comment": "此處是建立 Function 與 Site 執行時使用的 API Endpoint（APPWRITE_FUNCTION_API_ENDPOINT 等）。若 API 與 Console 網域分離（例如 api.example.com 與 console.example.com），優先使用 _APP_CONSOLE_DOMAIN 會導致 Function 將請求送往控制台網域而非 API 服務網域。",
+     "suggestion": "API Endpoint 應以 _APP_DOMAIN 為主，建議改回 System::getEnv('_APP_DOMAIN', '') 或確保優先取用 API 服務網域。"
+    },
+    {
+     "line": 812,
+     "severity": "bug",
+     "comment": "當同時設定了 _APP_CONSOLE_DOMAIN 與 _APP_DOMAIN 時，請求若發送至主要 API 網域（_APP_DOMAIN），會因為 $host !== $mainDomain 成立而被誤認為外部自訂網域進入 router()，導致一般 API 請求被錯誤處理或阻擋。",
+     "suggestion": "應同時排除 _APP_DOMAIN 與 _APP_CONSOLE_DOMAIN，例如：$mainDomains = array_filter([System::getEnv('_APP_DOMAIN', ''), System::getEnv('_APP_CONSOLE_DOMAIN', '')]); if (!in_array($host, $mainDomains, true) || !empty($previewHostname))"
+    },
+    {
+     "line": 861,
+     "severity": "bug",
+     "comment": "在 SSL 憑證生成檢查中，若將 $envDomain 設定為優先讀取 _APP_CONSOLE_DOMAIN，當主要網域 _APP_DOMAIN 收到請求時會因判定為非主網域而跳過憑證生成，導致主網域無法自動取得 SSL 憑證。",
+     "suggestion": "應允許 _APP_DOMAIN 與 _APP_CONSOLE_DOMAIN 兩者皆可通過主網域檢查以生成 SSL 憑證，而非僅限於其中一個。"
+    }
+   ],
+   "filename": "app/controllers/general.php"
+  },
+  {
+   "summary": "將主機名稱改為優先讀取 _APP_CONSOLE_DOMAIN，並以 _APP_DOMAIN 作為 fallback，修改簡潔合理且無明顯問題。",
+   "issues": [],
+   "filename": "app/views/general/error.phtml"
+  },
+  {
+   "summary": "將 Function 內部的 API endpoint 主機名稱改為優先取用 _APP_CONSOLE_DOMAIN，可能存在語意不符及網域解析失敗的風險。",
+   "issues": [
+    {
+     "line": 354,
+     "severity": "bug",
+     "comment": "1. 語意與邏輯問題：`APPWRITE_FUNCTION_API_ENDPOINT` 是供 Function 執行時呼叫 Appwrite REST API 使用的 endpoint。若使用者或環境設定了獨立的 `_APP_CONSOLE_DOMAIN`（例如分開 API 與後台 Console 域名），此處優先使用 Console 域名會導致 Function 的 API 呼叫導向 Console 服務而非 API 服務，引發路由錯誤或 CORS/連線失敗。\n2. 空值處理疑慮：若環境變數中 `_APP_CONSOLE_DOMAIN` 被宣告為空字串（例如 docker-compose 常見的 `_APP_CONSOLE_DOMAIN=`），視 `System::getEnv` 的內部實作（若使用 null 合併而非 falsy 判定），可能會直接取得空字串而無法順利 fallback 到 `_APP_DOMAIN`，導致組出無效的 URL（如 `https:///v1`）。",
+     "suggestion": "建議確認此處需求是否確實需要取用 Console 網域。若目標為優先使用主 API 網域，應維持優先取用 `_APP_DOMAIN`；若確實需以 fallback 方式支援兩者，建議先檢查值是否為非空字串再進行 fallback，例如：\n```php\n$hostname = !empty(System::getEnv('_APP_DOMAIN')) ? System::getEnv('_APP_DOMAIN') : System::getEnv('_APP_CONSOLE_DOMAIN', '');\n```"
+    }
+   ],
+   "filename": "src/Appwrite/Platform/Modules/Functions/Http/Executions/Create.php"
+  },
+  {
+   "summary": "更新了 GitHub commit 狀態跳轉與 Function 環境變數中的主機名稱來源，但將 API 端點指向 Console 網域可能存在邏輯問題。",
+   "issues": [
+    {
+     "line": 597,
+     "severity": "bug",
+     "comment": "此處建構的是提供給 Function 呼叫使用的 API 端點（$endpoint 指向 /v1 並傳入 APPWRITE_FUNCTION_API_ENDPOINT），應該使用 API 服務的網域（_APP_DOMAIN）。若優先使用 _APP_CONSOLE_DOMAIN，當 Console 與 API 採用不同網域或子網域時，Function 執行階段向 API 發送請求將會失敗或被導向錯誤的服務。",
+     "suggestion": "建議維持使用 `System::getEnv('_APP_DOMAIN', '')` 或使用 API 專用網域變數，避免將 Console 網域（_APP_CONSOLE_DOMAIN）作為 API 端點的主機名稱。"
+    }
+   ],
+   "filename": "src/Appwrite/Platform/Modules/Functions/Workers/Builds.php"
+  },
+  {
+   "summary": "新增主控台網域的黑名單判斷，但使用 fallback 方式會導致當設定了 _APP_CONSOLE_DOMAIN 時，原本的 _APP_DOMAIN 被排除在黑名單之外。",
+   "issues": [
+    {
+     "line": 79,
+     "severity": "security",
+     "comment": "使用 System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', '')) 會在設定了 _APP_CONSOLE_DOMAIN 的情況下，使 _APP_DOMAIN 不會被加入 $deniedDomains。這可能導致使用者能夠將主要的 API 網域（_APP_DOMAIN）綁定為自訂代理規則，造成網域劫持或路由衝突的安全性風險。",
+     "suggestion": "建議將 _APP_DOMAIN 與 _APP_CONSOLE_DOMAIN 分開處理，兩者只要有設定值都應加入 $deniedDomains 中，例如：\n```php\n$mainDomain = System::getEnv('_APP_DOMAIN', '');\nif (!empty($mainDomain)) {\n    $deniedDomains[] = $mainDomain;\n}\n\n$consoleDomain = System::getEnv('_APP_CONSOLE_DOMAIN', '');\nif (!empty($consoleDomain)) {\n    $deniedDomains[] = $consoleDomain;\n}\n```"
+    }
+   ],
+   "filename": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/API/Create.php"
+  },
+  {
+   "summary": "將主網域與主控台網域改為 fallback 邏輯可能導致主網域（_APP_DOMAIN）未被加入黑名單而引發安全性與路由衝突問題。",
+   "issues": [
+    {
+     "line": 84,
+     "severity": "security",
+     "comment": "使用 fallback 方式取值會導致在設定了 `_APP_CONSOLE_DOMAIN` 的環境下，`_APP_DOMAIN`（主 API 網域）不再被加入 `$deniedDomains`。這可能允許使用者將 Function 自訂網域綁定至 Appwrite 自身的 API 網域，造成路由衝突或潛在的網域劫持風險。",
+     "suggestion": "建議將 `_APP_CONSOLE_DOMAIN` 與 `_APP_DOMAIN` 兩者同時檢查並加入 `$deniedDomains`（若非空），而非作為 fallback 覆蓋。"
+    }
+   ],
+   "filename": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Function/Create.php"
+  },
+  {
+   "summary": "將 Console 網域納入黑名單，但使用 fallback 會導致主要 APP 網域遺漏防護。",
+   "issues": [
+    {
+     "line": 87,
+     "severity": "security",
+     "comment": "使用 fallback 方式取值會導致當環境設定了 `_APP_CONSOLE_DOMAIN` 時，`_APP_DOMAIN` 就無法被加入 `$deniedDomains` 列表中。這可能允許使用者將平台主要的 API/系統網域（`_APP_DOMAIN`）註冊為重定向規則，造成網域劫持或路由衝突的安全性風險。",
+     "suggestion": "建議將 `_APP_DOMAIN` 與 `_APP_CONSOLE_DOMAIN` 兩者都分別檢查並加入 `$deniedDomains`，而非二選一。"
+    }
+   ],
+   "filename": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Redirect/Create.php"
+  },
+  {
+   "summary": "將主網域與控制台網域視為互斥 fallback 會導致主網域（_APP_DOMAIN）未被加入黑名單，產生安全隱患。",
+   "issues": [
+    {
+     "line": 84,
+     "severity": "security",
+     "comment": "使用 `System::getEnv('_APP_CONSOLE_DOMAIN', System::getEnv('_APP_DOMAIN', ''))` 會在設定了 `_APP_CONSOLE_DOMAIN` 時忽略 `_APP_DOMAIN`。這會導致主服務網域（`_APP_DOMAIN`）沒有被加入 `$deniedDomains` 阻擋清單中，使使用者可能建立指向主網域的 Site Proxy Rule，造成流量劫持或衝突。",
+     "suggestion": "應該將 `_APP_CONSOLE_DOMAIN` 與 `_APP_DOMAIN` 兩者都獨立加入 `$deniedDomains`，例如：\n\n```php\n$mainDomain = System::getEnv('_APP_DOMAIN', '');\nif (!empty($mainDomain)) {\n    $deniedDomains[] = $mainDomain;\n}\n\n$consoleDomain = System::getEnv('_APP_CONSOLE_DOMAIN', '');\nif (!empty($consoleDomain)) {\n    $deniedDomains[] = $consoleDomain;\n}\n```"
+    }
+   ],
+   "filename": "src/Appwrite/Platform/Modules/Proxy/Http/Rules/Site/Create.php"
+  },
+  {
+   "summary": "將 Function 預設 API endpoint 的 hostname 優先改為 Console 網域，但需留意環境變數為空字串時 fallback 失效的潛在問題。",
+   "issues": [
+    {
+     "line": 487,
+     "severity": "bug",
+     "comment": "如果環境變數 `_APP_CONSOLE_DOMAIN` 存在但值為空字串（例如在 .env 或 docker-compose 中設定為 `_APP_CONSOLE_DOMAIN=\"\"`），`System::getEnv` 會回傳空字串而非觸發預設值，導致無法順利 fallback 至 `_APP_DOMAIN`，最終使 `$hostname` 變為空字串、產生無效的 `$endpoint`（如 `https:///v1`）。",
+     "suggestion": "建議改用 elvis 運算子 `?:` 或判斷是否為非空字串，例如：`$hostname = System::getEnv('_APP_CONSOLE_DOMAIN') ?: System::getEnv('_APP_DOMAIN', '');`"
+    }
+   ],
+   "filename": "src/Appwrite/Platform/Workers/Functions.php"
+  },
+  {
+   "summary": "為 System::getEnv('_APP_DOMAIN') 提供空字串作為預設值，避免環境變數未設定時回傳 null，整體改動合理且無問題。",
+   "issues": [],
+   "filename": "src/Appwrite/Vcs/Comment.php"
+  },
+  {
+   "summary": "調整了預設 Host Header 的取得邏輯，優先使用 _APP_CONSOLE_DOMAIN 並以 _APP_DOMAIN 作為 fallback，改動簡潔且符合規範。",
+   "issues": [],
+   "filename": "src/Executor/Executor.php"
+  },
+  {
+   "summary": "將主網域的環境變數讀取加上 _APP_CONSOLE_DOMAIN 作為優先 fallback，改動合理且無問題。",
+   "issues": [],
+   "filename": "tests/e2e/Services/Projects/ProjectsCustomServerTest.php"
+  }
+ ],
+ "n_files": 14,
+ "elapsed_s": 183.0,
+ "calls": 14,
+ "input_tokens": 34810,
+ "output_tokens": 2863,
+ "call_input_tokens": [
+  692,
+  2633,
+  6066,
+  872,
+  1460,
+  2453,
+  2848,
+  3180,
+  3232,
+  3179,
+  1452,
+  4019,
+  1048,
+  1676
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

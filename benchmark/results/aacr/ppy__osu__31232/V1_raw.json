@@ -1,0 +1,26 @@
+{
+ "results": [
+  {
+   "summary": "新增 SliderTailMiss 設定以支援 slider tail miss 時失敗，但建議改用 base.FailCondition 以增進可維護性。",
+   "issues": [
+    {
+     "line": 30,
+     "severity": "style",
+     "comment": "直接重複了基類 ModSuddenDeath.FailCondition 的預設實作（result.Type.AffectsCombo() && !result.IsHit），若基類未來調整判定邏輯將無法同步。",
+     "suggestion": "建議直接呼叫基類實作：\nreturn base.FailCondition(healthProcessor, result);"
+    }
+   ],
+   "filename": "osu.Game.Rulesets.Osu/Mods/OsuModSuddenDeath.cs"
+  }
+ ],
+ "n_files": 1,
+ "elapsed_s": 18.3,
+ "calls": 1,
+ "input_tokens": 897,
+ "output_tokens": 149,
+ "call_input_tokens": [
+  897
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

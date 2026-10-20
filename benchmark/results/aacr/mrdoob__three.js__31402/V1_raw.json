@@ -1,0 +1,89 @@
+{
+ "results": [
+  {
+   "summary": "將 workgroupSize 預設值補齊為三維陣列 [64, 1, 1]，並使 compute 輔助函式支援重載以直接傳入 workgroupSize，整體改動合理。",
+   "issues": [
+    {
+     "line": 222,
+     "severity": "style",
+     "comment": "JSDoc 中 countOrWorkgroupSize 的型別僅標註為 number，但實作上已支援傳入 Array<number> 作為 workgroupSize，這會導致 IDE 或 TypeScript 型別檢查發出警告或推導錯誤。",
+     "suggestion": "建議將 JSDoc 型別更新為 `@param {number|Array<number>} [countOrWorkgroupSize]`。"
+    }
+   ],
+   "filename": "src/nodes/gpgpu/ComputeNode.js"
+  },
+  {
+   "summary": "新增 dispatchSize 參數至 compute 方法，但未初始化的 fallback 呼叫未傳遞該參數，且預設參數可能產生不必要的物件配置。",
+   "issues": [
+    {
+     "line": 2322,
+     "severity": "bug",
+     "comment": "當 renderer 尚未初始化（_initialized === false）時，呼叫 this.computeAsync( computeNodes ) 遺漏了傳入 dispatchSize，導致呼叫者傳入的 dispatchSize 遺失。",
+     "suggestion": "改為 return this.computeAsync( computeNodes, dispatchSize ); 並同步擴充 computeAsync 以接收並傳遞 dispatchSize。"
+    },
+    {
+     "line": 2314,
+     "severity": "performance",
+     "comment": "以常規陣列實字 [ 0, 0, 0 ] 作為參數預設值，在每次未傳入第二參數呼叫 compute() 時都會重新建立一個新的 Array 實例，在每幀頻繁呼叫時會增加垃圾回收（GC）負擔。",
+     "suggestion": "建議將預設值設為模組層級的共用常數（例如宣告於外層的 const _defaultDispatchSize = [ 0, 0, 0 ];）或將預設值設為 null，由 backend 內部統一處理。"
+    }
+   ],
+   "filename": "src/renderers/common/Renderer.js"
+  },
+  {
+   "summary": "新增的 dispatchSize 參數處理存在嚴重的變數指派錯誤與潛在的 TypeError 風險，導致非自訂 dispatch 大小時無法正確運作。",
+   "issues": [
+    {
+     "line": 1327,
+     "severity": "bug",
+     "comment": "如果呼叫 compute() 時未傳入 dispatchSize（為 undefined 或 null），存取 dispatchSize[ 0 ] 會直接拋出 TypeError: Cannot read properties of undefined。",
+     "suggestion": "建議加入安全檢查，例如：const isValid = Array.isArray( dispatchSize ) && dispatchSize[ 0 ] > 0 && dispatchSize[ 1 ] > 0 && dispatchSize[ 2 ] > 0;"
+    },
+    {
+     "line": 1329,
+     "severity": "bug",
+     "comment": "在 isValid 為 false 時，dispatchSize 被指派為 computeNodeData（物件本身），但在第 1364-1376 行中卻存取了 dispatchSize.x/y/z。這導致 x 與 y 被直接掛在 computeNodeData 上，且 dispatchSize.z 變成 undefined，最終傳入 dispatchWorkgroups(dispatchSize.x, dispatchSize.y, undefined) 引發執行期錯誤。",
+     "suggestion": "移除第 1329 行對 dispatchSize 的混淆指派，並在 else 區塊內保留原本的 const { dispatchSize } = computeNodeData;，確保取得的是包含 x, y, z 的 dispatchSize 物件。"
+    }
+   ],
+   "filename": "src/renderers/webgpu/WebGPUBackend.js"
+  },
+  {
+   "summary": "重構了 compute shader 的 workgroupSize 解析與 instanceIndex 計算以支援三維工作群組，但嚴格限制長度為 3 可能破壞既有相容性，且存在縮排與 JSDoc 不一致的問題。",
+   "issues": [
+    {
+     "line": 1903,
+     "severity": "bug",
+     "comment": "強制要求 workgroupSize.length === 3 會造成 breaking change。使用者先前可能傳入一維或二維陣列（例如 [ 64 ] 或 [ 16, 16 ]），此檢查會導致原本可正常運行的設定拋出 Error。",
+     "suggestion": "建議允許長度為 1 至 3 的陣列並為缺少的維度自動補齊為 1，例如：const [ x = 64, y = 1, z = 1 ] = this.object.workgroupSize || []; const workgroupSize = [ x, y, z ]; 或在長度不足時用 .concat([ 1, 1 ]).slice(0, 3) 補齊。"
+    },
+    {
+     "line": 2136,
+     "severity": "style",
+     "comment": "換行處使用了空格縮排（4 個空白），而專案全域程式碼風格慣用 tabs，造成縮排風格不一致。",
+     "suggestion": "將空白縮排改為 tabs，保持與周圍 WGSL 生成程式碼相同的縮排風格。"
+    },
+    {
+     "line": 2105,
+     "severity": "style",
+     "comment": "_getWGSLComputeCode 的 JSDoc 中 @param {string} workgroupSize 未同步更新，目前傳入的已是包含 3 個元素的數值陣列（Array<number>）。",
+     "suggestion": "將 JSDoc 標籤更新為 @param {Array<number>} workgroupSize 或 @param {number[]} workgroupSize。"
+    }
+   ],
+   "filename": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js"
+  }
+ ],
+ "n_files": 4,
+ "elapsed_s": 82.0,
+ "calls": 4,
+ "input_tokens": 11140,
+ "output_tokens": 1322,
+ "call_input_tokens": [
+  3186,
+  2099,
+  2798,
+  3057
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

@@ -1,0 +1,27 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 6,
+  "findings": [
+   {
+    "file": "linera-core/src/chain_worker/state.rs",
+    "start": 1418,
+    "end": 1418,
+    "category": "bug",
+    "comment": "當查詢請求的 start（request_received_log_excluding_first_n）大於 chain.received_log.count() 時，end 會被取為 count()，導致 start > end。傳入反向範圍（start..end）會造成 panic（例如底層資料結構的範圍查詢斷言 range start <= range end）。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "linera-core/src/chain_worker/state.rs",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — ref discusses doc comment markdown formatting, while generated discusses an invalid range when `start > count()`.\n2. No match — ref discusses visibility of a constant (`pub` vs `pub(crate)`), while generated discusses range bounds checking.\n3. Match — both address the issue where `start` exceeds `chain.received_log.count()`, resulting in an invalid `start..end` range.\n4. No match — ref discusses pagination loop termination conditions, while generated discusses out-of-bounds start index causing an invalid range.\n\n[3]",
+   "hit_new_gt": true
+  }
+ ]
+}

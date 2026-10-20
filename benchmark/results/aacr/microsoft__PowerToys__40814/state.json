@@ -1,0 +1,54 @@
+{
+ "owner": "microsoft",
+ "repo": "PowerToys",
+ "full": "microsoft/PowerToys",
+ "pr_number": 40814,
+ "title": "CmdPal: try to fix the context menu crash, again.",
+ "body": "Cherry-pick of 782ee47. That is probably over-aggressive, but it fixes it. \r\n\r\nCloses  #40633\r\npreviously: #40744\r\nThis pull request refactors how `CommandContextItemViewModel` objects are handled in the `cmdpal` module and improves compatibility for Ahead-of-Time (AOT) compilation. Key changes include updating logic for type handling in view models and template selectors, and adding necessary type declarations for AOT compatibility.\r\n\r\n### Refactoring `CommandContextItemViewModel` Handling:\r\n\r\n* [`src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs`](diffhunk://#diff-32b887a08ffca8bc080581d18757a50dcee8ff4badfb56fd3b963dc97e15b230R66-R72): Updated the `TopLevelViewModel` logic to explicitly handle `CommandContextItemViewModel` objects, returning `commandItem.Model.Unsafe` when applicable. Removed the fallback cast and replaced it with a `null` return for unsupported cases.\r\n* [`src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs`](diffhunk://#diff-e8ff86266149712a39a973749aadce55089e1d9d275adf6df4c7c75757080dcbR36-R43): Added explicit handling for `CommandContextItemViewModel` in the `ContextItemTemplateSelector`, assigning templates based on the `IsCritical` property. Introduced a fallback to the default template for unknown types.\r\n\r\n### AOT Compatibility Improvements:\r\n\r\n* [`src/modules/cmdpal/Microsoft.CmdPal.UI/rd.xml`](diffhunk://#diff-4e4dd4a2368c19fb4975f9c810616c442612f25494860c2fe7824240ce7015cfR5-R18): Added type declarations for `CommandContextItemViewModel`, `SeparatorContextItemViewModel`, `IContextItemViewModel`, and other related types in the `Microsoft.CmdPal.Core.ViewModels` and `Microsoft.CmdPal.UI` assemblies to ensure compatibility with AOT compilation.",
+ "base_sha": "e1474c1f3020e2615c438d82b29f48626f456a9f",
+ "review_sha": "c1cedce10cfe7436da12580ea231d5837520ef69",
+ "head_now": "c1cedce10cfe7436da12580ea231d5837520ef69",
+ "raw_diff": "diff --git a/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs b/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs\nindex dabfdca3f6e5..6d78d9518045 100644\n--- a/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs\n+++ b/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs\n@@ -63,9 +63,13 @@ public sealed partial class TopLevelViewModel : ObservableObject, IListItem\n                                                         {\n                                                             return item as IContextItem;\n                                                         }\n+                                                        else if (item is CommandContextItemViewModel commandItem)\n+                                                        {\n+                                                            return commandItem.Model.Unsafe;\n+                                                        }\n                                                         else\n                                                         {\n-                                                            return ((CommandContextItemViewModel)item).Model.Unsafe;\n+                                                            return null;\n                                                         }\n                                                     }).ToArray();\n \ndiff --git a/src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs b/src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs\nindex d2af6ca6d61f..aec50163db10 100644\n--- a/src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs\n+++ b/src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs\n@@ -33,9 +33,14 @@ internal sealed partial class ContextItemTemplateSelector : DataTemplateSelector\n                 li.AllowFocusOnInteraction = false;\n                 dataTemplate = Separator;\n             }\n+            else if (item is CommandContextItemViewModel commandItem)\n+            {\n+                dataTemplate = commandItem.IsCritical ? Critical : Default;\n+            }\n             else\n             {\n-                dataTemplate = ((CommandContextItemViewModel)item).IsCritical ? Critical : Default;\n+                // Fallback for unknown types\n+                dataTemplate = Default;\n             }\n         }\n \ndiff --git a/src/modules/cmdpal/Microsoft.CmdPal.UI/rd.xml b/src/modules/cmdpal/Microsoft.CmdPal.UI/rd.xml\nindex 037839d5490f..86331f360d7e 100644\n--- a/src/modules/cmdpal/Microsoft.CmdPal.UI/rd.xml\n+++ b/src/modules/cmdpal/Microsoft.CmdPal.UI/rd.xml\n@@ -2,7 +2,20 @@\n \t<Application>\n \t\t<Assembly Name=\"Microsoft.WinUI\">\n \t\t\t<Type Name=\"Microsoft.UI.Xaml.Controls.FontIconSource\" Dynamic=\"Required All\" />\n+\t\t\t<Type Name=\"Microsoft.UI.Xaml.DataTemplate\" Dynamic=\"Required All\" />\n+\t\t\t<Type Name=\"Microsoft.UI.Xaml.Controls.DataTemplateSelector\" Dynamic=\"Required All\" />\n+\t\t\t<Type Name=\"Microsoft.UI.Xaml.Controls.ListViewItem\" Dynamic=\"Required All\" />\n \t\t</Assembly>\n+\n+\t\t<!-- Add ViewModel types for AOT compatibility -->\n+\t\t<Assembly Name=\"Microsoft.CmdPal.Core.ViewModels\">\n+\t\t\t<Type Name=\"Microsoft.CmdPal.Core.ViewModels.CommandContextItemViewModel\" Dynamic=\"Required All\" />\n+\t\t\t<Type Name=\"Microsoft.CmdPal.Core.ViewModels.SeparatorContextItemViewModel\" Dynamic=\"Required All\" />\n+\t\t\t<Type Name=\"Microsoft.CmdPal.Core.ViewModels.IContextItemViewModel\" Dynamic=\"Required All\" />\n+\t\t\t<Type Name=\"Microsoft.CmdPal.Core.ViewModels.CommandItemViewModel\" Dynamic=\"Required All\" />\n+\t\t</Assembly>\n+\n+\t\t<!-- Add UI types for AOT compatibility -->\n \t\t<Assembly Name=\"Microsoft.CmdPal.UI\">\n \t\t\t<Type Name=\"Microsoft.CmdPal.UI.ContextItemTemplateSelector\" Dynamic=\"Required All\" />\n \t\t</Assembly>\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs",
+   "body": "MoreCommands returns null for unsupported item types without logging, risking downstream null reference exceptions; add debug logging to record unexpected item types.",
+   "from_line": 71,
+   "to_line": 71,
+   "category": "Maintainability and Readability",
+   "context": "Diff Level",
+   "diff_hunk": "@@ -63,9 +63,13 @@ public sealed partial class TopLevelViewModel : ObservableObject, IListItem\n                                                         {\n                                                             return item as IContextItem;\n                                                         }\n+                                                        else if (item is CommandContextItemViewModel commandItem)\n+                                                        {\n+                                                            return commandItem.Model.Unsafe;\n+                                                        }\n                                                         else\n                                                         {\n-                                                            return ((CommandContextItemViewModel)item).Model.Unsafe;\n+                                                            return null;\n                                                         }\n                                                     }).ToArray();",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 1,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs",
+   "body": "`Default`, `Critical`, and `Separator` are nullable. If `Default` isn't set in XAML, this selector can return null templates (both on entry and in the fallback). Consider making `Default` non-null (required), or provide a safe non-null fallback (e.g., base.SelectTemplateCore / throw with a clear message) to avoid silent UI failures.",
+   "from_line": 15,
+   "to_line": 15,
+   "category": "Code Defect",
+   "context": "File Level",
+   "diff_hunk": "",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 2,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "src/modules/cmdpal/Microsoft.CmdPal.UI/Converters/ContextItemTemplateSelector.cs",
+   "body": "Missing debug logging for unknown item types in ContextItemTemplateSelector fallback. Add a Debug.WriteLine statement when falling back to Default template to monitor unexpected types.",
+   "from_line": 42,
+   "to_line": 42,
+   "category": "Maintainability and Readability",
+   "context": "File Level",
+   "diff_hunk": "@@ -33,9 +33,14 @@ internal sealed partial class ContextItemTemplateSelector : DataTemplateSelector\n                 li.AllowFocusOnInteraction = false;\n                 dataTemplate = Separator;\n             }\n+            else if (item is CommandContextItemViewModel commandItem)\n+            {\n+                dataTemplate = commandItem.IsCritical ? Critical : Default;\n+            }\n             else\n             {\n-                dataTemplate = ((CommandContextItemViewModel)item).IsCritical ? Critical : Default;\n+                // Fallback for unknown types\n+                dataTemplate = Default;\n             }\n         }",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "C#"
+}

@@ -1,0 +1,54 @@
+{
+ "owner": "ollama",
+ "repo": "ollama",
+ "full": "ollama/ollama",
+ "pr_number": 10135,
+ "title": "create blobs in parallel",
+ "body": "quick tests show roughly 75% (30s -> 7.5s) reduction in time to create [mistralai/Mistral-Small-3.1-24B-Instruct-2503](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503).\r\n\r\nthis also caps the number of lines outputted by the progress writer however there is still much to be improved. since it only outputs the last lines that fit into the terminal, it's possible active progress lines are truncated",
+ "base_sha": "c2f5d6662ba696b94455eaaa298a797d56fdca5c",
+ "review_sha": "0b52f186fb4af8fa7d4f6a71967f922eb6b69cdc",
+ "head_now": "53081fc41ea9bb2176b199da18c28882817e34c4",
+ "raw_diff": "diff --git a/cmd/cmd.go b/cmd/cmd.go\nindex 847278629b8..f64fe669923 100644\n--- a/cmd/cmd.go\n+++ b/cmd/cmd.go\n@@ -22,6 +22,7 @@ import (\n \t\"sort\"\n \t\"strconv\"\n \t\"strings\"\n+\t\"sync\"\n \t\"sync/atomic\"\n \t\"syscall\"\n \t\"time\"\n@@ -31,6 +32,7 @@ import (\n \t\"github.com/olekukonko/tablewriter\"\n \t\"github.com/spf13/cobra\"\n \t\"golang.org/x/crypto/ssh\"\n+\t\"golang.org/x/sync/errgroup\"\n \t\"golang.org/x/term\"\n \n \t\"github.com/ollama/ollama/api\"\n@@ -106,7 +108,7 @@ func CreateHandler(cmd *cobra.Command, args []string) error {\n \t}\n \tspinner.Stop()\n \n-\treq.Name = args[0]\n+\treq.Model = args[0]\n \tquantize, _ := cmd.Flags().GetString(\"quantize\")\n \tif quantize != \"\" {\n \t\treq.Quantize = quantize\n@@ -117,26 +119,43 @@ func CreateHandler(cmd *cobra.Command, args []string) error {\n \t\treturn err\n \t}\n \n-\tif len(req.Files) > 0 {\n-\t\tfileMap := map[string]string{}\n-\t\tfor f, digest := range req.Files {\n+\tvar mu sync.Mutex\n+\tvar g errgroup.Group\n+\tg.SetLimit(max(runtime.GOMAXPROCS(0)-1, 1))\n+\t// copy files since we'll be modifying the map\n+\ttemp := req.Files\n+\treq.Files = make(map[string]string, len(temp))\n+\tfor f, digest := range temp {\n+\t\tg.Go(func() error {\n \t\t\tif _, err := createBlob(cmd, client, f, digest, p); err != nil {\n \t\t\t\treturn err\n \t\t\t}\n-\t\t\tfileMap[filepath.Base(f)] = digest\n-\t\t}\n-\t\treq.Files = fileMap\n+\n+\t\t\tmu.Lock()\n+\t\t\treq.Files[filepath.Base(f)] = digest\n+\t\t\tmu.Unlock()\n+\t\t\treturn nil\n+\t\t})\n \t}\n \n-\tif len(req.Adapters) > 0 {\n-\t\tfileMap := map[string]string{}\n-\t\tfor f, digest := range req.Adapters {\n+\t// copy files since we'll be modifying the map\n+\ttemp = req.Adapters\n+\treq.Adapters = make(map[string]string, len(temp))\n+\tfor f, digest := range temp {\n+\t\tg.Go(func() error {\n \t\t\tif _, err := createBlob(cmd, client, f, digest, p); err != nil {\n \t\t\t\treturn err\n \t\t\t}\n-\t\t\tfileMap[filepath.Base(f)] = digest\n-\t\t}\n-\t\treq.Adapters = fileMap\n+\n+\t\t\tmu.Lock()\n+\t\t\treq.Adapters[filepath.Base(f)] = digest\n+\t\t\tmu.Unlock()\n+\t\t\treturn nil\n+\t\t})\n+\t}\n+\n+\tif err := g.Wait(); err != nil {\n+\t\treturn err\n \t}\n \n \tbars := make(map[string]*progress.Bar)\n@@ -213,7 +232,7 @@ func createBlob(cmd *cobra.Command, client *api.Client, path string, digest stri\n \t\t}\n \t}()\n \n-\tif err = client.CreateBlob(cmd.Context(), digest, io.TeeReader(bin, &pw)); err != nil {\n+\tif err := client.CreateBlob(cmd.Context(), digest, io.TeeReader(bin, &pw)); err != nil {\n \t\treturn \"\", err\n \t}\n \treturn digest, nil\ndiff --git a/cmd/cmd_test.go b/cmd/cmd_test.go\nindex e6a542d091d..584505657a9 100644\n--- a/cmd/cmd_test.go\n+++ b/cmd/cmd_test.go\n@@ -689,7 +689,7 @@ func TestCreateHandler(t *testing.T) {\n \t\t\t\t\t\treturn\n \t\t\t\t\t}\n \n-\t\t\t\t\tif req.Name != \"test-model\" {\n+\t\t\t\t\tif req.Model != \"test-model\" {\n \t\t\t\t\t\tt.Errorf(\"expected model name 'test-model', got %s\", req.Name)\n \t\t\t\t\t}\n \ndiff --git a/progress/bar.go b/progress/bar.go\nindex 410b6e23f43..f3d21a8fdf2 100644\n--- a/progress/bar.go\n+++ b/progress/bar.go\n@@ -64,7 +64,7 @@ func formatDuration(d time.Duration) string {\n func (b *Bar) String() string {\n \ttermWidth, _, err := term.GetSize(int(os.Stderr.Fd()))\n \tif err != nil {\n-\t\ttermWidth = 80\n+\t\ttermWidth = defaultTermWidth\n \t}\n \n \tvar pre strings.Builder\ndiff --git a/progress/progress.go b/progress/progress.go\nindex 0cd0ea1f97b..4d2ae26ebe6 100644\n--- a/progress/progress.go\n+++ b/progress/progress.go\n@@ -4,8 +4,16 @@ import (\n \t\"bufio\"\n \t\"fmt\"\n \t\"io\"\n+\t\"os\"\n \t\"sync\"\n \t\"time\"\n+\n+\t\"golang.org/x/term\"\n+)\n+\n+const (\n+\tdefaultTermWidth  = 80\n+\tdefaultTermHeight = 24\n )\n \n type State interface {\n@@ -83,6 +91,11 @@ func (p *Progress) Add(key string, state State) {\n }\n \n func (p *Progress) render() {\n+\t_, termHeight, err := term.GetSize(int(os.Stderr.Fd()))\n+\tif err != nil {\n+\t\ttermHeight = defaultTermHeight\n+\t}\n+\n \tp.mu.Lock()\n \tdefer p.mu.Unlock()\n \n@@ -102,8 +115,8 @@ func (p *Progress) render() {\n \tfmt.Fprint(p.w, \"\\033[1G\")\n \n \t// render progress lines\n-\tfor i, state := range p.states {\n-\t\tfmt.Fprint(p.w, state.String(), \"\\033[K\")\n+\tfor i := range min(len(p.states), termHeight-1) {\n+\t\tfmt.Fprint(p.w, p.states[i].String(), \"\\033[K\")\n \t\tif i < len(p.states)-1 {\n \t\t\tfmt.Fprint(p.w, \"\\n\")\n \t\t}\n",
+ "ground_truth": [
+  {
+   "id": 0,
+   "user": "human (AACR, verified)",
+   "source": "human",
+   "path": "cmd/cmd.go",
+   "body": "The current mutex-protected map implementation for concurrent file processing is unnecessarily complex; replace it with a pre-allocated slice since the file count is known upfront, eliminating locking overhead.",
+   "from_line": 127,
+   "to_line": 127,
+   "category": "Performance",
+   "context": "Repo Level",
+   "diff_hunk": "@@ -117,26 +119,43 @@ func CreateHandler(cmd *cobra.Command, args []string) error {\n \t\treturn err\n \t}\n \n-\tif len(req.Files) > 0 {\n-\t\tfileMap := map[string]string{}\n-\t\tfor f, digest := range req.Files {\n+\tvar mu sync.Mutex\n+\tvar g errgroup.Group\n+\tg.SetLimit(max(runtime.GOMAXPROCS(0)-1, 1))\n+\t// copy files since we'll be modifying the map\n+\ttemp := req.Files\n+\treq.Files = make(map[string]string, len(temp))\n+\tfor f, digest := range temp {\n+\t\tg.Go(func() error {\n \t\t\tif _, err := createBlob(cmd, client, f, digest, p); err != nil {\n \t\t\t\treturn err\n \t\t\t}\n-\t\t\tfileMap[filepath.Base(f)] = digest\n-\t\t}\n-\t\treq.Files = fileMap\n+\n+\t\t\tmu.Lock()\n+\t\t\treq.Files[filepath.Base(f)] = digest\n+\t\t\tmu.Unlock()\n+\t\t\treturn nil\n+\t\t})\n \t}\n \n-\tif len(req.Adapters) > 0 {\n-\t\tfileMap := map[string]string{}\n-\t\tfor f, digest := range req.Adapters {\n+\t// copy files since we'll be modifying the map\n+\ttemp = req.Adapters\n+\treq.Adapters = make(map[string]string, len(temp))\n+\tfor f, digest := range temp {\n+\t\tg.Go(func() error {\n \t\t\tif _, err := createBlob(cmd, client, f, digest, p); err != nil {\n \t\t\t\treturn err\n \t\t\t}\n-\t\t\tfileMap[filepath.Base(f)] = digest\n-\t\t}\n-\t\treq.Adapters = fileMap\n+\n+\t\t\tmu.Lock()\n+\t\t\treq.Adapters[filepath.Base(f)] = digest\n+\t\t\tmu.Unlock()\n+\t\t\treturn nil\n+\t\t})\n+\t}\n+\n+\tif err := g.Wait(); err != nil {\n+\t\treturn err\n \t}\n \n \tbars := make(map[string]*progress.Bar)",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 1,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "cmd/cmd.go",
+   "body": "**Critical Bug: Closure Variable Capture Issue**\n\nThe loop variables `f` and `digest` are being captured by the goroutine closure. Since goroutines run concurrently, by the time they execute, the loop may have already progressed, causing all goroutines to potentially use the last iteration's values.\n\n**Fix:** Shadow the loop variables before using them in the closure:\n```go\nfor f, digest := range temp {\n    f, digest := f, digest  // Create new variables for each iteration\n    g.Go(func() error {\n        // ... rest of the code\n    })\n}\n```\n\nThis issue affects both the `req.Files` and `req.Adapters` processing loops.\n",
+   "from_line": 128,
+   "to_line": 139,
+   "category": "Code Defect",
+   "context": "File Level",
+   "diff_hunk": "@@ -117,26 +119,43 @@ func CreateHandler(cmd *cobra.Command, args []string) error {\n \t\treturn err\n \t}\n \n-\tif len(req.Files) > 0 {\n-\t\tfileMap := map[string]string{}\n-\t\tfor f, digest := range req.Files {\n+\tvar mu sync.Mutex\n+\tvar g errgroup.Group\n+\tg.SetLimit(max(runtime.GOMAXPROCS(0)-1, 1))\n+\t// copy files since we'll be modifying the map\n+\ttemp := req.Files\n+\treq.Files = make(map[string]string, len(temp))\n+\tfor f, digest := range temp {\n+\t\tg.Go(func() error {\n \t\t\tif _, err := createBlob(cmd, client, f, digest, p); err != nil {\n \t\t\t\treturn err\n \t\t\t}\n-\t\t\tfileMap[filepath.Base(f)] = digest\n-\t\t}\n-\t\treq.Files = fileMap\n+\n+\t\t\tmu.Lock()\n+\t\t\treq.Files[filepath.Base(f)] = digest\n+\t\t\tmu.Unlock()\n+\t\t\treturn nil\n+\t\t})\n \t}\n \n-\tif len(req.Adapters) > 0 {\n-\t\tfileMap := map[string]string{}\n-\t\tfor f, digest := range req.Adapters {\n+\t// copy files since we'll be modifying the map\n+\ttemp = req.Adapters\n+\treq.Adapters = make(map[string]string, len(temp))\n+\tfor f, digest := range temp {\n+\t\tg.Go(func() error {\n \t\t\tif _, err := createBlob(cmd, client, f, digest, p); err != nil {\n \t\t\t\treturn err\n \t\t\t}\n-\t\t\tfileMap[filepath.Base(f)] = digest\n-\t\t}\n-\t\treq.Adapters = fileMap\n+\n+\t\t\tmu.Lock()\n+\t\t\treq.Adapters[filepath.Base(f)] = digest\n+\t\t\tmu.Unlock()\n+\t\t\treturn nil\n+\t\t})\n+\t}\n+\n+\tif err := g.Wait(); err != nil {\n+\t\treturn err\n \t}\n \n \tbars := make(map[string]*progress.Bar)",
+   "is_dataset_comment": true
+  },
+  {
+   "id": 2,
+   "user": "AI (AACR, verified)",
+   "source": "ai",
+   "path": "progress/progress.go",
+   "body": "The loop now limits rendering to `termHeight-1` states, which truncates progress output when there are more states than available terminal lines. This is a regression that causes users to lose visibility into progress for items beyond the terminal height. Consider implementing pagination or scrolling, or at minimum ensure users are aware that not all progress is being displayed.",
+   "from_line": 118,
+   "to_line": 119,
+   "category": "Code Defect",
+   "context": "File Level",
+   "diff_hunk": "@@ -102,8 +115,8 @@ func (p *Progress) render() {\n \tfmt.Fprint(p.w, \"\\033[1G\")\n \n \t// render progress lines\n-\tfor i, state := range p.states {\n-\t\tfmt.Fprint(p.w, state.String(), \"\\033[K\")\n+\tfor i := range min(len(p.states), termHeight-1) {\n+\t\tfmt.Fprint(p.w, p.states[i].String(), \"\\033[K\")\n \t\tif i < len(p.states)-1 {\n \t\t\tfmt.Fprint(p.w, \"\\n\")\n \t\t}",
+   "is_dataset_comment": true
+  }
+ ],
+ "language": "Go"
+}

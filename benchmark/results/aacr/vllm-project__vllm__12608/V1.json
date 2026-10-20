@@ -1,0 +1,66 @@
+{
+ "results": [
+  {
+   "filename": "tests/v1/core/test_prefix_caching.py",
+   "summary": "將測試中的 append_slots 呼叫統一改為 allocate_slots，並在 test_preallocate_blocks 中針對無預分配 block 的情況進行適當條件判斷，改動正確無問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "vllm/v1/core/kv_cache_manager.py",
+   "summary": "重構 allocate_slots 與 append_slots 合併邏輯，並新增 _untouch 機制，整體結構清晰，但需注意容量上限檢查與失敗時的副作用清理。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 163,
+     "end_line": 163,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "當所需區塊數超過請求上限（即 num_new_blocks > self.max_num_blocks_per_req - len(req_blocks) - len(new_computed_blocks)）時，程式只檢查了 free_block_queue 的數量。這會導致在 line 180 處 min() 將 num_new_blocks 截斷為小於實際所需區塊數的值，導致配置的區塊不足以容納 num_tokens；或在額度已滿時觸發 line 190 的 AssertionError。"
+    },
+    {
+     "start_line": 160,
+     "end_line": 160,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "由於 self.req_to_blocks 改為 defaultdict(list)，在 line 160 存取未曾加入過的 request.request_id 時會自動建立一個空串列。若後續因資源不足在 line 166 返回 None，該 request_id 仍會殘留在 req_to_blocks 中，造成未成功分配但 key 已存在的副作用。"
+    },
+    {
+     "start_line": 432,
+     "end_line": 432,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "_untouch 方法的 docstring 參數描述寫成 'A list of blocks to touch.'，應為 untouch；另外 line 155 註解中的 'prefix cacheing hits' 有拼字錯誤（cacheing -> caching）。"
+    }
+   ]
+  },
+  {
+   "filename": "vllm/v1/core/scheduler.py",
+   "summary": "在排程 RUNNING 請求時，呼叫 allocate_slots 誤傳入寫死的空列表 []，導致該請求的 encoder inputs 無法分配 KV 快取。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 142,
+     "end_line": 142,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在第 133 行已透過 _try_schedule_encoder_inputs 取得該請求欲排程的 encoder_inputs_to_schedule，但呼叫 allocate_slots 時卻傳入硬編碼的空列表 []，這會導致需要排程的 encoder inputs 無法正確分配對應的 KV 快取 slots。"
+    }
+   ]
+  }
+ ],
+ "n_files": 3,
+ "input_tokens": 15180,
+ "output_tokens": 851,
+ "calls": 3,
+ "tool_calls": null,
+ "elapsed_s": 380.7,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  6847,
+  7080,
+  1253
+ ],
+ "model": "gemini-3.8-flash"
+}

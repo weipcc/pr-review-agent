@@ -1,0 +1,81 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 3,
+  "findings": [
+   {
+    "file": "cmd/cmd.go",
+    "start": 123,
+    "end": 123,
+    "category": "performance",
+    "comment": "目前宣告 `var g errgroup.Group`，當其中一個 blob 上傳發生錯誤時，無法及時中斷其他正在進行的 goroutine。由於模型檔通常體積龐大，繼續上傳失敗請求中的其餘檔案會徒增頻寬與 I/O 消耗。"
+   },
+   {
+    "file": "cmd/cmd_test.go",
+    "start": 692,
+    "end": 692,
+    "category": "bug",
+    "comment": "條件判斷已更新為檢查 req.Model，但隨後的 t.Errorf 依然輸出 req.Name，測試失敗時會印出錯誤或不一致的值。"
+   },
+   {
+    "file": "progress/progress.go",
+    "start": 118,
+    "end": 118,
+    "category": "bug",
+    "comment": "當 states 數量超過終端機限制時，換行判斷 `if i < len(p.states)-1` 仍會為 true，導致最後一行被渲染後仍額外輸出換行符 `\\n`，多佔用一行。"
+   },
+   {
+    "file": "progress/progress.go",
+    "start": 125,
+    "end": 125,
+    "category": "bug",
+    "comment": "`p.pos` 記錄的是游標目前所在的行數位置，用以在下一次 render 或 StopAndClear 時往上移回起始處。若限制了渲染行數，但 `p.pos` 仍被賦值為完整的 `len(p.states)`，下一次 render 時會往上多移動多餘的行數，導致畫面內容被覆蓋甚至終端機顯示錯亂。"
+   },
+   {
+    "file": "progress/progress.go",
+    "start": 15,
+    "end": 15,
+    "category": "style",
+    "comment": "宣告了未使用的常數 `defaultTermWidth`。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "cmd/cmd.go",
+   "matched_gt": [],
+   "reason": "1. No match — ref discusses replacing a mutex-protected map with a slice, while generated comment discusses cancellation via errgroup context.\n2. No match — ref discusses loop closure variable capture bugs, whereas generated comment discusses lack of cancellation on error in `errgroup.Group`.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "cmd/cmd_test.go",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "progress/progress.go",
+   "matched_gt": [],
+   "reason": "1. No match — Generated comment identifies an extra newline bug when truncated, whereas reference comment addresses truncation and loss of visibility.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "progress/progress.go",
+   "matched_gt": [],
+   "reason": "1. No match — Reference comment 1 addresses truncation and loss of visibility beyond terminal height, whereas the generated comment addresses a cursor tracking bug with `p.pos` causing screen corruption.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "progress/progress.go",
+   "matched_gt": [],
+   "reason": "1. No match — Reference 1 discusses truncating output due to terminal height, while the Generated Comment points out an unused constant `defaultTermWidth`.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

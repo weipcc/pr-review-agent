@@ -1,0 +1,43 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 6,
+  "findings": [
+   {
+    "file": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs",
+    "start": 40,
+    "end": 40,
+    "category": "bug",
+    "comment": "IPAddress.NetworkToHostOrder((short)...) returns a signed 16-bit short. When the port number is in the range 32768-65535 (such as ephemeral/dynamic client ports), the short value is negative, and converting it to int sign-extends it into a negative integer."
+   },
+   {
+    "file": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs",
+    "start": 62,
+    "end": 62,
+    "category": "bug",
+    "comment": "IPAddress.NetworkToHostOrder((short)...) returns a signed 16-bit short. When the IPv6 port number is in the range 32768-65535, returning it as int sign-extends the negative short value into a negative integer."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — discusses null pointer dereference in `CopyOutAddress`, while generated discusses signed port conversion.\n2. No match — discusses endianness bug in `IPAddress(long)` address conversion, not port conversion.\n3. Match — both identify that casting/converting port using signed `short` causes issues for ports above 32767 (32768-65535).\n4. No match — discusses temporary workaround technical debt, unrelated to port conversion.\n5. No match — discusses missing IPv6 scope ID handling, unrelated to port conversion.\n\n[3]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs",
+   "matched_gt": [
+    2
+   ],
+   "reason": "1. No match — concerns a missing null check on `pSockaddr`.\n2. No match — concerns byte-order handling in `IPAddress(long)` for IPv4 addresses.\n3. Match — both identify that casting the port to a signed `short` causes issues for port numbers above 32767.\n4. No match — concerns tracking a temporary workaround for inline arrays.\n5. No match — concerns missing IPv6 scope ID handling.\n\n[3]",
+   "hit_new_gt": false
+  }
+ ]
+}

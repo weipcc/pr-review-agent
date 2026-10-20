@@ -1,0 +1,88 @@
+{
+ "results": [
+  {
+   "summary": "新增 changeset 檔案以記錄非 UTF-8 檔案編碼偵測修復的 patch 版本變更，內容格式正確無誤。",
+   "issues": [],
+   "filename": ".changeset/shiny-dingos-float.md"
+  },
+  {
+   "summary": "新增了 iconv-lite 與 jschardet 套件以支援文字編碼偵測與轉換，需注意 TypeScript 型別定義的安裝。",
+   "issues": [
+    {
+     "line": 295,
+     "severity": "style",
+     "comment": "jschardet 套件本身並未內建 TypeScript 型別定義（.d.ts）。若專案中直接 import 使用，執行 check-types（tsc --noEmit）時可能會遇到 TS7016 找不到型別宣告檔的錯誤。",
+     "suggestion": "建議在 devDependencies 中加入 @types/jschardet（例如 npm i -D @types/jschardet），或確認專案內已有自訂的 ambient module 宣告。"
+    }
+   ],
+   "filename": "package.json"
+  },
+  {
+   "summary": "新增檔案編碼偵測與轉碼支援，但編碼字串比對、ASCII 誤轉及未驗證 iconv 支援性可能導致檔案損毀或例外崩潰。",
+   "issues": [
+    {
+     "line": 51,
+     "severity": "bug",
+     "comment": "jschardet 偵測到的編碼名稱可能不被 iconv-lite 支援，或者 detect() 回傳信心度過低/無效的編碼名稱。若直接傳入 iconv.decode/encode，會拋出例外（Encoding not recognized）導致編輯或儲存失敗。",
+     "suggestion": "使用 iconv.encodingExists() 檢查偵測出的編碼，若不支援或信心度不足（如 detected.confidence < 0.8）則 fallback 至 utf8。"
+    },
+    {
+     "line": 237,
+     "severity": "bug",
+     "comment": "比對條件 this.fileEncoding.toLowerCase() !== \"utf8\" 存在嚴重缺陷：1. jschardet 通常回傳帶連字號的 \"UTF-8\"，toLowerCase() 後為 \"utf-8\"，比對時會被誤判為非 UTF-8。2. 純英文或空檔案常被偵測為 \"ascii\"，若以 ascii 編碼寫回檔案，模型或使用者新增的非 ASCII 字元（如中文或特殊符號）會被破壞或轉為問號（?）。",
+     "suggestion": "標準化編碼名稱（如去掉連字號），且當編碼為 utf8 或 ascii 時不應強制轉碼覆寫；建議判斷 const encoding = this.fileEncoding.toLowerCase().replace(/[^a-z0-9]/g, ''); if (encoding !== 'utf8' && encoding !== 'ascii') { ... }"
+    },
+    {
+     "line": 382,
+     "severity": "style",
+     "comment": "reset() 方法中未重置 this.fileEncoding 回預設值 \"utf8\"，可能導致重置後在特定邊界情況下殘留上一個檔案的編碼設定。",
+     "suggestion": "在 reset() 方法中加入 this.fileEncoding = \"utf8\"。"
+    }
+   ],
+   "filename": "src/integrations/editor/DiffViewProvider.ts"
+  },
+  {
+   "summary": "新增了自動編碼偵測以支援多編碼解碼，但二進位檔案檢查邏輯被繞過，且未驗證 iconv 是否支援偵測到的編碼。",
+   "issues": [
+    {
+     "line": 30,
+     "severity": "bug",
+     "comment": "二進位檔案檢查被移至 else 分支。因為 jschardet.detect 對於任意二進位資料（如 images、zip、exe 等）通常仍會猜測一個編碼（例如 windows-1252 或 ISO-8859-1，僅信心度較低），導致程式永遠不會進入 else 呼叫 isBinaryFile，使二進位檔案被當作文字解碼回傳亂碼。",
+     "suggestion": "應在讀取 buffer 後優先執行 isBinaryFile 判斷，確認非二進位檔案後再呼叫 chardet.detect 進行編碼偵測；或者檢查 detected.confidence 是否達到一定門檻。"
+    },
+    {
+     "line": 43,
+     "severity": "bug",
+     "comment": "chardet 偵測到的編碼名稱可能不被 iconv-lite 支援，若直接傳入不支援的編碼名稱，iconv.decode 可能會拋出例外或無法正確解碼。",
+     "suggestion": "使用 iconv.encodingExists(encoding) 檢查編碼是否存在，若不支援則 fallback 至 'utf8' 或報錯。"
+    },
+    {
+     "line": 60,
+     "severity": "bug",
+     "comment": "IPYNB (Jupyter Notebook) 格式標準嚴格規範為 UTF-8 編碼的 JSON。在此使用 chardet 進行猜測容易因誤判而導致 JSON.parse 失敗。",
+     "suggestion": "IPYNB 檔案建議保持以 'utf8' 讀取，無需使用 chardet 偵測編碼。"
+    },
+    {
+     "line": 7,
+     "severity": "style",
+     "comment": "getFileSizeInKB 已被改為直接檢查 fileBuffer.byteLength，但 import 尚未被移除，成為未使用的引用。",
+     "suggestion": "移除第 7 行未使用的 getFileSizeInKB import。"
+    }
+   ],
+   "filename": "src/integrations/misc/extract-text.ts"
+  }
+ ],
+ "n_files": 4,
+ "elapsed_s": 55.2,
+ "calls": 4,
+ "input_tokens": 14120,
+ "output_tokens": 1271,
+ "call_input_tokens": [
+  279,
+  5001,
+  6984,
+  1856
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

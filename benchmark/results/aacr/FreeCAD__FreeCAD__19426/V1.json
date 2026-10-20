@@ -1,0 +1,73 @@
+{
+ "results": [
+  {
+   "filename": "src/Mod/Fem/App/AppFemPy.cpp",
+   "summary": "新增 frdToVTK 方法將 .frd 結果檔轉換為 VTK 格式，實作方式符合既有程式碼慣例且無明顯問題。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": "src/Mod/Fem/App/FemVTKTools.cpp",
+   "summary": "新增 CalculiX FRD 檔解析與轉換至 VTK MultiBlock 格式的功能，但在字串剖析、節點與例外處理上存在若干崩潰及未定義行為的隱患。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 1095,
+     "end_line": 1095,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "std::strtol 與 std::strtof 需要以 null-terminated 字串做結尾，然而 std::string_view::data() 並不保證在 digits 長度處有 '\\0'，這會導致 strtol/strtof 讀取超過欄位寬度甚至越界讀取；此外 double 特化使用了單精度的 std::strtof，會造成數值精度損失。"
+    },
+    {
+     "start_line": 1243,
+     "end_line": 1243,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在 readNodes 中，如果讀到的行不符合 keyCodeCoord 前綴，coords 向量將為空，但程式仍會執行 points->SetPoint(nodeID, coords.data()) 與 mapNodes[node] = nodeID++。SetPoint 期望一個指向 3 個 double 的指標，傳入空向量的 data() 會導致未定義行為或崩潰。"
+    },
+    {
+     "start_line": 1395,
+     "end_line": 1395,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在讀取 -5 實體資訊時，sub 的截取固定為 4 * 5 = 20 字元，且指標移動為 it1 += 5，但 valueFromLine 傳入的長度卻是 digits。當 indicator == 1 時 digits 為 10，步長與讀取寬度不一致，會導致欄位解析錯誤甚至迭代器越界。"
+    },
+    {
+     "start_line": 1460,
+     "end_line": 1460,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在 readResults 中，前面 try 區塊若拋出 std::out_of_range 代表 node 不存在於 mapNodes 中並已被 catch 警告；但隨後在填入 vecArray / scaArrays 時又直接呼叫了 mapNodes.at(node)，未做任何異常處理，將導致 std::out_of_range 未被捕獲而引發崩潰。"
+    }
+   ]
+  },
+  {
+   "filename": "src/Mod/Fem/App/FemVTKTools.h",
+   "summary": "新增了靜態成員函式 frdToVTK 的宣告，改動簡潔，但建議補充函式註解以保持風格一致。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 75,
+     "end_line": 75,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "類別中其他靜態函式上方皆有註解說明其用途與參數行為，但 frdToVTK 缺少對應的註解說明（例如輸入格式、輸出為何、是否會產生同名檔案等）。"
+    }
+   ]
+  }
+ ],
+ "n_files": 3,
+ "input_tokens": 17244,
+ "output_tokens": 950,
+ "calls": 3,
+ "tool_calls": null,
+ "elapsed_s": 43.3,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  5286,
+  10508,
+  1450
+ ],
+ "model": "gemini-3.8-flash"
+}

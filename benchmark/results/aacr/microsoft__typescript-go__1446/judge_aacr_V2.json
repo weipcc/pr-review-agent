@@ -1,0 +1,73 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 13,
+  "findings": [
+   {
+    "file": "internal/fourslash/_scripts/convertFourslash.mts",
+    "start": 26,
+    "end": 29,
+    "category": "bug",
+    "comment": "If manualTests.txt does not exist yet (e.g., on a clean clone before any manual tests are created), fs.readFileSync will throw an unhandled ENOENT error and crash the script."
+   },
+   {
+    "file": "internal/fourslash/_scripts/convertFourslash.mts",
+    "start": 70,
+    "end": 74,
+    "category": "bug",
+    "comment": "makeManual.mts populates manualTests.txt using the filename in genDir (e.g., foo_test.go), but this check looks up the capitalized base name testName (e.g., Foo). Because of this format mismatch, manualTests.has(testName) will evaluate to false and the test will not be skipped."
+   },
+   {
+    "file": "internal/fourslash/_scripts/makeManual.mts",
+    "start": 16,
+    "end": 41,
+    "category": "bug",
+    "comment": "There is a mismatch in how test files are named on disk and how test names are recorded for skipping in convertFourslash.mts. In convertFourslash.mts, generated files are named `${test.name}_test.go`, and tests are skipped if manualTests contains `test.name[0].toUpperCase() + test.name.substring(1)`. In this script, if the user passes `foo` (as shown in the PR description `npm run manualtest testname`), `genTestFile` checks for `genDir/foo` instead of `foo_test.go` and exits with an error. If the user passes `foo_test.go`, `foo_test.go` is written to `manualTests.txt`, but convertFourslash.mts will check for `Foo` (capitalized and without `_test.go`), causing convertFourslash to regenerate the file anyway."
+   },
+   {
+    "file": "internal/fourslash/_scripts/makeManual.mts",
+    "start": 12,
+    "end": 14,
+    "category": "nitpick",
+    "comment": "When no arguments are supplied, the script exits without printing usage instructions or an error message."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "internal/fourslash/_scripts/convertFourslash.mts",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both identify that the script crashes when `manualTests.txt` is missing due to a lack of file existence check.\n2. No match — ref discusses inconsistent test name processing, while generated discusses missing file handling.\n3. No match — ref discusses an unused directory creation, while generated discusses missing file error handling.\n4. No match — ref discusses a test name formatting mismatch, while generated discusses missing file error handling.\n5. No match — ref discusses empty string handling for `test.name`, while generated discusses missing file error handling.\n6. No match — ref discusses checking for whitespace-only content before writing, while generated discusses missing file error handling.\n7. No match — ref discusses removing an unnecessary truthiness check, while generated discusses missing file error handling.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "internal/fourslash/_scripts/convertFourslash.mts",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. No match — discusses missing file check in `getManualTests`.\n2. No match — discusses `substring(4)` discrepancy between `getFailingTests()` and `getManualTests()`.\n3. No match — discusses unused `manualOutputDir`.\n4. Match — both identify the naming mismatch between filenames stored by `makeManual.mts` in `manualTests.txt` and the capitalized base name checked here.\n5. No match — discusses handling empty `test.name`.\n6. No match — discusses checking for whitespace in `testContent`.\n7. No match — discusses whether the `if (testContent)` check is redundant.\n\n[4]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "internal/fourslash/_scripts/makeManual.mts",
+   "matched_gt": [],
+   "reason": "1. No match — ref concerns missing usage message when no arguments are provided.\n2. No match — ref concerns path traversal vulnerability with `../` in CLI arguments.\n3. No match — ref suggests validating that the target is a Go test file to prevent moving arbitrary files, not fixing the contract mismatch with `convertFourslash.mts`.\n4. No match — ref addresses missing error handling for `renameSync`.\n5. No match — ref addresses missing error handling for `manualTests.txt` file operations.\n6. No match — ref concerns newline/EOL formatting in `manualTests.txt`.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "internal/fourslash/_scripts/makeManual.mts",
+   "matched_gt": [
+    7
+   ],
+   "reason": "1. Match — both identify that exiting silently when no arguments are provided leaves the user without usage instructions or an error message.\n2. No match — concerns path traversal security and filename validation, not missing CLI usage/error output.\n3. No match — concerns validating the test file extension, not missing argument handling/usage instructions.\n4. No match — concerns error handling for `renameSync`, not missing argument handling/usage instructions.\n5. No match — concerns error handling for `manualTests.txt` operations.\n6. No match — concerns explicit newline control rather than argument validation output.\n\n[1]",
+   "hit_new_gt": true
+  }
+ ]
+}

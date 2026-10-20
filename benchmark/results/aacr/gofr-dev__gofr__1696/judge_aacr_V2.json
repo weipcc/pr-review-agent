@@ -1,0 +1,69 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 4,
+  "findings": [
+   {
+    "file": "pkg/gofr/handler.go",
+    "start": 71,
+    "end": 75,
+    "category": "bug",
+    "comment": "`h.container` is a shared singleton accessed concurrently across all incoming HTTP requests. Overwriting `h.container.Logger` per request and restoring it in `defer` causes a severe race condition: concurrent requests will overwrite each other's logger, mix up request contexts/trace IDs, and restore `origLogger` prematurely while another request is still processing."
+   },
+   {
+    "file": "pkg/gofr/logging/ctx_logger.go",
+    "start": 30,
+    "end": 32,
+    "category": "performance",
+    "comment": "Allocating a map[string]any on every log call introduces heap allocations and GC overhead on the logging path. In addition, using a map with the string key \"__trace_id__\" relies on magic strings and could potentially collide with user-provided map data."
+   },
+   {
+    "file": "pkg/gofr/logging/logger.go",
+    "start": 251,
+    "end": 267,
+    "category": "performance",
+    "comment": "extractTraceIDAndFilterArgs allocates a new slice on every single log call even when no trace ID is present in args. For the majority of log calls where no trace ID is injected (such as background tasks, startup, or when tracing is disabled), allocating and copying arguments into filtered adds unnecessary heap allocations to the logging hot path."
+   },
+   {
+    "file": "pkg/gofr/logging/logger.go",
+    "start": 255,
+    "end": 261,
+    "category": "refactor",
+    "comment": "Using a generic map[string]any with a magic key \"__trace_id__\" to pass metadata between ContextLogger and logger requires allocating a map on every traced log statement, and risks stripping user data if user code logs a map containing \"__trace_id__\" with other fields. Because both ContextLogger and logger reside in package logging, an unexported type (such as type traceID string) can be used instead."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "pkg/gofr/handler.go",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both identify the race condition and risk of trace ID leakage caused by concurrently overwriting the shared container logger across requests.\n2. No match — ref focuses on a downstream read accessing `h.container.Logger` instead of `ctxLogger`, rather than the concurrent overwrite issue itself.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "pkg/gofr/logging/ctx_logger.go",
+   "matched_gt": [],
+   "reason": "1. No match — Reference Comment 1 addresses format string argument mismatch in formatted log functions, whereas the Generated Comment concerns heap allocations/GC overhead and magic string collision.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "pkg/gofr/logging/logger.go",
+   "matched_gt": [],
+   "reason": "1. No match — Reference 1 addresses map type assertions and filtering logic for multiple trace IDs, whereas the generated comment concerns heap allocation overhead on the logging hot path.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "pkg/gofr/logging/logger.go",
+   "matched_gt": [],
+   "reason": "1. No match — Reference 1 focuses on type assertion failures for non-`map[string]any` maps and handling multiple trace IDs, whereas the generated comment addresses allocation overhead and accidental stripping of user data via an internal unexported type.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

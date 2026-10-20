@@ -1,0 +1,25 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 5,
+  "findings": [
+   {
+    "file": "packages/svelte/src/compiler/phases/2-analyze/index.js",
+    "start": 441,
+    "end": 441,
+    "category": "bug",
+    "comment": "`module.scope.references` 為 `Map` 物件，其 `keys()` 回傳的是 `MapIterator`。在不支援 Iterator Helpers 的環境（如 Node.js 18 或較早期的 Node.js 20）中，`MapIterator` 並沒有 `.some()` 方法，執行時會拋出 `TypeError: module.scope.references.keys().some is not a function`。此外，僅為判斷集合中是否包含特定 key，使用 `.keys().some()` 是 O(N) 的線性遍歷。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "packages/svelte/src/compiler/phases/2-analyze/index.js",
+   "matched_gt": [],
+   "reason": "1. No match — Generated comment concerns calling `.some()` on `MapIterator` (compatibility/TypeError issue), whereas Reference comment concerns `maybe_runes` logic omitting `$:` reactive statements check.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

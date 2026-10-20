@@ -1,0 +1,81 @@
+{
+ "results": [
+  {
+   "summary": "新增了自 POEditor 下載並匯出翻譯檔案的腳本，整體流程清晰，但在空翻譯處理、環境變數解析與錯誤處理架構上有些細節可改進。",
+   "issues": [
+    {
+     "line": 7,
+     "severity": "style",
+     "comment": "定義了 `__filename` 變數但後續程式碼未曾使用過。",
+     "suggestion": "移除未使用的 `const __filename = fileURLToPath(import.meta.url);` 及其相關的 `fileURLToPath` import。"
+    },
+    {
+     "line": 12,
+     "severity": "bug",
+     "comment": "以逗號分隔語言字串時沒有去除空白。若環境變數設定如 `LANGUAGES=\"tr, en\"`，將會得到含有前導空白的語言代碼（例如 `\" en\"`），導致 API 請求失敗。",
+     "suggestion": "建議加入 `.map(lang => lang.trim()).filter(Boolean)`，例如：`const LANGUAGES = (process.env.LANGUAGES || 'tr,en').split(',').map(lang => lang.trim()).filter(Boolean);`"
+    },
+    {
+     "line": 57,
+     "severity": "bug",
+     "comment": "使用 `if (item.term && item.definition)` 檢查時，若該詞彙尚未翻譯或翻譯內容為空字串 `\"\"`，會被視為 falsy 而直接略過，可能導致輸出的 JSON 遺失未翻譯的空字串 key。",
+     "suggestion": "改用更嚴謹的檢查，例如：`if (item.term && item.definition !== undefined && item.definition !== null)`。"
+    },
+    {
+     "line": 71,
+     "severity": "style",
+     "comment": "`downloadTranslations` 函式內部捕捉錯誤後直接呼叫 `process.exit(1)`，造成外層 `main()` 的 try...catch 無法正常捕捉錯誤，屬於重複且多餘的錯誤處理架構。",
+     "suggestion": "可將 `downloadTranslations` 內部的 try...catch 移除，讓錯誤直接拋給外層的 `main()` 統一捕捉與結束行程。"
+    }
+   ],
+   "filename": ".github/scripts/download-translations.js"
+  },
+  {
+   "summary": "新增了 POEditor 翻譯同步工作流程的說明文件，內容清晰完整且指引明確。",
+   "issues": [],
+   "filename": ".github/workflows/README.md"
+  },
+  {
+   "summary": "新增 POEditor 翻譯同步工作流程，但缺少 Git Push 所需的寫入權限，且排程與手動觸發的預設語言代碼不一致。",
+   "issues": [
+    {
+     "line": 21,
+     "severity": "bug",
+     "comment": "工作流程中未設定 GITHUB_TOKEN 的權限。在 GitHub Actions 預設安全設定（唯讀）下，步驟結尾的 git push 會因缺少 contents 寫入權限而失敗 (HTTP 403)。",
+     "suggestion": "在 job 層級或 workflow 層級加入 permissions 宣告，例如：\npermissions:\n  contents: write"
+    },
+    {
+     "line": 60,
+     "severity": "bug",
+     "comment": "語言代碼預設值不一致。在 workflow_dispatch 的預設值是 'tr,en'，但在排程 (schedule) 觸發時 fallback 是 'tr,gb'，這會導致自動排程與手動執行的行為不一致。",
+     "suggestion": "統一語言代碼預設值，例如改為：LANGUAGES: ${{ inputs.languages || 'tr,en' }}"
+    },
+    {
+     "line": 26,
+     "severity": "style",
+     "comment": "actions/checkout 與 actions/setup-node 仍在使用 v3 版本，Node.js 18 也即將或已終止維護 (EOL)。",
+     "suggestion": "建議將 actions 升級至 v4 (actions/checkout@v4, actions/setup-node@v4)，並將 node-version 升級至 LTS (例如 '20')。"
+    },
+    {
+     "line": 69,
+     "severity": "style",
+     "comment": "在 bash 預設行為下，若 temp/ 目錄下沒有任何 .json 檔案，temp/*.json 不會展開而是作為字串進入迴圈，可能導致提示訊息不夠明確。",
+     "suggestion": "可在迴圈前啟用 nullglob 或先檢查是否有檔案，例如：\nshopt -s nullglob\nfiles=(temp/*.json)\nif [ ${#files[@]} -eq 0 ]; then echo 'No translation files found'; exit 1; fi"
+    }
+   ],
+   "filename": ".github/workflows/poeditor-sync.yml"
+  }
+ ],
+ "n_files": 3,
+ "elapsed_s": 37.2,
+ "calls": 3,
+ "input_tokens": 5270,
+ "output_tokens": 1098,
+ "call_input_tokens": [
+  2123,
+  1064,
+  2083
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

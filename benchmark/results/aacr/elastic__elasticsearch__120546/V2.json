@@ -1,0 +1,47 @@
+{
+ "results": [
+  {
+   "change_intent": "Add a changelog entry for PR 120546 detailing the restriction of agent entitlements to the system classloader unnamed module.",
+   "summary": "The changelog entry is correctly formatted and accurately describes the pull request.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "docs/changelog/120546.yaml"
+  },
+  {
+   "change_intent": "Pass the system classloader's unnamed module to PolicyManager so agent entitlements are restricted to classes loaded by the system classloader.",
+   "summary": "The change cleanly restricts agent entitlements to the system classloader's unnamed module, matching the updated PolicyManager constructor.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/initialization/EntitlementInitialization.java"
+  },
+  {
+   "change_intent": "Restrict agent entitlement grants to classes residing specifically in the system classloader's unnamed module rather than any unnamed module.",
+   "summary": "The change cleanly restricts non-modular agent entitlements to the system classloader's unnamed module as intended.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java"
+  },
+  {
+   "change_intent": "Update test instances of PolicyManager to accommodate the new agentsModule constructor parameter.",
+   "summary": "All PolicyManager constructor invocations and helper methods in the test class have been cleanly updated to match the updated constructor signature.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "libs/entitlement/src/test/java/org/elasticsearch/entitlement/runtime/policy/PolicyManagerTests.java"
+  }
+ ],
+ "n_files": 4,
+ "input_tokens": 36913,
+ "output_tokens": 265,
+ "calls": 4,
+ "tool_calls": null,
+ "elapsed_s": 42.2,
+ "mode": "per-file",
+ "routing_tokens": 13354,
+ "call_input_tokens": [
+  6520,
+  9635,
+  9623,
+  11135
+ ],
+ "model": "gemini-3.8-flash"
+}

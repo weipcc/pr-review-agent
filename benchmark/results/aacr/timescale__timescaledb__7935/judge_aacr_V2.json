@@ -1,0 +1,27 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 5,
+  "findings": [
+   {
+    "file": "tsl/src/hypercore/hypercore_handler.c",
+    "start": 106,
+    "end": 110,
+    "category": "bug",
+    "comment": "The mode parameter is accepted by hypercore_open_compressed but ignored; table_open is unconditionally called with AccessShareLock. Multiple callers pass exclusive lock modes such as RowExclusiveLock (e.g., in hypercore_tuple_delete and hypercore_index_delete_tuples), RowShareLock (in hypercore_tuple_lock), and AccessExclusiveLock (in compress_and_swap_heap). Hardcoding AccessShareLock leads to lock downgrade and insufficient concurrency protection."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "tsl/src/hypercore/hypercore_handler.c",
+   "matched_gt": [
+    0
+   ],
+   "reason": "1. Match — both identify that `hypercore_open_compressed` accepts a `mode` parameter but hardcodes `AccessShareLock` in `table_open`, leading to insufficient lock levels and concurrency issues.\n2. No match — discusses variable shadowing of `hinfo`.\n3. No match — discusses cache invalidation/use-after-free for `hinfo`.\n4. No match — discusses variable shadowing of `hsinfo`.\n5. No match — discusses calling `RelationGetHypercoreInfo` inside an inner loop.\n\n[1]",
+   "hit_new_gt": true
+  }
+ ]
+}

@@ -1,0 +1,94 @@
+{
+ "results": [
+  {
+   "filename": ".github/scripts/download-translations.js",
+   "summary": "新增了自 POEditor 下載並匯出翻譯檔案的腳本，整體流程清晰，但在空翻譯處理、環境變數解析與錯誤處理架構上有些細節可改進。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 7,
+     "end_line": 7,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "定義了 `__filename` 變數但後續程式碼未曾使用過。"
+    },
+    {
+     "start_line": 12,
+     "end_line": 12,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "以逗號分隔語言字串時沒有去除空白。若環境變數設定如 `LANGUAGES=\"tr, en\"`，將會得到含有前導空白的語言代碼（例如 `\" en\"`），導致 API 請求失敗。"
+    },
+    {
+     "start_line": 57,
+     "end_line": 57,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "使用 `if (item.term && item.definition)` 檢查時，若該詞彙尚未翻譯或翻譯內容為空字串 `\"\"`，會被視為 falsy 而直接略過，可能導致輸出的 JSON 遺失未翻譯的空字串 key。"
+    },
+    {
+     "start_line": 71,
+     "end_line": 71,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "`downloadTranslations` 函式內部捕捉錯誤後直接呼叫 `process.exit(1)`，造成外層 `main()` 的 try...catch 無法正常捕捉錯誤，屬於重複且多餘的錯誤處理架構。"
+    }
+   ]
+  },
+  {
+   "filename": ".github/workflows/README.md",
+   "summary": "新增了 POEditor 翻譯同步工作流程的說明文件，內容清晰完整且指引明確。",
+   "recommendation": "n/a",
+   "issues": []
+  },
+  {
+   "filename": ".github/workflows/poeditor-sync.yml",
+   "summary": "新增 POEditor 翻譯同步工作流程，但缺少 Git Push 所需的寫入權限，且排程與手動觸發的預設語言代碼不一致。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 21,
+     "end_line": 21,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "工作流程中未設定 GITHUB_TOKEN 的權限。在 GitHub Actions 預設安全設定（唯讀）下，步驟結尾的 git push 會因缺少 contents 寫入權限而失敗 (HTTP 403)。"
+    },
+    {
+     "start_line": 60,
+     "end_line": 60,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "語言代碼預設值不一致。在 workflow_dispatch 的預設值是 'tr,en'，但在排程 (schedule) 觸發時 fallback 是 'tr,gb'，這會導致自動排程與手動執行的行為不一致。"
+    },
+    {
+     "start_line": 26,
+     "end_line": 26,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "actions/checkout 與 actions/setup-node 仍在使用 v3 版本，Node.js 18 也即將或已終止維護 (EOL)。"
+    },
+    {
+     "start_line": 69,
+     "end_line": 69,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "在 bash 預設行為下，若 temp/ 目錄下沒有任何 .json 檔案，temp/*.json 不會展開而是作為字串進入迴圈，可能導致提示訊息不夠明確。"
+    }
+   ]
+  }
+ ],
+ "n_files": 3,
+ "input_tokens": 5270,
+ "output_tokens": 1098,
+ "calls": 3,
+ "tool_calls": null,
+ "elapsed_s": 37.2,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  2123,
+  1064,
+  2083
+ ],
+ "model": "gemini-3.8-flash"
+}

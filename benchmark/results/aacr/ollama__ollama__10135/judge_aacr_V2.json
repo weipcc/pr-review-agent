@@ -1,0 +1,39 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 3,
+  "findings": [
+   {
+    "file": "cmd/cmd_test.go",
+    "start": 692,
+    "end": 694,
+    "category": "bug",
+    "comment": "The condition was updated to check req.Model, but the error message still logs req.Name, which might be empty or unpopulated when the check fails."
+   },
+   {
+    "file": "progress/progress.go",
+    "start": 118,
+    "end": 125,
+    "category": "bug",
+    "comment": "When `len(p.states) >= termHeight`, `p.pos` is set to `len(p.states)` instead of the number of lines actually printed. On subsequent `render()` calls, `for range p.pos - 1 { fmt.Fprint(p.w, \"\\033[A\") }` moves the cursor up by more lines than were printed. Additionally, inside the loop, the newline condition `i < len(p.states)-1` will emit a newline after every printed line up to `termHeight-1`, printing an extra trailing newline and causing the terminal to scroll off-screen."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "cmd/cmd_test.go",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "progress/progress.go",
+   "matched_gt": [],
+   "reason": "1. No match — Generated Comment addresses incorrect cursor tracking (`p.pos`) and trailing newlines causing cursor/scrolling bugs, whereas Reference Comment 1 discusses UX truncation of output and suggests pagination/scrolling.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

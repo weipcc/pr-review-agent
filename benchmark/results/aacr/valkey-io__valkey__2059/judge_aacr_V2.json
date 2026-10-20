@@ -1,0 +1,83 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 11,
+  "findings": [
+   {
+    "file": "src/Makefile",
+    "start": 519,
+    "end": 519,
+    "category": "bug",
+    "comment": "$(RDMA_CLIENT_LIBS) was added to the build rule for $(TLS_MODULE_NAME) (valkey-tls.so). The TLS module does not use RDMA and should not depend on libvalkey_rdma.a or RDMA libraries."
+   },
+   {
+    "file": "src/Makefile",
+    "start": 344,
+    "end": 344,
+    "category": "refactor",
+    "comment": "Line 343 already appends $(RDMA_LIBS) to FINAL_LIBS, so adding $(RDMA_LIBS) again on line 344 duplicates these flags in the link command."
+   },
+   {
+    "file": "src/valkey-benchmark.c",
+    "start": 832,
+    "end": 840,
+    "category": "bug",
+    "comment": "When config.rdma is enabled, writeHandler is invoked synchronously before the client is appended to config.clients (which occurs at listAddNodeTail) and before config.liveclients is incremented. If writeHandler fails on the initial write, it calls freeClient(c), which performs listSearchKey(config.clients, c) and aborts on assert(ln != NULL)."
+   },
+   {
+    "file": "src/valkey-benchmark.c",
+    "start": 658,
+    "end": 663,
+    "category": "bug",
+    "comment": "In createClient, rdma is only assigned config.rdma when !is_cluster_client. In cluster mode, rdma remains 0, so cluster clients connect over standard TCP. However, resetClient and createClient check the global config.rdma, which prevents registering AE_WRITABLE on the event loop for those TCP sockets, stalling them. Furthermore, cluster helpers (fetchClusterConfiguration at line 1104, fetchClusterSlotsConfiguration at line 1217, and node config fetching at line 1832) hardcode 0 instead of config.rdma."
+   },
+   {
+    "file": "src/valkey-benchmark.c",
+    "start": 2079,
+    "end": 2079,
+    "category": "bug",
+    "comment": "When executing the 'fcall' test, getValkeyContext is called with rdma = 0 instead of config.rdma. If benchmarking over RDMA against an endpoint that requires RDMA, loading the function script will attempt a standard TCP connection and fail."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "src/Makefile",
+   "matched_gt": [],
+   "reason": "1. No match — Generated comment discusses an inappropriate RDMA dependency added to the TLS module rule, while reference comment addresses duplicate inclusion of RDMA libraries in FINAL_LIBS.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "src/Makefile",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. Match — both identify that `$(RDMA_LIBS)` is redundant because it is added to `FINAL_LIBS` on both the previous line and line 344.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 2,
+   "file": "src/valkey-benchmark.c",
+   "matched_gt": [],
+   "reason": "1. No match — discusses redundant function parameter for RDMA context creation, whereas the generated comment addresses an assertion failure/crash during client error handling.\n2. No match — discusses documenting a port constraint for RDMA cluster operation, whereas the generated comment addresses an assertion failure in client cleanup.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 3,
+   "file": "src/valkey-benchmark.c",
+   "matched_gt": [],
+   "reason": "1. No match — ref argues that `getValkeyContext` has a redundant `rdma` parameter that should use `config.rdma` globally, whereas the generated comment addresses cluster mode RDMA logic bugs and event loop stalls.\n2. No match — ref suggests documenting a port constraint in valkey.conf, unrelated to cluster client RDMA handling logic.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 4,
+   "file": "src/valkey-benchmark.c",
+   "matched_gt": [],
+   "reason": "1. No match — Ref 1 suggests refactoring `getValkeyContext` to remove the redundant `rdma` parameter and read `config.rdma` globally, whereas the generated comment flags a functional bug at a specific call site passing `rdma = 0`.\n2. No match — Ref 2 discusses documentation of cluster port constraints in valkey.conf.\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

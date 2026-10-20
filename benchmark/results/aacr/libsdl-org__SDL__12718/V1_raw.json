@@ -1,0 +1,32 @@
+{
+ "results": [
+  {
+   "summary": "重構了紋理建立與記憶體重組（defrag）的命令緩衝區管理，但引入了潛在的 NULL 指針解引用與日誌錯誤。",
+   "issues": [
+    {
+     "line": 5881,
+     "severity": "bug",
+     "comment": "在 VULKAN_INTERNAL_CycleActiveTexture 中，VULKAN_INTERNAL_TextureTransitionToDefaultUsage 在檢查 `if (!texture)` 之前就被呼叫。若 VULKAN_INTERNAL_CreateTexture 失敗回傳 NULL，將導致空指標解引用（NULL pointer dereference）而崩潰。",
+     "suggestion": "應將 `if (!texture) { return; }` 檢查移至 `VULKAN_INTERNAL_TextureTransitionToDefaultUsage` 呼叫之前。"
+    },
+    {
+     "line": 10701,
+     "severity": "style",
+     "comment": "複製貼上導致的日誌訊息錯誤，在分配貼圖失敗的分支中，日誌仍顯示 'Failed to allocate defrag buffer!'。",
+     "suggestion": "將錯誤訊息改為 'Failed to allocate defrag texture!'。"
+    }
+   ],
+   "filename": "src/gpu/vulkan/SDL_gpu_vulkan.c"
+  }
+ ],
+ "n_files": 1,
+ "elapsed_s": 17.7,
+ "calls": 1,
+ "input_tokens": 21386,
+ "output_tokens": 278,
+ "call_input_tokens": [
+  21386
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

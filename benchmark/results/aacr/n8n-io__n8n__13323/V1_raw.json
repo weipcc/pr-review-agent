@@ -1,0 +1,108 @@
+{
+ "results": [
+  {
+   "summary": "在 docker/build-push-action 的 build-args 中無法直接使用 shell 的命令替換語法，導致日期變數傳入未展開的字面字串。",
+   "issues": [
+    {
+     "line": 106,
+     "severity": "bug",
+     "comment": "GitHub Actions 中的 action 參數（with 下的設定）並非在 shell 中執行，因此不會解析 command substitution `$(date ...)`。這會導致 Docker build-arg `N8N_RELEASE_DATE` 的值被直接設為字面字串 `$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")`，而非實際的時間戳記。",
+     "suggestion": "可以在先前的步驟先透過 shell 產生時間戳並寫入環境變數或輸出，例如在前面的 step 執行：\n```bash\nrun: echo \"N8N_RELEASE_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')\" >> $GITHUB_ENV\n```\n接著在 build-args 中使用 `${{ env.N8N_RELEASE_DATE }}`。"
+    }
+   ],
+   "filename": ".github/workflows/release-publish.yml"
+  },
+  {
+   "summary": "新增 OCI 映像檔建立日期標籤與 N8N_RELEASE_DATE 環境變數，整體改動簡潔，但需留意對 Docker 建置快取的影響。",
+   "issues": [
+    {
+     "line": 18,
+     "severity": "performance",
+     "comment": "ENV N8N_RELEASE_DATE 定義在昂貴的 npm install 指令之前。若建置時傳入的時間戳記頻繁變動（例如以建置當下時間作為參數），會導致後續的 RUN npm install 快取失效，增加建置時間。",
+     "suggestion": "若此環境變數在 npm install 階段不會被使用，建議將 ENV N8N_RELEASE_DATE（以及相應的 ARG 與 LABEL）移至較後面的層級（例如在 npm install 或 launcher 下載完成之後），以最大化 Docker layer cache 的利用率。"
+    }
+   ],
+   "filename": "docker/images/n8n/Dockerfile"
+  },
+  {
+   "summary": "新增了 N8N_RELEASE_DATE 環境變數設定，但需注意環境變數值在執行時期是否能正確轉換為 Date 型別。",
+   "issues": [
+    {
+     "line": 13,
+     "severity": "bug",
+     "comment": "環境變數讀取出的原始型別皆為字串。若 `@Env` 裝飾器內部未實作針對 `Date` 型別的自動轉換邏輯（例如使用 `new Date()` 轉換），在執行時期 `releaseDate` 的實際值可能會是 `string` 而非 `Date` 實例，導致型別不符；若有轉換邏輯，也需注意格式錯誤時產生 Invalid Date 的狀況。",
+     "suggestion": "請確認 `@Env` 是否支援 `Date` 型別轉換。若未支援，建議將型別改為 `string`（例如 ISO 8601 日期字串格式），或於讀取後透過 helper / getter 轉換為 `Date`。"
+    }
+   ],
+   "filename": "packages/@n8n/config/src/configs/generic.config.ts"
+  },
+  {
+   "summary": "新增對 Date 類型的環境變數解析支援，整體實作簡潔，但需留意數值型 timestamp 字串解析與錯誤訊息一致性。",
+   "issues": [
+    {
+     "line": 59,
+     "severity": "bug",
+     "comment": "使用 `Date.parse(value)` 解析日期字串（如 ISO 8601）是正常的，但如果環境變數傳入的是純數字的 Unix timestamp 字串（例如 '1700000000000'），`Date.parse` 會回傳 `NaN`。若預期支援 timestamp 數值，此處將無法正確解析。",
+     "suggestion": "建議可先嘗試以數字解析，若非純數字再使用 `Date.parse(value)`，例如：`const timestamp = !isNaN(Number(value)) ? Number(value) : Date.parse(value);`"
+    },
+    {
+     "line": 61,
+     "severity": "style",
+     "comment": "錯誤訊息文字為 'Invalid timestamp value'，與上方的 'Invalid number value' 和 'Invalid boolean value' 不一致，且型別對應為 Date，若僅支援日期格式字串容易造成混淆。",
+     "suggestion": "建議將警告訊息改為 `Invalid date value for ${envName}: ${value}` 以保持命名一致性。"
+    }
+   ],
+   "filename": "packages/@n8n/config/src/decorators.ts"
+  },
+  {
+   "summary": "重構測試中的物件深拷貝為 structuredClone，並新增 releaseDate 環境變數解析與無效數值/時間戳記的警告測試，整體改動良好且嚴謹。",
+   "issues": [],
+   "filename": "packages/@n8n/config/test/config.test.ts"
+  },
+  {
+   "summary": "將 releaseDate 從 generic 設定傳入 errorReporter.init，改動簡潔且無問題。",
+   "issues": [],
+   "filename": "packages/cli/src/commands/base-command.ts"
+  },
+  {
+   "summary": "新增了版本超過 6 週即關閉錯誤追蹤的機制，但 setTimeout 存在嚴重的 32 位元整數溢位 Bug，會導致新版本在啟動 1 毫秒後就被錯誤關閉追蹤。",
+   "issues": [
+    {
+     "line": 89,
+     "severity": "bug",
+     "comment": "Node.js 的 `setTimeout` 延遲時間上限為 32 位元有號整數（2,147,483,647 毫秒，約 24.8 天）。若 `releaseDate` 是近期（例如小於 17 天前），`releaseExpiresInMs` 會大於 2,147,483,647 毫秒。這會觸發 Node.js 的 `TimeoutOverflowWarning`，並將延遲重設為 1 毫秒立即執行，導致新版本的錯誤追蹤在啟動瞬間就被關閉。",
+     "suggestion": "不要使用長達數週的單一 `setTimeout`。建議改在 `beforeSend` 或 `error` 執行時動態檢查目前時間是否已過期（例如封裝一個 `private isExpired(): boolean` 方法），或者使用週期性定時器（如 `setInterval` 每天檢查一次）來更新狀態。"
+    },
+    {
+     "line": 85,
+     "severity": "bug",
+     "comment": "當版本已經過期（`releaseExpiresInMs <= 0`）時直接 return，但此時 `this.enabled` 仍保持預設值 `true`。雖然跳過了 Sentry 初始化，但內部狀態與實際過期語意不一致。",
+     "suggestion": "在 return 前將 `this.enabled = false;`，確保物件狀態與過期狀態一致。"
+    },
+    {
+     "line": 89,
+     "severity": "performance",
+     "comment": "此處建立的 `setTimeout` 未呼叫 `.unref()`，若應用程式為短暫執行的任務或在特定情境下嘗試自然結束（graceful exit），此長定時器會阻止 Node.js event loop 結束。",
+     "suggestion": "若仍需保留 timer，建議加上 `.unref()`，如：`setTimeout(...).unref();`，避免阻礙 event loop 結束。"
+    }
+   ],
+   "filename": "packages/core/src/errors/error-reporter.ts"
+  }
+ ],
+ "n_files": 7,
+ "elapsed_s": 82.1,
+ "calls": 7,
+ "input_tokens": 21639,
+ "output_tokens": 1688,
+ "call_input_tokens": [
+  3129,
+  1572,
+  574,
+  1758,
+  6432,
+  4403,
+  3771
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

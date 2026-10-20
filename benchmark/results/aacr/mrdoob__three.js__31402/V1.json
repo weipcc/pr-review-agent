@@ -1,0 +1,103 @@
+{
+ "results": [
+  {
+   "filename": "src/nodes/gpgpu/ComputeNode.js",
+   "summary": "將 workgroupSize 預設值補齊為三維陣列 [64, 1, 1]，並使 compute 輔助函式支援重載以直接傳入 workgroupSize，整體改動合理。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 222,
+     "end_line": 222,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "JSDoc 中 countOrWorkgroupSize 的型別僅標註為 number，但實作上已支援傳入 Array<number> 作為 workgroupSize，這會導致 IDE 或 TypeScript 型別檢查發出警告或推導錯誤。"
+    }
+   ]
+  },
+  {
+   "filename": "src/renderers/common/Renderer.js",
+   "summary": "新增 dispatchSize 參數至 compute 方法，但未初始化的 fallback 呼叫未傳遞該參數，且預設參數可能產生不必要的物件配置。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 2322,
+     "end_line": 2322,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "當 renderer 尚未初始化（_initialized === false）時，呼叫 this.computeAsync( computeNodes ) 遺漏了傳入 dispatchSize，導致呼叫者傳入的 dispatchSize 遺失。"
+    },
+    {
+     "start_line": 2314,
+     "end_line": 2314,
+     "category": "performance",
+     "confidence": "n/a",
+     "comment": "以常規陣列實字 [ 0, 0, 0 ] 作為參數預設值，在每次未傳入第二參數呼叫 compute() 時都會重新建立一個新的 Array 實例，在每幀頻繁呼叫時會增加垃圾回收（GC）負擔。"
+    }
+   ]
+  },
+  {
+   "filename": "src/renderers/webgpu/WebGPUBackend.js",
+   "summary": "新增的 dispatchSize 參數處理存在嚴重的變數指派錯誤與潛在的 TypeError 風險，導致非自訂 dispatch 大小時無法正確運作。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 1327,
+     "end_line": 1327,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "如果呼叫 compute() 時未傳入 dispatchSize（為 undefined 或 null），存取 dispatchSize[ 0 ] 會直接拋出 TypeError: Cannot read properties of undefined。"
+    },
+    {
+     "start_line": 1329,
+     "end_line": 1329,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "在 isValid 為 false 時，dispatchSize 被指派為 computeNodeData（物件本身），但在第 1364-1376 行中卻存取了 dispatchSize.x/y/z。這導致 x 與 y 被直接掛在 computeNodeData 上，且 dispatchSize.z 變成 undefined，最終傳入 dispatchWorkgroups(dispatchSize.x, dispatchSize.y, undefined) 引發執行期錯誤。"
+    }
+   ]
+  },
+  {
+   "filename": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+   "summary": "重構了 compute shader 的 workgroupSize 解析與 instanceIndex 計算以支援三維工作群組，但嚴格限制長度為 3 可能破壞既有相容性，且存在縮排與 JSDoc 不一致的問題。",
+   "recommendation": "n/a",
+   "issues": [
+    {
+     "start_line": 1903,
+     "end_line": 1903,
+     "category": "bug",
+     "confidence": "n/a",
+     "comment": "強制要求 workgroupSize.length === 3 會造成 breaking change。使用者先前可能傳入一維或二維陣列（例如 [ 64 ] 或 [ 16, 16 ]），此檢查會導致原本可正常運行的設定拋出 Error。"
+    },
+    {
+     "start_line": 2136,
+     "end_line": 2136,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "換行處使用了空格縮排（4 個空白），而專案全域程式碼風格慣用 tabs，造成縮排風格不一致。"
+    },
+    {
+     "start_line": 2105,
+     "end_line": 2105,
+     "category": "style",
+     "confidence": "n/a",
+     "comment": "_getWGSLComputeCode 的 JSDoc 中 @param {string} workgroupSize 未同步更新，目前傳入的已是包含 3 個元素的數值陣列（Array<number>）。"
+    }
+   ]
+  }
+ ],
+ "n_files": 4,
+ "input_tokens": 11140,
+ "output_tokens": 1322,
+ "calls": 4,
+ "tool_calls": null,
+ "elapsed_s": 82.0,
+ "mode": "per-file (always)",
+ "routing_tokens": null,
+ "call_input_tokens": [
+  3186,
+  2099,
+  2798,
+  3057
+ ],
+ "model": "gemini-3.8-flash"
+}

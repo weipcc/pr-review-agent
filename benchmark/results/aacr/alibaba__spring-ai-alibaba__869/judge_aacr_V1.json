@@ -1,0 +1,71 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 4,
+  "findings": [
+   {
+    "file": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/src/main/java/com/alibaba/cloud/ai/toolcalling/alitranslate/AliTranslateProperties.java",
+    "start": 34,
+    "end": 34,
+    "category": "style",
+    "comment": "環境變數名稱使用 'ACCESS_KEY_ID' 與 'ACCESS_KEY_SECRET' 過於寬鬆，容易與其他雲廠商（如 AWS）或系統變數衝突，且阿里雲 SDK 預設慣用的環境變數通常為 'ALIBABA_CLOUD_ACCESS_KEY_ID' 及 'ALIBABA_CLOUD_ACCESS_KEY_SECRET'。"
+   },
+   {
+    "file": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/src/main/java/com/alibaba/cloud/ai/toolcalling/alitranslate/AliTranslateProperties.java",
+    "start": 37,
+    "end": 37,
+    "category": "style",
+    "comment": "setter 方法 setAccessKeyId/setAccessKeySecret 已標記 @Deprecated，但對應的 getter 方法 getAccessKeyId/getAccessKeySecret 尚未標記 @Deprecated，API 規範不一致。"
+   },
+   {
+    "file": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/src/main/java/com/alibaba/cloud/ai/toolcalling/alitranslate/AliTranslateService.java",
+    "start": 84,
+    "end": 84,
+    "category": "bug",
+    "comment": "在 Request 定義中，sourceLanguage 與 targetLanguage 均被標註為 required = false 且具有預設值；但在 apply() 方法中，若 request.sourceLanguage 或 request.targetLanguage 為 null 或空字串，會直接返回 null，導致 LLM 工具調用若省略這兩個選填參數時呼叫直接失效。"
+   },
+   {
+    "file": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/src/main/java/com/alibaba/cloud/ai/toolcalling/alitranslate/AliTranslateService.java",
+    "start": 104,
+    "end": 104,
+    "category": "bug",
+    "comment": "CompletableFuture.get() 會拋出 InterruptedException 與 ExecutionException。捕獲通用的 Exception 時，未針對 InterruptedException 恢復執行緒中斷狀態（Thread.currentThread().interrupt()），且 logger.error 僅輸出 e.getMessage()，無法取得完整堆疊追蹤，不利於排查線上問題。"
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/src/main/java/com/alibaba/cloud/ai/toolcalling/alitranslate/AliTranslateProperties.java",
+   "matched_gt": [
+    1
+   ],
+   "reason": "1. Match — both identify that `ACCESS_KEY_ID` and `ACCESS_KEY_SECRET` risk naming conflicts due to a lack of proper prefixes.\n2. No match — concerns credential inheritance and property naming in `CommonToolCallProperties` rather than environment variable naming conflicts.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 1,
+   "file": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/src/main/java/com/alibaba/cloud/ai/toolcalling/alitranslate/AliTranslateProperties.java",
+   "matched_gt": [],
+   "reason": "1. No match — discusses environment variable naming and helper method calls, not deprecation annotations.\n2. No match — discusses migrating access key/secret key handling to the shared configuration superclass, not getter/setter deprecation mismatch.\n\n[]",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 2,
+   "file": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/src/main/java/com/alibaba/cloud/ai/toolcalling/alitranslate/AliTranslateService.java",
+   "matched_gt": [
+    3
+   ],
+   "reason": "1. Match — both identify that `sourceLanguage` and `targetLanguage` are optional (`required = false`) in `Request`, but the validation in `apply()` returns `null` if they are omitted.\n\n[1]",
+   "hit_new_gt": true
+  },
+  {
+   "finding": 3,
+   "file": "community/tool-calls/spring-ai-alibaba-starter-tool-calling-alitranslate/src/main/java/com/alibaba/cloud/ai/toolcalling/alitranslate/AliTranslateService.java",
+   "matched_gt": [],
+   "reason": "1. No match — Reference Comment 1 concerns parameter validation and missing default values, whereas the Generated Comment addresses exception handling and thread interruption for CompletableFuture.get().\n\n[]",
+   "hit_new_gt": false
+  }
+ ]
+}

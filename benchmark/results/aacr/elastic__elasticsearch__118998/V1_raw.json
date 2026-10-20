@@ -1,0 +1,38 @@
+{
+ "results": [
+  {
+   "summary": "將 Message 解析中的 content 欄位改為選填，但未同步調整其型別標註與 Stream 序列化邏輯。",
+   "issues": [
+    {
+     "line": 126,
+     "severity": "bug",
+     "comment": "將 content 設為選填參數（optionalConstructorArg）表示解析後 content 可能為 null。然而 Message record 的 content 未標註 @Nullable，且 Message(StreamInput in) 使用 in.readNamedWriteable(Content.class)（相應的 writeTo 應為 writeNamedWriteable），當 content 為 null 進行節點間序列化時會拋出 NullPointerException。",
+     "suggestion": "若 content 允許為 null，請在 Message record 的 content 參數加上 @Nullable 註解，並同步將 StreamInput / StreamOutput 的序列化邏輯改為 readOptionalNamedWriteable 與 writeOptionalNamedWriteable。"
+    }
+   ],
+   "filename": "server/src/main/java/org/elasticsearch/inference/UnifiedCompletionRequest.java"
+  },
+  {
+   "summary": "在 message content 的 switch pattern matching 中支援 null 情況處理，避免 NPE 並符合 OpenAI 工具調用時 content 可為空的規格，改動簡潔且正確。",
+   "issues": [],
+   "filename": "x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/request/openai/OpenAiUnifiedChatCompletionRequestEntity.java"
+  },
+  {
+   "summary": "移除了兩個依賴 NullPointerException 來驗證欄位缺失與無效資料的序列化單元測試，改動簡潔無問題。",
+   "issues": [],
+   "filename": "x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/external/request/openai/OpenAiUnifiedChatCompletionRequestEntityTests.java"
+  }
+ ],
+ "n_files": 3,
+ "elapsed_s": 29.3,
+ "calls": 3,
+ "input_tokens": 6485,
+ "output_tokens": 313,
+ "call_input_tokens": [
+  1281,
+  2920,
+  2284
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

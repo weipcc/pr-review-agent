@@ -1,0 +1,72 @@
+{
+ "results": [
+  {
+   "change_intent": "Add SOCKADDR_IN and SOCKADDR_IN6 to CsWin32 native method generation list for HttpSys.",
+   "summary": "Correctly registers the required native sockaddr structs for CsWin32 code generation.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Servers/HttpSys/src/NativeMethods.txt"
+  },
+  {
+   "change_intent": "Add SOCKADDR_IN and SOCKADDR_IN6 to CsWin32 native method generation list for IIS.",
+   "summary": "Correctly registers the required native sockaddr structs for CsWin32 code generation.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Servers/IIS/IIS/src/NativeMethods.txt"
+  },
+  {
+   "change_intent": "Refactor SocketAddress to remove fixed statements and use CsWin32 SOCKADDR types directly.",
+   "summary": "Introduces a bug in GetPort() where ports >= 32768 (including ephemeral ports) are returned as negative numbers due to short sign extension.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 40,
+     "end_line": 40,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "return IPAddress.NetworkToHostOrder((short)_sockaddr.sin_port);",
+     "comment": "IPAddress.NetworkToHostOrder((short)...) returns a signed 16-bit short. When the port number is in the range 32768-65535 (such as ephemeral/dynamic client ports), the short value is negative, and converting it to int sign-extends it into a negative integer.",
+     "suggestion": "Cast the result of NetworkToHostOrder to ushort before returning, or use BinaryPrimitives.ReverseEndianness(_sockaddr.sin_port).",
+     "suggested_code": "return (ushort)IPAddress.NetworkToHostOrder((short)_sockaddr.sin_port);"
+    },
+    {
+     "start_line": 62,
+     "end_line": 62,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "return IPAddress.NetworkToHostOrder((short)_sockaddr.sin6_port);",
+     "comment": "IPAddress.NetworkToHostOrder((short)...) returns a signed 16-bit short. When the IPv6 port number is in the range 32768-65535, returning it as int sign-extends the negative short value into a negative integer.",
+     "suggestion": "Cast the result of NetworkToHostOrder to ushort before returning, or use BinaryPrimitives.ReverseEndianness(_sockaddr.sin6_port).",
+     "suggested_code": "return (ushort)IPAddress.NetworkToHostOrder((short)_sockaddr.sin6_port);"
+    }
+   ],
+   "filename": "src/Shared/HttpSys/NativeInterop/SocketAddress.cs"
+  },
+  {
+   "change_intent": "Update pointer cast in NativeRequestContext to pass SOCKADDR* to SocketAddress.CopyOutAddress.",
+   "summary": "Correctly updates pointer type from IntPtr to SOCKADDR* matching the new SocketAddress.CopyOutAddress signature.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Shared/HttpSys/RequestProcessing/NativeRequestContext.cs"
+  },
+  {
+   "change_intent": "Add SOCKADDR_IN and SOCKADDR_IN6 to test project native methods generation list.",
+   "summary": "Correctly registers required native structs for testing.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Shared/test/Shared.Tests/NativeMethods.txt"
+  }
+ ],
+ "n_files": 5,
+ "input_tokens": 9560,
+ "output_tokens": 725,
+ "calls": 1,
+ "tool_calls": null,
+ "elapsed_s": 49.8,
+ "mode": "batch",
+ "routing_tokens": 4972,
+ "call_input_tokens": [
+  9560
+ ],
+ "model": "gemini-3.8-flash"
+}

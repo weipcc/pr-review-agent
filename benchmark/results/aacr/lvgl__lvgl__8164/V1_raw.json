@@ -1,0 +1,71 @@
+{
+ "results": [
+  {
+   "summary": "更新了 animimg 的圖片來源設定 API 說明，新增反向播放來源函式描述。",
+   "issues": [
+    {
+     "line": 36,
+     "severity": "style",
+     "comment": "英文語法與用詞略為生硬（例如 'images source' 與 'flip playback'）。",
+     "suggestion": "建議修改為：'To set the image sources for reverse playback of the animation image, use'"
+    }
+   ],
+   "filename": "docs/src/details/widgets/animimg.rst"
+  },
+  {
+   "summary": "修正 lv_animimg_set_src 函式呼叫以符合其參數簽名，移除多餘的引數。",
+   "issues": [],
+   "filename": "examples/widgets/animimg/lv_example_animimg_1.c"
+  },
+  {
+   "summary": "將原本帶有 reverse 布林參數的函式拆分為兩個獨立函式，語意更清晰，但兩者實作存在微小的程式碼重複。",
+   "issues": [
+    {
+     "line": 119,
+     "severity": "style",
+     "comment": "lv_animimg_set_src_reverse 與 lv_animimg_set_src 的實作邏輯高度重複，僅在 lv_anim_set_values 的起迄數值設定上相反。",
+     "suggestion": "可將共同邏輯（如參數賦值與驗證）抽成內部 helper 函式，或讓其中一個函式複用內部邏輯，以減少重複程式碼並提升維護性。"
+    }
+   ],
+   "filename": "src/widgets/animimage/lv_animimage.c"
+  },
+  {
+   "summary": "將原本帶有 reverse 參數的函式拆分為獨立的 forward 及 reverse 來源設定函式，使 API 更清楚一致。",
+   "issues": [
+    {
+     "line": 79,
+     "severity": "style",
+     "comment": "Doxygen 註解描述開頭多了一個空格（` *  Set` 比起標準的 ` * Set` 多了一格縮排）。",
+     "suggestion": "建議將 ` *  Set the images source...` 改為 ` * Set the images source...`，以維持與其他函式註解風格一致。"
+    }
+   ],
+   "filename": "src/widgets/animimage/lv_animimage.h"
+  },
+  {
+   "summary": "更新了 lv_animimg_set_src API 呼叫並新增了 lv_animimg_set_src_reverse 的測試案例，整體改動簡潔，但新測試案例的斷言驗證較為薄弱。",
+   "issues": [
+    {
+     "line": 57,
+     "severity": "style",
+     "comment": "test_animimg_set_src_reverse 僅檢查了 animimg 是否為非空，但 animimg 早在 setUp() 中便已建立並非空，因此此斷言無法有效驗證 lv_animimg_set_src_reverse 是否成功執行或反向邏輯是否正確。",
+     "suggestion": "建議加入對 lv_animimg_get_src(animimg) 或 lv_animimg_get_src_count(animimg) 等回傳值的斷言檢查，以確保資料確實有被正確設定。"
+    }
+   ],
+   "filename": "tests/src/test_cases/widgets/test_animimg.c"
+  }
+ ],
+ "n_files": 5,
+ "elapsed_s": 43.9,
+ "calls": 5,
+ "input_tokens": 11803,
+ "output_tokens": 702,
+ "call_input_tokens": [
+  1165,
+  694,
+  4287,
+  2745,
+  2912
+ ],
+ "mode": "per-file (always)",
+ "routing_tokens": null
+}

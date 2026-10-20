@@ -1,0 +1,56 @@
+{
+ "results": [
+  {
+   "change_intent": "Add CurrentMetrics counters for readonly and broken disks.",
+   "summary": "Clean addition of ReadonlyDisks and BrokenDisks metric definitions.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Common/CurrentMetrics.cpp"
+  },
+  {
+   "change_intent": "Include the disk name in DiskLocal's logger name for clearer log output.",
+   "summary": "Updated the logger instantiation to include the disk name formatted in the category name.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "src/Disks/DiskLocal.cpp"
+  },
+  {
+   "change_intent": "Log when the disk check thread starts and update ReadonlyDisks/BrokenDisks metrics when disk status changes.",
+   "summary": "The diskStatusChange helper has external linkage instead of being in an anonymous namespace or marked static, and shutdown/destructors do not decrement the metrics.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 41,
+     "end_line": 44,
+     "category": "style",
+     "confidence": "medium",
+     "evidence": "int diskStatusChange(bool old_val, bool new_val)\n{\n    return static_cast<int>(new_val) - static_cast<int>(old_val);\n}",
+     "comment": "`diskStatusChange` is declared with external linkage in the `DB` namespace inside this translation unit. It should be declared in an anonymous namespace or marked `static` (or `constexpr`) to avoid polluting the namespace and symbol table.",
+     "suggestion": "Move `diskStatusChange` into an anonymous namespace or mark it `static constexpr`.",
+     "suggested_code": "namespace\n{\nint diskStatusChange(bool old_val, bool new_val)\n{\n    return static_cast<int>(new_val) - static_cast<int>(old_val);\n}\n}"
+    },
+    {
+     "start_line": 83,
+     "end_line": 84,
+     "category": "bug",
+     "confidence": "medium",
+     "evidence": "CurrentMetrics::add(CurrentMetrics::ReadonlyDisks, diskStatusChange(readonly, disk->isReadOnly()));\n    CurrentMetrics::add(CurrentMetrics::BrokenDisks, diskStatusChange(broken, disk->isBroken()));",
+     "comment": "When a disk checker thread shuts down or the disk object is destroyed while `disk->isReadOnly()` or `disk->isBroken()` is true, the `CurrentMetrics::ReadonlyDisks` or `BrokenDisks` metrics are not decremented, leading to metric leakage (metrics remaining positive indefinitely after disk detach/removal/shutdown).",
+     "suggestion": "Ensure that during shutdown or destruction of `DiskLocalCheckThread`, any active status increments are subtracted from `CurrentMetrics::ReadonlyDisks` and `CurrentMetrics::BrokenDisks`.",
+     "suggested_code": null
+    }
+   ],
+   "filename": "src/Disks/DiskLocalCheckThread.cpp"
+  }
+ ],
+ "n_files": 3,
+ "elapsed_s": 5.8,
+ "calls": 1,
+ "input_tokens": 9499,
+ "output_tokens": 594,
+ "call_input_tokens": [
+  9499
+ ],
+ "mode": "batch",
+ "routing_tokens": 4420
+}

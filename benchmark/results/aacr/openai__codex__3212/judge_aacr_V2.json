@@ -1,0 +1,39 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 7,
+  "findings": [
+   {
+    "file": "codex-rs/core/tests/suite/client.rs",
+    "start": 581,
+    "end": 581,
+    "category": "refactor",
+    "comment": "Removing the `store` assertion leaves `request` and `request_body` unused at the end of the test, which can trigger unused variable compiler warnings."
+   },
+   {
+    "file": "codex-rs/core/tests/suite/client.rs",
+    "start": 662,
+    "end": 662,
+    "category": "refactor",
+    "comment": "Removing the `store` assertion leaves `request` and `request_body` unused here as well, which can trigger unused variable compiler warnings."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "codex-rs/core/tests/suite/client.rs",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  },
+  {
+   "finding": 1,
+   "file": "codex-rs/core/tests/suite/client.rs",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

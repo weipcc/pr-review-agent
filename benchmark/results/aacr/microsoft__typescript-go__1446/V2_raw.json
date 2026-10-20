@@ -1,0 +1,79 @@
+{
+ "results": [
+  {
+   "change_intent": "Skip regenerating fourslash tests that have been designated as manual tests.",
+   "summary": "The change introduces an unhandled exception if manualTests.txt does not exist and uses a key format that does not match the test names written by makeManual.mts.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 26,
+     "end_line": 29,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "function getManualTests(): Set<string> {\n    const manualTestsList = fs.readFileSync(manualTestsPath, \"utf-8\").split(\"\\n\").map(line => line.trim()).filter(line => line.length > 0);\n    return new Set(manualTestsList);\n}",
+     "comment": "If manualTests.txt does not exist yet (e.g., on a clean clone before any manual tests are created), fs.readFileSync will throw an unhandled ENOENT error and crash the script.",
+     "suggestion": "Check if manualTestsPath exists before attempting to read it, returning an empty set if it is absent.",
+     "suggested_code": "function getManualTests(): Set<string> {\n    if (!fs.existsSync(manualTestsPath)) {\n        return new Set();\n    }\n    const manualTestsList = fs.readFileSync(manualTestsPath, \"utf-8\").split(\"\\n\").map(line => line.trim()).filter(line => line.length > 0);\n    return new Set(manualTestsList);\n}"
+    },
+    {
+     "start_line": 70,
+     "end_line": 74,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "const testName = test.name[0].toUpperCase() + test.name.substring(1);\n// Skip generation if test is in manual tests list\nif (manualTests.has(testName)) {\n    return;\n}",
+     "comment": "makeManual.mts populates manualTests.txt using the filename in genDir (e.g., foo_test.go), but this check looks up the capitalized base name testName (e.g., Foo). Because of this format mismatch, manualTests.has(testName) will evaluate to false and the test will not be skipped.",
+     "suggestion": "Ensure the format checked here matches what makeManual.mts writes to manualTests.txt, such as checking `${test.name}_test.go` or test.name.",
+     "suggested_code": "const testFileName = `${test.name}_test.go`;\n// Skip generation if test is in manual tests list\nif (manualTests.has(testFileName) || manualTests.has(test.name)) {\n    return;\n}"
+    }
+   ],
+   "filename": "internal/fourslash/_scripts/convertFourslash.mts"
+  },
+  {
+   "change_intent": "Add a script to move a generated fourslash test to the manual tests directory and record it in manualTests.txt so it won't be overwritten.",
+   "summary": "The script does not format test names consistently with convertFourslash.mts, causing file resolution failures and preventing manual tests from actually being skipped during regeneration.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 16,
+     "end_line": 41,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "    const testName = args[0];\n    const testFileName = testName;\n    const genTestFile = path.join(genDir, `${testFileName}`);\n    if (!fs.existsSync(genTestFile)) {\n        console.error(`Test file not found: ${genTestFile}`);\n        console.error(\"Make sure the test exists in the gen directory first.\");\n        process.exit(1);\n    }\n\n    if (!fs.existsSync(manualDir)) {\n        fs.mkdirSync(manualDir, { recursive: true });\n    }\n\n    const manualTestFile = path.join(manualDir, path.basename(genTestFile));\n    fs.renameSync(genTestFile, manualTestFile);\n\n    let manualTests: string[] = [];\n    if (fs.existsSync(manualTestsPath)) {\n        const content = fs.readFileSync(manualTestsPath, \"utf-8\");\n        manualTests = content.split(\"\\n\").map(line => line.trim()).filter(line => line.length > 0);\n    }\n\n    if (!manualTests.includes(testName)) {\n        manualTests.push(testName);\n        manualTests.sort();\n        fs.writeFileSync(manualTestsPath, [...manualTests, \"\"].join(\"\\n\"), \"utf-8\");\n    }",
+     "comment": "There is a mismatch in how test files are named on disk and how test names are recorded for skipping in convertFourslash.mts. In convertFourslash.mts, generated files are named `${test.name}_test.go`, and tests are skipped if manualTests contains `test.name[0].toUpperCase() + test.name.substring(1)`. In this script, if the user passes `foo` (as shown in the PR description `npm run manualtest testname`), `genTestFile` checks for `genDir/foo` instead of `foo_test.go` and exits with an error. If the user passes `foo_test.go`, `foo_test.go` is written to `manualTests.txt`, but convertFourslash.mts will check for `Foo` (capitalized and without `_test.go`), causing convertFourslash to regenerate the file anyway.",
+     "suggestion": "Normalize the input argument: resolve the file on disk by appending `_test.go` if omitted, and format the name written to `manualTests.txt` to match the capitalized test name format checked by convertFourslash (e.g. strip `_test.go` and capitalize the first letter).",
+     "suggested_code": null
+    },
+    {
+     "start_line": 12,
+     "end_line": 14,
+     "category": "nitpick",
+     "confidence": "medium",
+     "evidence": "    if (args.length === 0) {\n        process.exit(1);\n    }",
+     "comment": "When no arguments are supplied, the script exits without printing usage instructions or an error message.",
+     "suggestion": "Log a usage message to `console.error` before exiting.",
+     "suggested_code": "    if (args.length === 0) {\n        console.error(\"Usage: npm run makemanual <testName>\");\n        process.exit(1);\n    }"
+    }
+   ],
+   "filename": "internal/fourslash/_scripts/makeManual.mts"
+  },
+  {
+   "change_intent": "Add a `makemanual` npm script to run `internal/fourslash/_scripts/makeManual.mts`.",
+   "summary": "The new npm script correctly references the new TypeScript script and matches existing conventions in the file.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "package.json"
+  }
+ ],
+ "n_files": 3,
+ "elapsed_s": 120.2,
+ "calls": 3,
+ "input_tokens": 21959,
+ "output_tokens": 1636,
+ "call_input_tokens": [
+  9061,
+  6405,
+  6493
+ ],
+ "mode": "per-file",
+ "routing_tokens": 6090
+}

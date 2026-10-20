@@ -1,0 +1,25 @@
+{
+ "key": {
+  "protocol": "aacr-bench file_semantic",
+  "model": "gemini-3.8-flash",
+  "n_truth": 1,
+  "findings": [
+   {
+    "file": "server/src/main/java/org/elasticsearch/inference/UnifiedCompletionRequest.java",
+    "start": 125,
+    "end": 130,
+    "category": "bug",
+    "comment": "Making the content field optional allows Message.content() to be null. However, Message's Writeable serialization has not been updated: Message(StreamInput in) uses in.readNamedWriteable(Content.class) (line 151) and Message#writeTo uses out.writeNamedWriteable(content). Calling out.writeNamedWriteable with a null content will throw a NullPointerException, and in.readNamedWriteable cannot deserialize a null value when messages are transmitted across cluster nodes."
+   }
+  ]
+ },
+ "records": [
+  {
+   "finding": 0,
+   "file": "server/src/main/java/org/elasticsearch/inference/UnifiedCompletionRequest.java",
+   "matched_gt": [],
+   "reason": "no reference comments in this file (no judge call)",
+   "hit_new_gt": false
+  }
+ ]
+}

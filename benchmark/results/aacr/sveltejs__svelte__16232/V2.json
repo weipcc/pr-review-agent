@@ -1,0 +1,165 @@
+{
+ "results": [
+  {
+   "change_intent": "Add a patch changeset documenting the fix for fine-grained template reactivity when not in explicit legacy mode.",
+   "summary": "The changeset is properly formatted and accurately describes the patch release.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": ".changeset/cold-dingos-dream.md"
+  },
+  {
+   "change_intent": "Add a `maybe_runes` analysis flag to allow components that are not explicitly in legacy mode to use fine-grained reactivity in templates.",
+   "summary": "Introduces a `maybe_runes` flag during component analysis, but invokes `.some()` directly on a Map iterator, which will fail with a TypeError on Node.js versions prior to 22.",
+   "recommendation": "needs_changes",
+   "issues": [
+    {
+     "start_line": 441,
+     "end_line": 441,
+     "category": "bug",
+     "confidence": "high",
+     "evidence": "!module.scope.references.keys().some((name) => ['$$props', '$$restProps'].includes(name)) &&",
+     "comment": "`module.scope.references` is a Map. `Map.prototype.keys()` returns a MapIterator, which does not have a `.some()` method in Node.js 18 or 20 (Iterator helpers were added in Node.js 22). Invoking this will throw `TypeError: module.scope.references.keys(...).some is not a function`. Furthermore, membership checks on a Map can be done directly in O(1) with `.has()`.",
+     "suggestion": "Replace the iterator `.some()` call with `!module.scope.references.has('$$props') && !module.scope.references.has('$$restProps')`.",
+     "suggested_code": "!module.scope.references.has('$$props') &&\n\t\t\t!module.scope.references.has('$$restProps') &&"
+    }
+   ],
+   "filename": "packages/svelte/src/compiler/phases/2-analyze/index.js"
+  },
+  {
+   "change_intent": "Allow components in ambiguous (maybe_runes) mode to skip legacy dependency sequence generation in build_expression, matching the behavior of runes mode.",
+   "summary": "The change appropriately checks context.state.analysis.maybe_runes alongside runes before building expression wrappers, with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/src/compiler/phases/3-transform/client/visitors/shared/utils.js"
+  },
+  {
+   "change_intent": "Add the `maybe_runes` boolean property to the `ComponentAnalysis` interface.",
+   "summary": "The type definition correctly reflects the new property added to component analysis.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/src/compiler/phases/types.d.ts"
+  },
+  {
+   "change_intent": "Add a test configuration asserting that components explicitly marked with `runes={false}` retain legacy reactivity behavior and do not fine-grain react to external rune state changes.",
+   "summary": "The test correctly verifies that components with explicitly disabled runes do not trigger fine-grained template updates when external rune state changes.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-explicit-false/_config.js"
+  },
+  {
+   "change_intent": "Add a test component that explicitly sets runes={false} via <svelte:options> to verify legacy mode behavior with external runes.",
+   "summary": "The test component correctly sets runes to false and exercises the external reactive getter/setter.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-explicit-false/main.svelte"
+  },
+  {
+   "change_intent": "Provide a reactive module using runes to test interaction with a component configured with explicit legacy mode (<svelte:options runes={false} />).",
+   "summary": "The test helper module correctly defines and exports functions accessing reactive state using Svelte 5 runes.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-explicit-false/test.svelte.js"
+  },
+  {
+   "change_intent": "Add a runtime test verifying that a component with an exported constant without explicit legacy syntax defaults to runes reactivity mode.",
+   "summary": "The test configuration is well-structured and cleanly tests the intended runtime behavior.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-const/_config.js"
+  },
+  {
+   "change_intent": "Add a test component with `export const` to verify fine-grained reactivity in ambiguous runes/legacy mode.",
+   "summary": "The test component is well-formed and correctly exercises the intended compiler behavior.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-const/main.svelte"
+  },
+  {
+   "change_intent": "Add a shared reactive state module test fixture with getter and setter functions using Svelte runes.",
+   "summary": "The test helper module correctly defines and exports reactive state accessors for the test sample.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-const/test.svelte.js"
+  },
+  {
+   "change_intent": "Add a runtime test to verify template reactivity behavior for an ambiguous component that exports a let-declared variable.",
+   "summary": "The test setup is standard, but asserting '1' appears inconsistent with the PR's goal of treating 'export let' as explicit legacy mode.",
+   "recommendation": "minor_comments",
+   "issues": [
+    {
+     "start_line": 12,
+     "end_line": 12,
+     "category": "question",
+     "confidence": "medium",
+     "evidence": "assert.equal(p?.innerHTML, '1');",
+     "comment": "Should this test assert '0' instead of '1'? According to the PR description and the scope check added in 2-analyze/index.js, 'export let' (including `let x; export { x }`) is intended to be treated as an explicit legacy mode indicator that sets `maybe_runes` to false. In `legacy-runes-ambiguous-explicit-false`, explicit legacy mode means external rune changes do not trigger fine-grained template updates, resulting in '0'. Asserting '1' here suggests either the assertion was copied from `legacy-runes-ambiguous-export-const` or the export-let check did not actually put the component in legacy mode.",
+     "suggestion": "Verify whether this sample is intended to exhibit legacy mode behavior (matching `legacy-runes-ambiguous-explicit-false` where innerHTML is '0') or runes mode behavior. If it should be legacy mode, update the assertion to '0' and verify that the export check in `analyze_component` is matching as expected.",
+     "suggested_code": "assert.equal(p?.innerHTML, '0');"
+    }
+   ],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-let/_config.js"
+  },
+  {
+   "change_intent": "Add a test component with an exported let variable to test rune reactivity behavior in ambiguous legacy components.",
+   "summary": "The test component fixture is well-formed and matches its companion test files.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-let/main.svelte"
+  },
+  {
+   "change_intent": "Add a reactive state helper module using runes for runtime tests.",
+   "summary": "The test helper correctly defines and exports reactive state accessors using $state.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous-export-let/test.svelte.js"
+  },
+  {
+   "change_intent": "Add a runtime test to verify that an ambiguous component without explicit legacy mode indicators reacts to state updates from an imported runes module.",
+   "summary": "The test implementation is correct, standard for the test suite, and properly verifies the feature.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous/_config.js"
+  },
+  {
+   "change_intent": "Add a test fixture component to verify fine-grained reactivity in ambiguous components importing runes-based state.",
+   "summary": "The test component is correctly implemented and tests the expected behavior.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous/main.svelte"
+  },
+  {
+   "change_intent": "Add a test module using reactive state with Svelte 5 runes for the ambiguous legacy-runes test case.",
+   "summary": "The test helper module correctly defines and exports rune-based state accessors with no issues found.",
+   "recommendation": "looks_good",
+   "issues": [],
+   "filename": "packages/svelte/tests/runtime-runes/samples/legacy-runes-ambiguous/test.svelte.js"
+  }
+ ],
+ "n_files": 16,
+ "input_tokens": 91615,
+ "output_tokens": 1685,
+ "calls": 16,
+ "tool_calls": null,
+ "elapsed_s": 367.6,
+ "mode": "per-file",
+ "routing_tokens": 6437,
+ "call_input_tokens": [
+  5481,
+  6328,
+  6238,
+  6989,
+  5595,
+  5534,
+  5514,
+  5595,
+  5539,
+  5514,
+  5595,
+  5560,
+  5514,
+  5591,
+  5518,
+  5510
+ ],
+ "model": "gemini-3.8-flash"
+}
