@@ -1,8 +1,8 @@
 """
 diff_reader.py
-負責把 git diff 的原始文字解析成結構化資料。
+Parses the raw text of a git diff into structured data.
 
-輸出格式範例:
+Example of the output format:
 [
     {
         "filename": "app.py",
@@ -53,7 +53,7 @@ FILE_HEADER_RE = re.compile(r"^diff --git a/(.+) b/(.+)$")
 
 
 def parse_diff(raw_diff: str) -> list[FileDiff]:
-    """把 git diff 的原始文字解析成結構化的 FileDiff 清單。"""
+    """Parse the raw text of a git diff into a structured list of FileDiff objects."""
     files: list[FileDiff] = []
     current_file: FileDiff | None = None
     current_hunk: DiffHunk | None = None
@@ -102,6 +102,6 @@ def parse_diff(raw_diff: str) -> list[FileDiff]:
             )
             old_line_no += 1
             new_line_no += 1
-        # 其他如 "\ No newline at end of file" 直接忽略
+        # Anything else, such as "\ No newline at end of file", is ignored
 
     return files

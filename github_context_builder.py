@@ -1,6 +1,6 @@
 """
 github_context_builder.py
-負責透過 GitHub API 讀取 PR head commit 版本的 README。
+Reads the README at the PR head commit through the GitHub API.
 """
 
 import base64
@@ -14,9 +14,9 @@ GITHUB_API_BASE = "https://api.github.com"
 
 def get_readme(owner: str, repo: str, ref: str) -> str:
     """
-    透過 GitHub README API 取得指定 commit（ref）版本的 README，並截斷到長度上限。
-    README 只是補充背景，抓不到（沒有 README、網路或速率限制問題）就回傳空字串，
-    不要讓整個審查因此失敗。
+    Fetches the README at the given commit (ref) through the GitHub README API and truncates it to the length limit.
+    The README is only supplementary background; if it cannot be fetched (no README, network or rate-limit problems), an empty string is returned
+    so that the whole review does not fail because of it.
     """
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/readme"
     try:

@@ -1,18 +1,18 @@
 """
 aggregator.py
-負責把每個檔案的 review 結果彙整起來，並依嚴重程度排序，
-以及產生整份 PR 的總體摘要。
+Aggregates the review results of every file and sorts them by severity,
+and produces an overall summary of the whole PR.
 
-本版改動（配合 reviewer.py 的 schema 擴充，本機實驗版，尚未上傳）：
-- severity -> category（新增 refactor/nitpick/question）
-- 加入 recommendation 的彙整（looks_good/minor_comments/needs_changes 計數），
-  作為整份 PR 的結論性摘要依據
-- overall_summary 的模板文字改成英文，並拿掉重複的結論字句
-  （結論已經由 overall_recommendation 單獨表達，report.py 會另外顯示，不用在這裡重複一次）
-- 修掉 file_priority 裡直接用 ["category"] 索引可能觸發 KeyError 的問題，改用 .get()
+Changes in this version (to match the schema extension in reviewer.py; local experimental version, not yet uploaded):
+- severity -> category (adds refactor/nitpick/question)
+- aggregates recommendation (counts of looks_good/minor_comments/needs_changes),
+  as the basis for the overall conclusion of the whole PR
+- the template text of overall_summary is now English, and the duplicated conclusion wording is removed
+  (the conclusion is already expressed by overall_recommendation, which report.py displays separately, so it need not be repeated here)
+- fixes a possible KeyError in file_priority caused by indexing ["category"] directly; it now uses .get()
 """
 
-# 分類排序權重，數字越小越優先顯示
+# Sort weight per category; the smaller the number, the earlier it is shown
 CATEGORY_ORDER = {
     "bug": 0,
     "security": 1,
@@ -41,16 +41,16 @@ CATEGORY_LABEL = {
 
 
 def sort_issues(issues: list[dict]) -> list[dict]:
-    """依 category 權重排序單一檔案內的 issues。"""
+    """Sort the issues within a single file by category weight."""
     return sorted(issues, key=lambda x: CATEGORY_ORDER.get(x.get("category", "style"), 99))
 
 
 def aggregate_results(review_results: list[dict]) -> dict:
     """
-    輸入: review_file/review_pr_files 產生的結果清單
-    輸出:
+    Input: the list of results produced by review_file/review_pr_files
+    Output:
     {
-        "files": [ {filename, change_intent, summary, recommendation, issues(排序後)} ... ],
+        "files": [ {filename, change_intent, summary, recommendation, issues(sorted)} ... ],
         "total_issues": int,
         "category_counts": {"bug": n, "security": n, ...},
         "recommendation_counts": {"needs_changes": n, "minor_comments": n, "looks_good": n},
@@ -83,8 +83,8 @@ def aggregate_results(review_results: list[dict]) -> dict:
             }
         )
 
-    # 檔案本身依 recommendation 優先排序，需要修改的檔案排前面；
-    # recommendation 相同時再依最嚴重的 issue category 排序
+    # Files are sorted by recommendation first, so files that need changes come first;
+    # files with the same recommendation are then sorted by their most severe issue category
     def file_priority(f):
         rec_rank = RECOMMENDATION_ORDER.get(f["recommendation"], 99)
         issue_rank = CATEGORY_ORDER.get(f["issues"][0].get("category", "style"), 99) if f["issues"] else 99
@@ -106,8 +106,8 @@ def aggregate_results(review_results: list[dict]) -> dict:
 
 
 def _overall_recommendation(recommendation_counts: dict, file_count: int) -> str:
-    """整份 PR 的結論：任一檔案 needs_changes 就整體 needs_changes；
-    否則任一檔案 minor_comments 就整體 minor_comments；全部 looks_good 才是 looks_good。"""
+    """Overall conclusion of the PR: if any file is needs_changes the whole PR is needs_changes;
+    otherwise if any file is minor_comments the whole PR is minor_comments; it is looks_good only when all files are looks_good."""
     if file_count == 0:
         return "looks_good"
     if recommendation_counts.get("needs_changes"):

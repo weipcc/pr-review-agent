@@ -1,26 +1,26 @@
 """
 context_builder.py
-把每個被改動檔案的 diff 組成要餵給 LLM 的文字，並提供專案背景資訊（README / PR 描述）的截斷工具。
-檔案內容本身不再放進 prompt，由 agent 在 sandbox 裡自行探索。
+Builds the text fed to the LLM from the diff of every changed file, and provides a truncation helper for the project background information (README / PR description).
+The file contents themselves are no longer put in the prompt; the agent explores them on its own in the sandbox.
 """
 
 from diff_reader import FileDiff
 
-# 專案背景資訊（README / PR 描述）的長度上限。這些內容會被放進每一次 LLM 呼叫，
-# 太長會白白增加 token，所以只取開頭一段（README 的開頭通常就是專案簡介與架構概述）。
+# Length limit for the project background information (README / PR description). This content goes into every LLM call,
+# and too much of it only adds tokens, so only the beginning is kept (the start of a README is usually the project introduction and architecture overview).
 MAX_README_CHARS = 6000
 MAX_PR_DESCRIPTION_CHARS = 3000
 
 
 def truncate_text(text: str, limit: int) -> str:
-    """超過 limit 個字元就截斷並標註，避免專案背景資訊撐大 prompt。"""
+    """Truncate and mark the text if it is longer than limit characters, so the project background does not bloat the prompt."""
     if len(text) <= limit:
         return text
     return text[:limit].rstrip() + "\n...[truncated]"
 
 
 def build_diff_text(file_diff: FileDiff) -> str:
-    """把單一檔案的 diff hunks 轉成人類/LLM 可讀的文字格式。"""
+    """Convert the diff hunks of a single file into a text format readable by humans and the LLM."""
     parts = [f"File: {file_diff.filename}"]
     for hunk in file_diff.hunks:
         parts.append(hunk.header)
