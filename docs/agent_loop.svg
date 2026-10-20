@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" width="760" height="300" font-family="Helvetica, Arial, sans-serif" font-size="14">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#475569"/></marker></defs>
+<rect width="760" height="300" fill="#ffffff"/>
+<g stroke="#475569" stroke-width="1.5" fill="none" marker-end="url(#a)">
+<path d="M250 100H300"/><path d="M500 100H550"/>
+<path d="M620 140V190Q620 205 605 205H175Q160 205 160 190V140"/>
+</g>
+<g text-anchor="middle" fill="#0f172a">
+<rect x="40" y="60" width="210" height="80" rx="8" fill="#ede9fe" stroke="#6d28d9"/><text x="145" y="92" font-weight="bold">Gemini</text><text x="145" y="112" font-size="12">told "Step k of 10"</text><text x="145" y="128" font-size="12">decides what to inspect</text>
+<rect x="300" y="60" width="200" height="80" rx="8" fill="#dcfce7" stroke="#166534"/><text x="400" y="92" font-weight="bold">run_bash</text><text x="400" y="112" font-size="12">read-only commands only</text><text x="400" y="128" font-size="12">timeout · output ≤ 5000 chars</text>
+<rect x="550" y="60" width="180" height="80" rx="8" fill="#f1f5f9" stroke="#475569"/><text x="640" y="92" font-weight="bold">Tool result</text><text x="640" y="112" font-size="12">stdout / stderr as text</text><text x="640" y="128" font-size="12">errors do not crash</text>
+<text x="380" y="195" font-size="12">result goes back to the model (next step)</text>
+<rect x="40" y="240" width="690" height="42" rx="8" fill="#fef3c7" stroke="#b45309"/><text x="385" y="265" font-size="13">After step 10 the tool is removed and the model must output its structured findings.</text>
+</g>
+</svg>

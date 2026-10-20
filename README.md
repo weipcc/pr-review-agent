@@ -5,6 +5,12 @@ It reviews remote GitHub PRs through an API (requires E2B_API_KEY and GEMINI_API
 
 ## Architecture
 
+![Workflow of the PR Review Agent](docs/workflow.svg)
+
+*Review workflow as designed in the project report: V2 routes a PR by size (batch vs per-file); the dashed box is the V3 sandbox extension. The version currently on `main` is the V3 flow described below: PRs over the token threshold are rejected, and every review runs the agent in the E2B sandbox.*
+
+Flow of `main` in text form:
+
 ```
 Input (PR URL)
    → fetch the diff and the project background (PR title/description, the beginning of the README)
@@ -15,6 +21,10 @@ Input (PR URL)
    → aggregate and sort
    → produce a Markdown report (in English)
 ```
+
+### How the agent explores the code
+
+![Agent loop: LLM, run_bash, result](docs/agent_loop.svg)
 
 ## Files
 
