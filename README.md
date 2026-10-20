@@ -75,9 +75,11 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 export GEMINI_API_KEY=your_Gemini_key
-export E2B_API_KEY=your_E2B_key      # required: without a sandbox no review is done (E2B_KEY in .env also works)
-export GITHUB_TOKEN=your_GitHub_token  # optional: read private repos, enable @mention polling
+export E2B_API_KEY=your_E2B_key      # required: without a sandbox no review is done
+export GITHUB_TOKEN=your_GitHub_token  # optional: needed for the sandbox checkout of private repos and for @mention polling
 ```
+
+Instead of `export`, you can copy `.env.example` to `.env` and fill in the values (`.env` is git-ignored).
 
 ## Usage
 
@@ -90,6 +92,13 @@ export GITHUB_TOKEN=your_GitHub_token  # optional: read private repos, enable @m
 2. Open `review_page.html` in Chrome (not Safari, whose file:// permissions are stricter)
 3. Paste a PR URL and click "Start review"
 
+### @mention polling
+
+If `GITHUB_TOKEN` is set, starting the API also starts a background poller. Every 15 seconds (change it with
+`POLL_INTERVAL_SECONDS`) it reads your unread GitHub notifications; when someone @mentions you on a pull request, it
+reviews that PR and posts the report as a comment on it. The token needs the `notifications` and `repo` scopes.
+Without `GITHUB_TOKEN` the poller is disabled and only the web page / `POST /review` can be used.
+
 Reading the PR information, the diff and the README uses anonymous GitHub API calls (about 60 requests per hour),
 and one review takes about 3 requests, so only **public repos** are supported for now.
 
@@ -99,12 +108,12 @@ at most 10 rounds of "LLM → tool → result", after which the tool is taken aw
 
 ## Known limitations / ideas for improvement
 
-- GitHub API calls are anonymous, so the rate limit is low and private repos cannot be read (the sandbox checkout uses GITHUB_TOKEN, but the diff/README do not)
-- Reviews are currently triggered manually; no webhook trigger has been connected yet
-- Only a report is returned for now; it is not yet posted back to the GitHub PR as inline comments
+- The diff and README are fetched with anonymous GitHub API calls, so the rate limit is low and private repos cannot be reviewed (`GITHUB_TOKEN` is only used for the sandbox checkout and the @mention poller)
+- Reviews are triggered by the web page or by an @mention picked up by polling; there is no webhook trigger
+- The review is posted as one report comment (or shown on the web page), not as inline comments on the PR's lines
 - It can currently only run locally and has not been deployed to the cloud
 - PRs above the token threshold are not reviewed; the user is only asked to split them
 - Only the first 6000 characters of the README and the first 3000 characters of the PR description are used; there is no full project architecture summary yet
-- No benchmark has been built yet to measure review quality quantitatively (precision / recall), and it has not been verified
-  how much the few-shot examples and the project background actually help
+- Review quality was evaluated on a sample of AACR-Bench pull requests (data and scripts are on the `alaric/aacr-eval` branch, not on `main`); the effect of
+  the few-shot examples and the project background has not been measured separately
 - There are no dedicated few-shot examples for the `refactor` and `question` categories yet
